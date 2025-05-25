@@ -36,6 +36,27 @@ class TarxivDB(TarxivModule):
         with open(self.schema_file) as f:
             return json.load(f)
 
+    def valid_object_types(self):
+        query_str = ("SELECT DISTINCT `obj_type`.`value` "
+                     "FROM tarxiv._default.tns_objects "
+                     "UNNEST `object_type` AS `obj_type`")
+        results = self.cluster.query(query_str)
+        return [row["value"] for row in results]
+
+    def valid_filters(self):
+        query_str = ("SELECT DISTINCT `mag`.`filter` "
+                     "FROM tarxiv._default.tns_objects "
+                     "UNNEST `peak_mag` AS `mag`")
+        results = self.cluster.query(query_str)
+        return [row["filter"] for row in results]
+
+    def valid_groups(self):
+        query_str = ("SELECT DISTINCT `group`.`value` "
+                     "FROM tarxiv._default.tns_objects "
+                     "UNNEST `reporting_group` AS `group`")
+        results = self.cluster.query(query_str)
+        return [row["value"] for row in results]
+
     def upsert(self, object_name, payload, collection):
         """
         Insert document into couchbase collection. Update if already exists.
