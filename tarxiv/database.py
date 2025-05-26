@@ -43,7 +43,7 @@ class TarxivDB(TarxivModule):
         :return: list if query results
         """
         # Log
-        self.logger.info({"status": "running sql++ query", "query_str": query_str})
+        #self.logger.info({"status": "running sql++ query", "query_str": query_str})
         return self.cluster.query(query_str)
 
     def upsert(self, object_name, payload, collection):
