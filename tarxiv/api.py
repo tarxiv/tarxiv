@@ -1,6 +1,3 @@
-import datetime
-
-from authlib.jose.rfc7519.jwt import find_encode_key
 from tarxiv.database import TarxivDB
 from tarxiv.utils import TarxivModule
 from flask import Flask, Blueprint, request, make_response
