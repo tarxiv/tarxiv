@@ -30,6 +30,8 @@ class API(TarxivModule):
         # Build application
         self.logger.info({"status": "setting up flask application"})
         self.app = Flask(__name__)
+        # Register routes
+        self.routes()
         self.app.register_blueprint(Blueprint('main', __name__))
 
 
