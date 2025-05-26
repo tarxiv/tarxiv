@@ -148,8 +148,8 @@ class API(TarxivModule):
                              "WHERE 1=1 ")
                 # Add restrictions from search fields, then append search params to query
                 condition_list = []
-                for condition in search:
-                    condition_str = self.build_condition(condition)
+                for field, condition in search:
+                    condition_str = self.build_condition(field, condition)
                     condition_list.append(condition_str)
                 # Append full condition string to query string
                 full_condition_string = " AND ".join(condition_list)
@@ -173,20 +173,19 @@ class API(TarxivModule):
                 self.logger.info(log)
                 return server_response(result, status_code)
 
-    def build_condition(self, query_json):
-        field_name = query_json["field"]
+    def build_condition(self, field, condition):
         # Start condition_string
-        condition_str = f"ANY `{field_name[0]}` IN `{field_name}` SATISFIES "
+        condition_str = f"ANY `{field[0]}` IN `{field}` SATISFIES "
         predicates = []
         # Each query has a number of parameters (usually just value, but peak mag can search on filter/mjd also)
-        for param in query_json['search']:
+        for param in condition:
             # First check value fields
             if "value" in param.keys():
-                prd_str = self.build_predicate(field_name, "value", param["operator"], param["value"])
+                prd_str = self.build_predicate(field, "value", param["operator"], param["value"])
             elif "filter" in param.keys():
-                prd_str = self.build_predicate(field_name, "filter", param["operator"], param["filter"])
+                prd_str = self.build_predicate(field, "filter", param["operator"], param["filter"])
             elif "mjd" in param.keys():
-                prd_str = self.build_predicate(field_name, "mjd", param["operator"], param["mjd"])
+                prd_str = self.build_predicate(field, "mjd", param["operator"], param["mjd"])
             else:
                 raise ValueError(f"bad search option {param}")
             # Add predicate to condition
