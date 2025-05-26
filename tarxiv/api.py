@@ -143,7 +143,7 @@ class API(TarxivModule):
                 if self.check_token(token) is False:
                     raise PermissionError("bad token")
                 # Build query
-                query_str = ("SELECT meta().id "
+                query_str = ("SELECT meta().id AS `obj_name` "
                              "FROM the tarxiv._default.tns_objects "
                              "WHERE 1=1 ")
                 # Add restrictions from search fields, then append search params to query
@@ -154,10 +154,11 @@ class API(TarxivModule):
                 # Append full condition string to query string
                 full_condition_string = " AND ".join(condition_list)
                 query_str += full_condition_string
-
                 # Return results
                 result = self.txv_db.query(query_str)
+                result = [r["obj_name"] for r in result]
                 status_code = 200
+
             except PermissionError as e:
                 result = {"error": str(e)}
                 status_code = 401
