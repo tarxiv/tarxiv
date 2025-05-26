@@ -157,7 +157,7 @@ class API(TarxivModule):
 
                 # Return results
                 result = self.txv_db.query(query_str)
-
+                status_code = 200
             except PermissionError as e:
                 result = {"error": str(e)}
                 status_code = 401
