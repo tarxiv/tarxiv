@@ -148,7 +148,7 @@ class API(TarxivModule):
                              "WHERE 1=1 ")
                 # Add restrictions from search fields, then append search params to query
                 condition_list = []
-                for field, condition in search:
+                for field, condition in search.items():
                     condition_str = self.build_condition(field, condition)
                     condition_list.append(condition_str)
                 # Append full condition string to query string
