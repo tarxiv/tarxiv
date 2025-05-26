@@ -31,11 +31,14 @@ class API(TarxivModule):
         self.valid_operators = ['<', '>', '=', '<=', '>=', 'IN', 'LIKE']
 
         # Build application
+        self.logger.info({"status": "setting up flask application"})
         self.app = Flask(__name__)
         self.app.register_blueprint(Blueprint('main', __name__))
 
 
     def start_server(self):
+        # Log
+        self.logger.info({"status": "starting WSGI server"})
         # Enable WSGI access logging via Paste
         app_logged = TransLogger(self.app)
         # Mount the WSGI callable object (app) on the root directory
@@ -60,6 +63,11 @@ class API(TarxivModule):
             # Get request json
             request_json = request.get_json()
             token = request_json['token']
+            # Start log
+            log = {'query_type': "meta",
+                   'query_ip': request.remote_addr,
+                   'token': token,
+                   'obj_name': obj_name}
             try:
                 # Return error if bad token
                 if self.check_token(token) is False:
@@ -81,6 +89,8 @@ class API(TarxivModule):
                 result = {"error": str(e), "type": "server"}
                 status_code = 500
             finally:
+                log['status'] = "success"
+                self.logger.info(log)
                 return server_response(result, status_code)
 
         @self.app.route('/get_object_lc/<string:obj_name>', methods=['POST'])
@@ -88,6 +98,11 @@ class API(TarxivModule):
             # Get request json
             request_json = request.get_json()
             token = request_json['token']
+            # Start log
+            log = {'query_type': "lightcurve",
+                   'query_ip': request.remote_addr,
+                   'token': token,
+                   'obj_name': obj_name}
             try:
                 # Return error if bad token
                 if self.check_token(token) is False:
@@ -109,6 +124,8 @@ class API(TarxivModule):
                 result = {"error": str(e), "type": "server"}
                 status_code = 500
             finally:
+                log['status'] = "success"
+                self.logger.info(log)
                 return server_response(result, status_code)
 
         @self.app.route('/search_objects', methods=['POST'])
@@ -116,6 +133,12 @@ class API(TarxivModule):
             # Get request json
             request_json = request.get_json()
             token = request_json['token']
+            search = request_json['search']
+            # Start log
+            log = {'query_type': "search",
+                   'query_ip': request.remote_addr,
+                   'token': token,
+                   'search': search}
             try:
                 # Return error if bad token
                 if self.check_token(token) is False:
@@ -126,12 +149,13 @@ class API(TarxivModule):
                              "WHERE 1=1 ")
                 # Add restrictions from search fields, then append search params to query
                 condition_list = []
-                for condition in request_json['search_fields']:
+                for condition in search:
                     condition_str = self.build_condition(condition)
                     condition_list.append(condition_str)
                 # Append full condition string to query string
                 full_condition_string = " AND ".join(condition_list)
                 query_str += full_condition_string
+
                 # Return results
                 result = self.txv_db.query(query_str)
 
@@ -145,6 +169,8 @@ class API(TarxivModule):
                 result = {"error": str(e), "type": "server"}
                 status_code = 500
             finally:
+                log['status'] = "success"
+                self.logger.info(log)
                 return server_response(result, status_code)
 
     def build_condition(self, query_json):

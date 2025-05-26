@@ -25,7 +25,7 @@ class Gmail(TarxivModule):
         super().__init__("gmail", *args, **kwargs)
 
         # Logging
-        self.logger.info({"status": "connecting"})
+        self.logger.info({"status": "connecting to google mail api"})
         # Get gmail token
         self.creds = None
         # Absolute paths
@@ -50,7 +50,7 @@ class Gmail(TarxivModule):
         # Connect to service
         self.service = build("gmail", "v1", credentials=self.creds)
         # Connect to email
-        self.logger.info({"status": "connected"})
+        self.logger.info({"status": "connection sucess"})
 
         # Create thread value
         self.t = None

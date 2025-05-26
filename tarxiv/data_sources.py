@@ -472,7 +472,7 @@ class TNS(Survey):
         :return: full TNS public object dataframe
         """
         # Run request to TNS Server
-        self.logger.info("pulling bulk tns objects")
+        self.logger.info({"status": "retreiving TNS public object catalog"})
         get_url = (
             self.site + "/system/files/tns_public_objects/tns_public_objects.csv.zip"
         )

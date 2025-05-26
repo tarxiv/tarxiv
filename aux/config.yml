@@ -7,7 +7,8 @@ log_dir: "/home/almalinux/logs/"
 
 # hosting information
 host: 157.136.254.204
-port: 9000
+user: almalinux
+api_port: 9000
 
 # database information
 database:

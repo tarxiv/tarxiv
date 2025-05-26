@@ -26,6 +26,7 @@ class TarxivModule:
         # Logger
         self.logger = logging.getLogger(self.module)
         # Set log level
+        self.debug = debug
         if debug:
             self.logger.setLevel(logging.DEBUG)
         else:

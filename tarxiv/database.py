@@ -17,7 +17,7 @@ class TarxivDB(TarxivModule):
         super().__init__("couchbase", *args, **kwargs)
         self.schema_file = os.path.join(self.config_dir, "schema.json")
         # Connect to Couchbase
-        self.logger.info("connecting to couchbase")
+        self.logger.info({"status": "connecting to couchbase"})
         connection_str = "couchbase://" + self.config["database"]["host"]
         options = ClusterOptions(
             PasswordAuthenticator(
@@ -26,7 +26,7 @@ class TarxivDB(TarxivModule):
         )
         self.cluster = Cluster(connection_str, options)
         self.conn = self.cluster.bucket("tarxiv")
-        self.logger.info("connected")
+        self.logger.info({"status": "connection sucess"})
 
     def get_object_schema(self):
         """
@@ -42,6 +42,8 @@ class TarxivDB(TarxivModule):
         :param query_str: valid sql++ query string
         :return: list if query results
         """
+        # Log
+        self.logger.info({"status": "running sql++ query", "query_str": query_str})
         return self.cluster.query(query_str)
 
     def upsert(self, object_name, payload, collection):
