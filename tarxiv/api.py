@@ -141,7 +141,7 @@ class API(TarxivModule):
                 if self.check_token(token) is False:
                     raise PermissionError("bad token")
                 # Build query
-                query_str = ("SELECT * "
+                query_str = ("SELECT meta().id "
                              "FROM the tarxiv._default.tns_objects "
                              "WHERE 1=1 ")
                 # Add restrictions from search fields, then append search params to query
