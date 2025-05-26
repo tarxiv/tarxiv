@@ -144,7 +144,7 @@ class API(TarxivModule):
                     raise PermissionError("bad token")
                 # Build query
                 query_str = ("SELECT meta().id AS `obj_name` "
-                             "FROM the tarxiv._default.tns_objects "
+                             "FROM tarxiv._default.tns_objects "
                              "WHERE 1=1 AND ")
                 # Add restrictions from search fields, then append search params to query
                 condition_list = []
