@@ -2,7 +2,7 @@ from tarxiv.database import TarxivDB
 from tarxiv.utils import TarxivModule
 from flask import Flask, Blueprint, request, make_response
 from paste.translogger import TransLogger
-
+import traceback
 import cherrypy
 import json
 
@@ -165,6 +165,7 @@ class API(TarxivModule):
                 result = {"error": str(e)}
                 status_code = 404
             except Exception as e:
+                traceback.print_exc()
                 result = {"error": str(e), "type": "server"}
                 status_code = 500
             finally:
