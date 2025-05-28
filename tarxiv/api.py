@@ -54,9 +54,12 @@ class API(TarxivModule):
         cherrypy.engine.block()
 
     def check_token(self, token):
+        # TODO: implement actual authentication
         return token == "TOKEN"
 
     def routes(self):
+        # HFS - 2025-05-28: These self.app.route things are Flask decoratoes which become
+        # endpoints for the API
         @self.app.route("/get_object_meta/<string:obj_name>", methods=["POST"])
         def get_object_meta(obj_name):
             # Get request json
