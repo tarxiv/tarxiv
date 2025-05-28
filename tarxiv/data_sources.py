@@ -349,7 +349,7 @@ class ATLAS(Survey):
             # First run cone search to get id
             # Set up the headers with the token
             headers = {
-                "Authorization": "Token {}".format(os.environ["TARXIV_ATLAS_TOKEN"]),
+                "Authorization": "Token {}".format(os.getenv("TARXIV_ATLAS_TOKEN", "")),
             }
             cone_res = requests.post(
                 f"{self.config['atlas_url']}/cone/",
@@ -447,11 +447,11 @@ class TNS(Survey):
 
         # Set attributes
         self.site = self.config["tns"]["site"]
-        self.api_key = os.environ["TARXIV_TNS_API_KEY"]
+        self.api_key = os.getenv("TARXIV_TNS_API_KEY", "")
 
         # Create marker
         tns_marker_dict = {
-            "tns_id": os.environ["TARXIV_TNS_ID"],
+            "tns_id": os.getenv("TARXIV_TNS_ID", 0),
             "type": self.config["tns"]["type"],
             "name": self.config["tns"]["name"],
         }
