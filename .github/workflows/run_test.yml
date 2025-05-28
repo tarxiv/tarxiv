@@ -10,6 +10,11 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11"]
 
+    env:
+      TARXIV_ATLAS_TOKEN: ${{ secrets.TARXIV_ATLAS_TOKEN }}
+      TARXIV_TNS_API_KEY: ${{ secrets.TARXIV_TNS_API_KEY }}
+      TARXIV_TNS_ID: ${{ secrets.TARXIV_TNS_ID }}
+
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
