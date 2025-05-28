@@ -3,27 +3,27 @@
 
 # General
 log_level: "debug"
-log_dir: "/home/almalinux/logs/"
+log_dir: "/tmp"
 
 # hosting information
-host: 157.136.254.204
-user: almalinux
-api_port: 9000
+host:
+user:
+api_port:
 
-# database information
+# database information - default are used in CI
 database:
   host: localhost
-  user: tarxiv_user
-  pass: t@rxiv_COUCH
+  user: test_user
+  pass: test_pssd
   
 # tns certifications/params
 tns:
-  id: 191311
+  id: 
   type: "bot"
   name: "tarxiv"
   site: "https://www.wis-tns.org"
   email: "tns@weizmann.ac.il"
-  api_key: "33912ce9ff5bb4a429957376e4f5ceb8e045b99d"
+  api_key:
   rate_limit: 4
   # Source info for schema
   associated_sources: ["tns"]
@@ -38,8 +38,7 @@ gmail:
   polling_interval: 4
 
 # ATLAS Info
-token: "3731c3f6b62f812709d2490a60290186aa9e283e"
-base_url: "https://psweb.mp.qub.ac.uk/sne/atlas4/api/"
+atlas_url: "https://psweb.mp.qub.ac.uk/sne/atlas4/api/"
 atlas:
   associated_sources: ["atlas_twb", "atlas_survey", "sherlock"]
 
