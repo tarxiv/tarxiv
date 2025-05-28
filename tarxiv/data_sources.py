@@ -1,4 +1,5 @@
 """Pull and process lightcurves"""
+
 from .utils import TarxivModule, SurveyMetaMissingError, SurveyLightCurveMissingError
 from atlasapiclient.exceptions import ATLASAPIClientError
 import atlasapiclient.client as atlas_client
@@ -16,6 +17,7 @@ import time
 import io
 import re
 import os
+
 
 class Survey(TarxivModule):
     """Base class to interact with a Tarxiv survey or data source."""
@@ -36,13 +38,13 @@ class Survey(TarxivModule):
             "ZTF": 3,
             "ASAS-SN": 5,
             "SHERLOCK": 7,
-            "MANGROVE": 8
+            "MANGROVE": 8,
         }
 
     def get_object(self, *args, **kwargs):
         """Query the survey for object at a given set of coordinates.
 
-        Must return metadata dict containing at least 
+        Must return metadata dict containing at least
         one survey designation, and any additional meta
                 e.g. {"identifiers" : [{"name": ATLAS25XX, "source": 3}, ...],
                      {"meta": {"redshift": {"value": 0.003, "source": 8},
@@ -60,7 +62,9 @@ class Survey(TarxivModule):
 
         :return: survey_meta; dict (None if no results), survey_lc; DataFrame (empty df if no results)
         """
-        raise NotImplementedError("each survey must implement their own logic to get meta/lightcurve")
+        raise NotImplementedError(
+            "each survey must implement their own logic to get meta/lightcurve"
+        )
 
     def update_object_meta(self, obj_meta, survey_meta):
         """Update the object meta schema with data from the survey meta returned by get_object.
@@ -72,7 +76,7 @@ class Survey(TarxivModule):
         # Only update if we get returned object
         if survey_meta is not None:
             # Append sources to schema
-            for source in self.config[self.module]['associated_sources']:
+            for source in self.config[self.module]["associated_sources"]:
                 obj_meta["sources"].append(self.schema_sources[source])
 
             for field, meta in survey_meta.items():
@@ -83,7 +87,6 @@ class Survey(TarxivModule):
                     obj_meta[field].append(meta)
 
         return obj_meta
-
 
     def meta_add_peak_mags(self, obj_meta, obj_lc_df):
         """Once we have all the object dataframes collated; find peak mag for each filter and append to object_meta.
@@ -96,14 +99,16 @@ class Survey(TarxivModule):
             return obj_meta
 
         # Get brightest mag for each filter
-        filter_df = obj_lc_df.groupby('filter').min()
+        filter_df = obj_lc_df.groupby("filter").min()
 
         peak_mags = []
         for filter_name, row in filter_df.iterrows():
-            peak_mag = {"filter": filter_name,
-                        "value": row["mag"],
-                        "mjd_recorded": row["mjd"],
-                        "source": self.survey_source_map[row["survey"]]}
+            peak_mag = {
+                "filter": filter_name,
+                "value": row["mag"],
+                "mjd_recorded": row["mjd"],
+                "source": self.survey_source_map[row["survey"]],
+            }
             peak_mags.append(peak_mag)
         # Append if exists
         if peak_mags:
@@ -112,7 +117,7 @@ class Survey(TarxivModule):
         return obj_meta
 
 
-class ASAS_SN(Survey):
+class ASAS_SN(Survey):  # noqa: N801
     """Interface to ASAS-SN SkyPatrol."""
 
     def __init__(self, *args, **kwargs):
@@ -138,31 +143,35 @@ class ASAS_SN(Survey):
 
         try:
             # Query client
-            query = f"WITH sources AS                " \
-                    f"  (                            " \
-                    f"      SELECT                   " \
-                    f"          asas_sn_id,          " \
-                    f"          ra_deg,              " \
-                    f"          dec_deg,             " \
-                    f"          catalog_sources,     " \
-                    f"          DISTANCE(ra_deg, dec_deg, {ra_deg}, {dec_deg}) AS angular_dist " \
-                    f"     FROM master_list          " \
-                    f"  )                            " \
-                    f"SELECT *                       " \
-                    f"FROM sources                   " \
-                    f"WHERE angular_dist <= ARCSEC({radius}) " \
-                    f"ORDER BY angular_dist ASC      "
+            query = (
+                f"WITH sources AS                "
+                f"  (                            "
+                f"      SELECT                   "
+                f"          asas_sn_id,          "
+                f"          ra_deg,              "
+                f"          dec_deg,             "
+                f"          catalog_sources,     "
+                f"          DISTANCE(ra_deg, dec_deg, {ra_deg}, {dec_deg}) AS angular_dist "
+                f"     FROM master_list          "
+                f"  )                            "
+                f"SELECT *                       "
+                f"FROM sources                   "
+                f"WHERE angular_dist <= ARCSEC({radius}) "
+                f"ORDER BY angular_dist ASC      "
+            )
 
-            query = re.sub(r'(\s+)', ' ', query)
+            query = re.sub(r"(\s+)", " ", query)
             lcs = self.client.adql_query(query, download=True)
             if lcs is None:
                 raise SurveyMetaMissingError
             # Get meta
             nearest = lcs.catalog_info.iloc[0]
-            nearest_id = nearest['asas_sn_id']
-            meta = {'identifiers': [{"name": str(nearest_id), 'source': 6}],
-                    'ra_deg': [{"value": nearest['ra_deg'], 'source': 6}],
-                    'dec_deg': [{"value": nearest['dec_deg'], 'source': 6}], }
+            nearest_id = nearest["asas_sn_id"]
+            meta = {
+                "identifiers": [{"name": str(nearest_id), "source": 6}],
+                "ra_deg": [{"value": nearest["ra_deg"], "source": 6}],
+                "dec_deg": [{"value": nearest["dec_deg"], "source": 6}],
+            }
             # Log
             status.update({"status": "match", "id": str(nearest_id)})
             # Sometimes we have meta but no database object (will fix later)
@@ -170,27 +179,33 @@ class ASAS_SN(Survey):
                 raise SurveyLightCurveMissingError
             # Get LC
             lc_df = lcs[nearest_id].data
-            lc_df['mjd'] = lc_df.apply(lambda row: Time(row['jd'], format='jd').mjd, axis=1)
-            lc_df.rename({"phot_filter": "filter", "camera": "unit"}, axis=1, inplace=True)
+            lc_df["mjd"] = lc_df.apply(
+                lambda row: Time(row["jd"], format="jd").mjd, axis=1
+            )
+            lc_df = lc_df.rename({"phot_filter": "filter", "camera": "unit"}, axis=1)
             # Do not return data from bad images
-            lc_df = lc_df[lc_df['quality'] != "B"]
+            lc_df = lc_df[lc_df["quality"] != "B"]
             # Throw out non_detections if not specified
-            lc_df = lc_df[lc_df['mag_err'] < 99]
-            lc_df['survey'] = "ASAS-SN"
-            lc_df = lc_df[['mjd', 'mag', 'mag_err', 'limit', 'filter', 'unit', 'survey']]
+            lc_df = lc_df[lc_df["mag_err"] < 99]
+            lc_df["survey"] = "ASAS-SN"
+            lc_df = lc_df[
+                ["mjd", "mag", "mag_err", "limit", "filter", "unit", "survey"]
+            ]
             # Update
             status["lc_count"] = len(lc_df)
         except SurveyMetaMissingError:
-            status['status'] = "no match"
+            status["status"] = "no match"
         except SurveyLightCurveMissingError:
             status["status"].append("|no light curve")
         except Exception as e:
-            status.update({"status": "encontered unexpected error",
-                           "message": str(e),
-                           "details": traceback.format_exc()})
+            status.update({
+                "status": "encontered unexpected error",
+                "message": str(e),
+                "details": traceback.format_exc(),
+            })
         finally:
             self.logger.info(status)
-            return meta, lc_df
+        return meta, lc_df
 
 
 class ZTF(Survey):
@@ -216,7 +231,12 @@ class ZTF(Survey):
             # Hit FINK API
             result = requests.post(
                 f"{self.config['fink_url']}/api/v1/conesearch",
-                json={"ra": ra_deg, "dec": dec_deg, "radius": radius, "columns": "i:objectId"},
+                json={
+                    "ra": ra_deg,
+                    "dec": dec_deg,
+                    "radius": radius,
+                    "columns": "i:objectId",
+                },
             )
             # check status
             if result.status_code != 200:
@@ -235,7 +255,7 @@ class ZTF(Survey):
             # Query
             result = requests.post(
                 f"{self.config['fink_url']}/api/v1/objects",
-                json={"objectId": ztf_name, "output-format": "json"}
+                json={"objectId": ztf_name, "output-format": "json"},
             )
             # check status
             if result.status_code != 200 or result.json() == []:
@@ -243,19 +263,30 @@ class ZTF(Survey):
 
             # Metadata on each line of photometry, we only take first row (d prefix are non-phot)
             result_meta = result.json()[0]
-            meta = {'identifiers': [{'name': ztf_name, 'source': 3}],
-                    'ra_deg': [{'value': result_meta['i:ra'], 'source': 3}],
-                    'dec_deg': [{'value': result_meta['i:dec'], 'source': 3}]}
+            meta = {
+                "identifiers": [{"name": ztf_name, "source": 3}],
+                "ra_deg": [{"value": result_meta["i:ra"], "source": 3}],
+                "dec_deg": [{"value": result_meta["i:dec"], "source": 3}],
+            }
 
-            meta['host_name'] = []
-            if "d:mangrove_2MASS_name" in result_meta.keys() and result_meta["d:mangrove_2MASS_name"] != 'None':
+            meta["host_name"] = []
+            if (
+                "d:mangrove_2MASS_name" in result_meta.keys()
+                and result_meta["d:mangrove_2MASS_name"] != "None"
+            ):
                 host_name = {"name": result_meta["d:mangrove_2MASS_name"], "source": 8}
-                meta['host_name'].append(host_name)
-            if "d:mangrove_2MASS_name" in result_meta.keys() and result_meta["d:mangrove_HyperLEDA_name"] != 'None':
-                host_name = {"name": result_meta["d:mangrove_HyperLEDA_name"], "source": 8}
-                meta['host_name'].append(host_name)
-            if len(meta['host_name']) == 0:
-                del meta['host_name']
+                meta["host_name"].append(host_name)
+            if (
+                "d:mangrove_2MASS_name" in result_meta.keys()
+                and result_meta["d:mangrove_HyperLEDA_name"] != "None"
+            ):
+                host_name = {
+                    "name": result_meta["d:mangrove_HyperLEDA_name"],
+                    "source": 8,
+                }
+                meta["host_name"].append(host_name)
+            if len(meta["host_name"]) == 0:
+                del meta["host_name"]
 
             # Lightcurve columns and values
             cols = {
@@ -263,34 +294,38 @@ class ZTF(Survey):
                 "i:sigmapsf": "mag_err",
                 "i:fid": "filter",
                 "i:jd": "jd",
-                "i:diffmaglim": "limit"
-                }
-            filter_map = {'1': 'g', '2': 'R', '3': 'i'}
+                "i:diffmaglim": "limit",
+            }
+            filter_map = {"1": "g", "2": "R", "3": "i"}
             # Push into DataFrame
             lc_df = pd.read_json(io.BytesIO(result.content))
             lc_df = lc_df.rename(cols, axis=1)
             lc_df = lc_df[list(cols.values())]
-            lc_df['mjd'] = lc_df.apply(lambda row: Time(row['jd'], format='jd').mjd, axis=1)
-            lc_df["filter"] = lc_df['filter'].astype(str).map(filter_map)
+            lc_df["mjd"] = lc_df.apply(
+                lambda row: Time(row["jd"], format="jd").mjd, axis=1
+            )
+            lc_df["filter"] = lc_df["filter"].astype(str).map(filter_map)
             # JD now unneeded
-            lc_df.drop('jd', axis=1, inplace=True)
+            lc_df = lc_df.drop("jd", axis=1)
             # Add unit/survey columns
             lc_df["unit"] = "main"
             lc_df["survey"] = "ZTF"
             status["lc_count"] = len(lc_df)
 
         except SurveyMetaMissingError:
-            status['status'] = "no match"
+            status["status"] = "no match"
         except SurveyLightCurveMissingError:
             status["status"].append("|no light curve")
 
         except Exception as e:
-            status.update({"status": "encontered unexpected error",
-                           "message": str(e),
-                           "details": traceback.format_exc()})
+            status.update({
+                "status": "encontered unexpected error",
+                "message": str(e),
+                "details": traceback.format_exc(),
+            })
         finally:
             self.logger.info(status)
-            return meta, lc_df
+        return meta, lc_df
 
 
 class ATLAS(Survey):
@@ -314,62 +349,76 @@ class ATLAS(Survey):
         status = {"obj_name": obj_name}
         try:
             # First run cone search to get id
-            cone_res = atlas_client.ConeSearch(api_config_file=self.config_file,
-                                     payload={"ra": ra_deg,
-                                              "dec": dec_deg,
-                                              "radius": radius,
-                                              "requestType": "nearest"},
-                                     get_response=True)
+            cone_res = atlas_client.ConeSearch(
+                api_config_file=self.config_file,
+                payload={
+                    "ra": ra_deg,
+                    "dec": dec_deg,
+                    "radius": radius,
+                    "requestType": "nearest",
+                },
+                get_response=True,
+            )
 
-
-            if 'object' not in cone_res.response_data.keys():
+            if "object" not in cone_res.response_data.keys():
                 raise SurveyMetaMissingError
             # Get atlas id and query for data
-            atlas_id = cone_res.response_data['object']
+            atlas_id = cone_res.response_data["object"]
             status.update({"status": "match", "id": atlas_id})
             # Get light curve
             try:
-                curve_res = atlas_client.RequestSingleSourceData(api_config_file=self.config_file,
-                                                                 atlas_id=str(atlas_id),
-                                                                 get_response=True)
+                curve_res = atlas_client.RequestSingleSourceData(
+                    api_config_file=self.config_file,
+                    atlas_id=str(atlas_id),
+                    get_response=True,
+                )
                 # Contains meta and lc
                 result = curve_res.response_data[0]
-            except:
-                raise SurveyLightCurveMissingError
+            except Exception as err:
+                raise SurveyLightCurveMissingError from err
 
             # Insert meta data
-            meta = {"identifiers": [{"name": result["object"]["id"], "source": 1}],
-                    "ra_deg": [{"value": result["object"]["ra"], "source": 1}],
-                    "dec_deg": [{"value": result["object"]["dec"], "source": 1}]}
+            meta = {
+                "identifiers": [{"name": result["object"]["id"], "source": 1}],
+                "ra_deg": [{"value": result["object"]["ra"], "source": 1}],
+                "dec_deg": [{"value": result["object"]["dec"], "source": 1}],
+            }
 
             if result["object"]["atlas_designation"] is not None:
-                atlas_name = {"name": result["object"]["atlas_designation"], "source": 2}
+                atlas_name = {
+                    "name": result["object"]["atlas_designation"],
+                    "source": 2,
+                }
                 meta["identifiers"].append(atlas_name)
             # Add sherlock crossmatch if exists
             if result["sherlock_crossmatches"]:
-                result['sherlock'] = result['sherlock_crossmatches'][0]
+                result["sherlock"] = result["sherlock_crossmatches"][0]
                 if result["sherlock"]["z"] is not None:
                     meta["redshift"] = {"value": result["sherlock"]["z"], "source": 7}
 
             # DETECTIONS
-            lc_df = pd.DataFrame(result['lc'])[['mjd', 'mag', 'magerr', 'mag5sig', 'filter', "expname"]]
-            lc_df.columns = ['mjd', 'mag', 'mag_err', 'limit', 'filter', "expname"]
+            lc_df = pd.DataFrame(result["lc"])[
+                ["mjd", "mag", "magerr", "mag5sig", "filter", "expname"]
+            ]
+            lc_df.columns = ["mjd", "mag", "mag_err", "limit", "filter", "expname"]
 
             # Add a column to record which ATLAS unit the value was taken from
-            lc_df['unit'] = lc_df["expname"].str[:3]
-            lc_df.drop('expname', axis=1, inplace=True)
-            lc_df['survey'] = "ATLAS"
+            lc_df["unit"] = lc_df["expname"].str[:3]
+            lc_df = lc_df.drop("expname", axis=1)
+            lc_df["survey"] = "ATLAS"
             status["lc_count"] = len(lc_df)
 
         except (SurveyMetaMissingError, ATLASAPIClientError):
-            status['status'] = "no match"
+            status["status"] = "no match"
         except SurveyLightCurveMissingError:
             status["status"].append("|no light curve")
 
         except Exception as e:
-            status.update({"status": "encontered unexpected error",
-                           "message": str(e),
-                           "details": traceback.format_exc()})
+            status.update({
+                "status": "encontered unexpected error",
+                "message": str(e),
+                "details": traceback.format_exc(),
+            })
         finally:
             self.logger.info(status)
         return meta, lc_df
@@ -432,11 +481,19 @@ class TNS(Survey):
                 "dec_deg": {"value": result["decdeg"], "source": 0},
                 "ra_hms": {"value": result["ra"], "source": 0},
                 "dec_dms": {"value": result["dec"], "source": 0},
-                "object_type": [{"value": result["name_prefix"], "source": 0},
-                             {"value": result["object_type"]["name"], "source": 0}],
+                "object_type": [
+                    {"value": result["name_prefix"], "source": 0},
+                    {"value": result["object_type"]["name"], "source": 0},
+                ],
                 "discovery_date": {"value": result["discoverydate"], "source": 0},
-                "reporting_group": {"value": result["reporting_group"]['group_name'], "source": 0},
-                "discovery_data_source": {"value": result["discovery_data_source"]['group_name'], "source": 0},
+                "reporting_group": {
+                    "value": result["reporting_group"]["group_name"],
+                    "source": 0,
+                },
+                "discovery_data_source": {
+                    "value": result["discovery_data_source"]["group_name"],
+                    "source": 0,
+                },
             }
             if result["redshift"] is not None:
                 meta["redshift"] = {"value": result["redshift"], "source": 0}
@@ -444,12 +501,14 @@ class TNS(Survey):
                 meta["host_name"] = {"value": result["hostname"], "source": 0}
 
         except SurveyMetaMissingError:
-            status['status'] = "failed to get TNS metadata"
+            status["status"] = "failed to get TNS metadata"
 
         except Exception as e:
-            status.update({"status": "encontered unexpected error",
-                           "message": str(e),
-                           "details": traceback.format_exc()})
+            status.update({
+                "status": "encontered unexpected error",
+                "message": str(e),
+                "details": traceback.format_exc(),
+            })
         finally:
             self.logger.info(status)
         return meta, lc_df

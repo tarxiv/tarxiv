@@ -4,6 +4,7 @@ import yaml
 import sys
 import os
 
+
 class TarxivModule:
     """Base class for all TarXiv modules to ensure unified logging and configuration."""
 
@@ -32,7 +33,9 @@ class TarxivModule:
             self.logger.setLevel(logging.INFO)
 
         # Print log to stdout
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
         handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
@@ -47,15 +50,18 @@ class TarxivModule:
         # Status
         self.logger.info({"status": "initializing", "module": self.module})
 
+
 class SurveyMetaMissingError(Exception):
     """TBD"""
 
     pass
 
+
 class SurveyLightCurveMissingError(Exception):
     """TBD"""
 
     pass
+
 
 def clean_meta(obj_meta):
     """Removes any empty fields from object meta schema

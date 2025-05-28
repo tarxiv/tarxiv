@@ -7,6 +7,7 @@ from couchbase.exceptions import DocumentNotFoundException
 import json
 import os
 
+
 class TarxivDB(TarxivModule):
     """Interface for TarXiv couchbase data."""
 
@@ -54,7 +55,11 @@ class TarxivDB(TarxivModule):
         """
         coll = self.conn.collection(collection)
         coll.upsert(object_name, payload)
-        self.logger.info({"status": "upserted", "object_name": object_name, "collection": collection})
+        self.logger.info({
+            "status": "upserted",
+            "object_name": object_name,
+            "collection": collection,
+        })
 
     def get(self, object_name, collection):
         """Retrieve a document from couchbase collection based on object_id
@@ -66,9 +71,17 @@ class TarxivDB(TarxivModule):
         try:
             coll = self.conn.collection(collection)
             result = coll.get(object_name).value
-            self.logger.info({"status": "retrieved", "object_name": object_name, "collection": collection})
+            self.logger.info({
+                "status": "retrieved",
+                "object_name": object_name,
+                "collection": collection,
+            })
         except DocumentNotFoundException:
-            self.logger.warn({"status": "no_document", "object_name": object_name, "collection": collection})
+            self.logger.warn({
+                "status": "no_document",
+                "object_name": object_name,
+                "collection": collection,
+            })
             result = None
         return result
 

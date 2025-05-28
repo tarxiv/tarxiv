@@ -76,7 +76,6 @@ class Gmail(TarxivModule):
 
         return result
 
-
     def parse_message(self, msg):
         """
         Parse a gmail message for tns object names
@@ -175,12 +174,22 @@ class Gmail(TarxivModule):
                 try:
                     # Read full message
                     time.sleep(self.config["gmail"]["polling_interval"])
-                    msg = service.users().messages().get(userId="me", id=message["id"]).execute()
+                    msg = (
+                        service.users()
+                        .messages()
+                        .get(userId="me", id=message["id"])
+                        .execute()
+                    )
                 except HttpError:
                     # Rate limit, wait 10 seconds and try again
                     self.logger.warn({"status": "rate_limited, sleeping 12 seconds"})
                     time.sleep(self.config["gmail"]["polling_interval"] * 3)
-                    msg = service.users().messages().get(userId="me", id=message["id"]).execute()
+                    msg = (
+                        service.users()
+                        .messages()
+                        .get(userId="me", id=message["id"])
+                        .execute()
+                    )
 
                 # Parse message for tns alerts
                 alerts = self.parse_message(msg)
