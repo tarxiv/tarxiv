@@ -1,6 +1,4 @@
-"""
-HFS - This was written with GPT 4o
-"""
+"""HFS - This was written with GPT 4o"""
 import pytest
 import tempfile
 import shutil
@@ -16,7 +14,7 @@ def config_dir_with_schema():
     config_path = os.path.join(temp_dir, "config.yml")
 
     sample_schema = {"test_field": {"type": "string", "description": "A test field"}}
-    sample_config = {"log_dir": None, "database": {"host": "localhost", "user": "user", "pass": "pass"}}
+    # sample_config = {"log_dir": None, "database": {"host": "localhost", "user": "user", "pass": "pass"}}
 
     with open(schema_path, "w") as f:
         json.dump(sample_schema, f)
