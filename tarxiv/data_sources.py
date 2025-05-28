@@ -446,14 +446,14 @@ class TNS(Survey):
         super().__init__("tns", *args, **kwargs)
 
         # Set attributes
-        self.site = self.config["tns"]["site"]
+        self.site = "https://www.wis-tns.org/"#self.config["tns"]["site"]
         self.api_key = os.getenv("TARXIV_TNS_API_KEY", "")
 
         # Create marker
         tns_marker_dict = {
             "tns_id": os.getenv("TARXIV_TNS_ID", 0),
-            "type": self.config["tns"]["type"],
-            "name": self.config["tns"]["name"],
+            "type": "bot", #self.config["tns"]["type"],
+            "name": "tarxiv",#self.config["tns"]["name"],
         }
         self.marker = "tns_marker" + json.dumps(tns_marker_dict, separators=(",", ":"))
 
