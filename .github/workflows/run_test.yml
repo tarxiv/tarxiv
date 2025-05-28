@@ -28,6 +28,10 @@ jobs:
 
     - name: Runs just the test
       run: |
+        export TARXIV_ATLAS_TOKEN=$TARXIV_ATLAS_TOKEN
+        export TARXIV_TNS_API_KEY=$TARXIV_TNS_API_KEY
+        export TARXIV_TNS_ID=$TARXIV_TNS_ID
+        echo $TARXIV_TNS_ID
         python -m pytest 
 
     - name: Run tests with coverage
