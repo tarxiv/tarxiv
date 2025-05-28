@@ -9,10 +9,6 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10", "3.11"]
-    env:
-      TARXIV_ATLAS_TOKEN: ${{ secrets.TARXIV_ATLAS_TOKEN }}
-      TARXIV_TNS_API_KEY: ${{ secrets.TARXIV_TNS_API_KEY }}
-      TARXIV_TNS_ID: ${{ secrets.TARXIV_TNS_ID }}
 
     steps:
     - uses: actions/checkout@v4
@@ -27,11 +23,11 @@ jobs:
         python -m pip install -e '.[dev]'
 
     - name: Runs just the test
+      env:
+        TARXIV_ATLAS_TOKEN: ${{ secrets.TARXIV_ATLAS_TOKEN }}
+        TARXIV_TNS_API_KEY: ${{ secrets.TARXIV_TNS_API_KEY }}
+        TARXIV_TNS_ID: ${{ secrets.TARXIV_TNS_ID }}
       run: |
-        export TARXIV_ATLAS_TOKEN=$TARXIV_ATLAS_TOKEN
-        export TARXIV_TNS_API_KEY=$TARXIV_TNS_API_KEY
-        export TARXIV_TNS_ID=$TARXIV_TNS_ID
-        echo $TARXIV_TNS_ID
         python -m pytest 
 
     - name: Run tests with coverage
