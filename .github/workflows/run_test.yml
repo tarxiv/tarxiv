@@ -28,7 +28,7 @@ jobs:
         TARXIV_TNS_API_KEY: ${{ secrets.TARXIV_TNS_API_KEY }}
         TARXIV_TNS_ID: ${{ secrets.TARXIV_TNS_ID }}
       run: |
-        python -m pytest 
+        python -m pytest --log-cli-level=INFO 
 
     - name: Run tests with coverage
       run: |

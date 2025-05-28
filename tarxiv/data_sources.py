@@ -455,6 +455,8 @@ class TNS(Survey):
             "type": self.config["tns"]["type"],
             "name": self.config["tns"]["name"],
         }
+        import logging
+        logging.warning("TARXIV_TNS_ID: {}".format(os.getenv("TARXIV_TNS_ID", 0)))
         self.marker = "tns_marker" + json.dumps(tns_marker_dict, separators=(",", ":"))
 
     def get_object(self, obj_name):
