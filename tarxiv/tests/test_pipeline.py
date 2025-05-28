@@ -121,8 +121,9 @@ def test_pipeline():
     obj_name = "2024iss"
 
     # Initial TNS metadata
-    tns_meta = get_tns_meta(obj_name)
-    ra_deg, dec_deg = tns_meta["ra_deg"]["value"], tns_meta["dec_deg"]["value"]
+    #tns_meta = get_tns_meta(obj_name)
+    #ra_deg, dec_deg = tns_meta["ra_deg"]["value"], tns_meta["dec_deg"]["value"]
+    ra_deg, dec_deg = 194.7755, 28.812
 
     # Get light curve data & metadata
     atlas_meta, atlas_lc = get_atlas_data(obj_name, ra_deg, dec_deg)
