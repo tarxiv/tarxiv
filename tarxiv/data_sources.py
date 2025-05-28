@@ -455,8 +455,6 @@ class TNS(Survey):
             "type": self.config["tns"]["type"],
             "name": self.config["tns"]["name"],
         }
-        import logging
-        logging.warning("toto: {}".format(tns_marker_dict["tns_id"]))
         self.marker = "tns_marker" + json.dumps(tns_marker_dict, separators=(",", ":"))
 
     def get_object(self, obj_name):
