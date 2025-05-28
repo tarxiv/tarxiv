@@ -1,5 +1,5 @@
 """Pull and process lightcurves"""
-from .utils import TarxivModule, SurveyMetaMissing, SurveyLightCurveMissing
+from .utils import TarxivModule, SurveyMetaMissingError, SurveyLightCurveMissingError
 from atlasapiclient.exceptions import ATLASAPIClientError
 import atlasapiclient.client as atlas_client
 
@@ -18,13 +18,10 @@ import re
 import os
 
 class Survey(TarxivModule):
-    """
-    Base class to interact with a Tarxiv survey or data source.
-    """
+    """Base class to interact with a Tarxiv survey or data source."""
+
     def __init__(self, *args, **kwargs):
-        """
-        Read in data for survey sources from config directory
-        """
+        """Read in data for survey sources from config directory"""
         super().__init__(*args, **kwargs)
 
         # Read in schema sources
@@ -43,9 +40,10 @@ class Survey(TarxivModule):
         }
 
     def get_object(self, *args, **kwargs):
-        """
-        Query the survey for object at a given set of coordinates.
-        Must return metadata dict containing at least one survey designation, and any additional meta
+        """Query the survey for object at a given set of coordinates.
+
+        Must return metadata dict containing at least 
+        one survey designation, and any additional meta
                 e.g. {"identifiers" : [{"name": ATLAS25XX, "source": 3}, ...],
                      {"meta": {"redshift": {"value": 0.003, "source": 8},
                                "hostname": [{"value": "NCGXXXX", "source": 9},
@@ -59,13 +57,14 @@ class Survey(TarxivModule):
             filter: bandpass filter,
             unit: telescope or camera for given measurement (if survey only has one unit, use 'main')
             survey: survey name.
+
         :return: survey_meta; dict (None if no results), survey_lc; DataFrame (empty df if no results)
         """
         raise NotImplementedError("each survey must implement their own logic to get meta/lightcurve")
 
     def update_object_meta(self, obj_meta, survey_meta):
-        """
-        Update the object meta schema with data from the survey meta returned by get_object.
+        """Update the object meta schema with data from the survey meta returned by get_object.
+
         :param obj_meta: existing object meta schema; dict
         :param survey_meta: survey meta returned from get_object; dict
         :return:updated object meta dictionary
@@ -87,8 +86,8 @@ class Survey(TarxivModule):
 
 
     def meta_add_peak_mags(self, obj_meta, obj_lc_df):
-        """
-        Once we have all the object dataframes collated; find peak mag for each filter and append to object_meta.
+        """Once we have all the object dataframes collated; find peak mag for each filter and append to object_meta.
+
         :param obj_meta: object meta schema; dict
         :param obj_lc_df: light curve dataframe; pd.DataFrame
         :return:object_meta; updated object meta dictionary
@@ -114,22 +113,18 @@ class Survey(TarxivModule):
 
 
 class ASAS_SN(Survey):
-    """
-    Interface to ASAS-SN SkyPatrol.
-    """
+    """Interface to ASAS-SN SkyPatrol."""
 
     def __init__(self, *args, **kwargs):
-        """
-        Connect to ASAS-SN SkyPatrol API.
-        """
+        """Connect to ASAS-SN SkyPatrol API."""
         super().__init__("asas-sn", *args, **kwargs)
 
         # Also need ASAS-SN client
         self.client = SkyPatrolClient(verbose=False)
 
     def get_object(self, obj_name, ra_deg, dec_deg, radius=15):
-        """
-        Get ASAS-SN Lightcurve curve from coordinates using cone_search.
+        """Get ASAS-SN Lightcurve curve from coordinates using cone_search.
+
         :param obj_name: name of object (used for logging); str
         :param ra_deg: right ascension in degrees; float
         :dec_deg: declination in degrees; float
@@ -137,7 +132,7 @@ class ASAS_SN(Survey):
         return asas-sn metadata and lightcurve dataframe
         """
         # Set meta and lc_df empty to start
-        meta , lc_df = None, pd.DataFrame()
+        meta, lc_df = None, pd.DataFrame()
         # Initial status
         status = {"obj_name": obj_name}
 
@@ -161,20 +156,20 @@ class ASAS_SN(Survey):
             query = re.sub(r'(\s+)', ' ', query)
             lcs = self.client.adql_query(query, download=True)
             if lcs is None:
-                raise SurveyMetaMissing
+                raise SurveyMetaMissingError
             # Get meta
             nearest = lcs.catalog_info.iloc[0]
             nearest_id = nearest['asas_sn_id']
             meta = {'identifiers': [{"name": str(nearest_id), 'source': 6}],
                     'ra_deg': [{"value": nearest['ra_deg'], 'source': 6}],
-                    'dec_deg': [{"value": nearest['dec_deg'], 'source': 6}],}
+                    'dec_deg': [{"value": nearest['dec_deg'], 'source': 6}], }
             # Log
             status.update({"status": "match", "id": str(nearest_id)})
             # Sometimes we have meta but no database object (will fix later)
             if lcs.data is None or len(lcs.data) == 0:
-                raise SurveyLightCurveMissing
+                raise SurveyLightCurveMissingError
             # Get LC
-            lc_df =  lcs[nearest_id].data
+            lc_df = lcs[nearest_id].data
             lc_df['mjd'] = lc_df.apply(lambda row: Time(row['jd'], format='jd').mjd, axis=1)
             lc_df.rename({"phot_filter": "filter", "camera": "unit"}, axis=1, inplace=True)
             # Do not return data from bad images
@@ -185,9 +180,9 @@ class ASAS_SN(Survey):
             lc_df = lc_df[['mjd', 'mag', 'mag_err', 'limit', 'filter', 'unit', 'survey']]
             # Update
             status["lc_count"] = len(lc_df)
-        except SurveyMetaMissing:
+        except SurveyMetaMissingError:
             status['status'] = "no match"
-        except SurveyLightCurveMissing:
+        except SurveyLightCurveMissingError:
             status["status"].append("|no light curve")
         except Exception as e:
             status.update({"status": "encontered unexpected error",
@@ -199,15 +194,14 @@ class ASAS_SN(Survey):
 
 
 class ZTF(Survey):
-    """
-    Interface to ZTF Fink broker.
-    """
+    """Interface to ZTF Fink broker."""
+
     def __init__(self, *args, **kwargs):
         super().__init__("ztf", *args, **kwargs)
 
     def get_object(self, obj_name, ra_deg, dec_deg, radius=15):
-        """
-        Get ZTF Lightcurve from coordinates using cone_search.
+        """Get ZTF Lightcurve from coordinates using cone_search.
+
         :param obj_name: name of object (used for logging); str
         :param ra_deg: right ascension in degrees; float
         :dec_deg: declination in degrees; float
@@ -215,7 +209,7 @@ class ZTF(Survey):
         return ztf metadata and lightcurve dataframe
         """
         # Set meta and lc_df empty to start
-        meta , lc_df = None, pd.DataFrame()
+        meta, lc_df = None, pd.DataFrame()
         # Initial status
         status = {"obj_name": obj_name}
         try:
@@ -226,13 +220,13 @@ class ZTF(Survey):
             )
             # check status
             if result.status_code != 200:
-                raise SurveyMetaMissing
+                raise SurveyMetaMissingError
 
             # get data for the match
             matches = [val["i:objectId"] for val in result.json()]
 
             if len(matches) == 0:
-                raise SurveyMetaMissing
+                raise SurveyMetaMissingError
 
             # Show ztf name
             ztf_name = matches[0]
@@ -245,7 +239,7 @@ class ZTF(Survey):
             )
             # check status
             if result.status_code != 200 or result.json() == []:
-                raise SurveyLightCurveMissing
+                raise SurveyLightCurveMissingError
 
             # Metadata on each line of photometry, we only take first row (d prefix are non-phot)
             result_meta = result.json()[0]
@@ -285,9 +279,9 @@ class ZTF(Survey):
             lc_df["survey"] = "ZTF"
             status["lc_count"] = len(lc_df)
 
-        except SurveyMetaMissing:
+        except SurveyMetaMissingError:
             status['status'] = "no match"
-        except SurveyLightCurveMissing:
+        except SurveyLightCurveMissingError:
             status["status"].append("|no light curve")
 
         except Exception as e:
@@ -300,15 +294,14 @@ class ZTF(Survey):
 
 
 class ATLAS(Survey):
-    """
-    Interface to ATLAS Transient Web Server.
-    """
+    """Interface to ATLAS Transient Web Server."""
+
     def __init__(self, *args, **kwargs):
         super().__init__("atlas", *args, **kwargs)
 
     def get_object(self, obj_name, ra_deg, dec_deg, radius=15):
-        """
-        Get ZTF Lightcurve from coordinates using cone_search.
+        """Get ZTF Lightcurve from coordinates using cone_search.
+
         :param obj_name: name of object (used for logging); str
         :param ra_deg: right ascension in degrees; float
         :dec_deg: declination in degrees; float
@@ -316,7 +309,7 @@ class ATLAS(Survey):
         return ztf metadata and lightcurve dataframe
         """
         # Set meta and lc_df empty to start
-        meta , lc_df = None, pd.DataFrame()
+        meta, lc_df = None, pd.DataFrame()
         # Initial status
         status = {"obj_name": obj_name}
         try:
@@ -330,7 +323,7 @@ class ATLAS(Survey):
 
 
             if 'object' not in cone_res.response_data.keys():
-                raise SurveyMetaMissing
+                raise SurveyMetaMissingError
             # Get atlas id and query for data
             atlas_id = cone_res.response_data['object']
             status.update({"status": "match", "id": atlas_id})
@@ -342,7 +335,7 @@ class ATLAS(Survey):
                 # Contains meta and lc
                 result = curve_res.response_data[0]
             except:
-                raise SurveyLightCurveMissing
+                raise SurveyLightCurveMissingError
 
             # Insert meta data
             meta = {"identifiers": [{"name": result["object"]["id"], "source": 1}],
@@ -368,9 +361,9 @@ class ATLAS(Survey):
             lc_df['survey'] = "ATLAS"
             status["lc_count"] = len(lc_df)
 
-        except (SurveyMetaMissing, ATLASAPIClientError):
+        except (SurveyMetaMissingError, ATLASAPIClientError):
             status['status'] = "no match"
-        except SurveyLightCurveMissing:
+        except SurveyLightCurveMissingError:
             status["status"].append("|no light curve")
 
         except Exception as e:
@@ -383,14 +376,10 @@ class ATLAS(Survey):
 
 
 class TNS(Survey):
-    """
-    Interface to Transient Name Server API.
-    """
+    """Interface to Transient Name Server API."""
 
     def __init__(self, *args, **kwargs):
-        """
-        Read in credentials and construct 'marker' for API calls
-        """
+        """Read in credentials and construct 'marker' for API calls"""
         super().__init__("tns", *args, **kwargs)
 
         # Set attributes
@@ -406,13 +395,13 @@ class TNS(Survey):
         self.marker = "tns_marker" + json.dumps(tns_marker_dict, separators=(",", ":"))
 
     def get_object(self, obj_name):
-        """
-        Get TNS metadata for a given object name.
+        """Get TNS metadata for a given object name.
+
         :param obj_name: TNS object name, e.g., 2025xxx; str
         :return: metadata dictionary and empty dataframe (since we are not pulling lightcurve)
         """
         # Set meta and lc_df empty to start
-        meta , lc_df = None, pd.DataFrame()
+        meta, lc_df = None, pd.DataFrame()
         # Initial status
         status = {"obj_name": obj_name}
         try:
@@ -432,7 +421,7 @@ class TNS(Survey):
             response_json = json.loads(response.text)
             # Meta
             if "data" not in response_json.keys():
-                raise SurveyMetaMissing
+                raise SurveyMetaMissingError
 
             # Reduce meta to what we want
             status["status"] = "query success"
@@ -454,7 +443,7 @@ class TNS(Survey):
             if result["hostname"] is not None:
                 meta["host_name"] = {"value": result["hostname"], "source": 0}
 
-        except SurveyMetaMissing:
+        except SurveyMetaMissingError:
             status['status'] = "failed to get TNS metadata"
 
         except Exception as e:
@@ -466,8 +455,8 @@ class TNS(Survey):
             return meta, lc_df
 
     def download_bulk_tns(self):
-        """
-        Download bulk TNS public object csv and convert to dataframe.
+        """Download bulk TNS public object csv and convert to dataframe.
+
         Used for bulk back-processing of TNS sources
         :return: full TNS public object dataframe
         """

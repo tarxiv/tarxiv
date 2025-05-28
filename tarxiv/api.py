@@ -225,8 +225,3 @@ def server_response(content, status_code):
     response.headers["Content-Type"] = "application/json; charset=utf-8"
     response.status_code = status_code
     return response
-
-
-
-
-

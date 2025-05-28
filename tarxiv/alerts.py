@@ -125,7 +125,7 @@ class Gmail(TarxivModule):
         self.t = threading.Thread(target=self._monitoring_thread, daemon=True)
         self.t.start()
         # Log
-        self.logger.info({"status":"starting monitoring thread"})
+        self.logger.info({"status": "starting monitoring thread"})
 
     def stop_monitoring(self):
         """
@@ -137,7 +137,7 @@ class Gmail(TarxivModule):
             self.stop_event.set()
             self.t.join()
         # Log
-        self.logger.info({"status":"stopping monitoring thread"})
+        self.logger.info({"status": "stopping monitoring thread"})
 
     def _monitoring_thread(self):
         """

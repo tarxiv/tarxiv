@@ -5,12 +5,11 @@ import sys
 import os
 
 class TarxivModule:
-    """
-    Base class for all TarXiv modules to ensure unified logging and configuration.
-    """
+    """Base class for all TarXiv modules to ensure unified logging and configuration."""
+
     def __init__(self, module, config_dir, debug=False):
-        """
-        Read in configuration file and create module logger
+        """Read in configuration file and create module logger
+
         :param module: name of module; str
         :param config_dir: directory containing config files; str.
         :param debug: sets logging level to DEBUG.
@@ -48,19 +47,22 @@ class TarxivModule:
         # Status
         self.logger.info({"status": "initializing", "module": self.module})
 
-class SurveyMetaMissing(Exception):
+class SurveyMetaMissingError(Exception):
+    """TBD"""
+
     pass
 
-class SurveyLightCurveMissing(Exception):
+class SurveyLightCurveMissingError(Exception):
+    """TBD"""
+
     pass
 
 def clean_meta(obj_meta):
-    """
-    Removes any empty fields from object meta schema
+    """Removes any empty fields from object meta schema
+
     :param obj_meta: object meta schema; dict
     :return: clean schema; dict
     """
     obj_meta = {k: v for k, v in obj_meta.items() if v != []}
     # obj_meta = {k: v[0] for k, v in obj_meta.items() if len(v) == 1}
     return obj_meta
-
