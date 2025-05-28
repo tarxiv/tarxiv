@@ -469,9 +469,9 @@ class TNS(Survey):
         status = {"obj_name": obj_name}
         try:
             # Wait to avoid rate limiting
-            time.sleep(self.config["tns"]["rate_limit"])
+            time.sleep(4)#self.config["tns"]["rate_limit"])
             # Run request to TNS server
-            get_url = self.site + "/api/get/object"
+            get_url = self.site + "/api/get/object/"
             headers = {"User-Agent": self.marker}
             obj_request = OrderedDict([
                 ("objid", ""),
