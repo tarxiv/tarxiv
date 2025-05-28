@@ -45,7 +45,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["tarxiv""]]
+where = ["tarxiv"]
 
 #[tool.setuptools.package-data]
 #"tarxiv.data" = ["*.csv"]
