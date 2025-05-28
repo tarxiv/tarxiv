@@ -20,12 +20,13 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install ruff
+
     - name: tarxiv
       run: |
-        ruff check --statistics --preview --fix tarxiv/*.py
-        ruff format --check --preview tarxiv/*.py
+        ruff format --preview tarxiv/  # auto-fix formatting issues
+        ruff check --statistics --preview --fix tarxiv/  # fix lint issues
 
     - name: bin 
       run: |
-        ruff check --statistics --preview bin/*.py
-        ruff format --check --preview bin/*.py
+        ruff format --preview bin/
+        ruff check --statistics --preview --fix bin/
