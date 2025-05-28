@@ -372,7 +372,7 @@ class ATLAS(Survey):
                            "details": traceback.format_exc()})
         finally:
             self.logger.info(status)
-            return meta, lc_df
+        return meta, lc_df
 
 
 class TNS(Survey):
@@ -452,7 +452,7 @@ class TNS(Survey):
                            "details": traceback.format_exc()})
         finally:
             self.logger.info(status)
-            return meta, lc_df
+        return meta, lc_df
 
     def download_bulk_tns(self):
         """Download bulk TNS public object csv and convert to dataframe.
