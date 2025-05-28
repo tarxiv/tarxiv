@@ -481,7 +481,11 @@ class TNS(Survey):
             ])
             get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
             response = requests.post(get_url, headers=headers, data=get_data)
+            if response.status_code != 200:
+                status["explanation"] = response.content
+                raise SurveyMetaMissingError
             response_json = response.json()
+
             # Meta
             if "data" not in response_json.keys():
                 raise SurveyMetaMissingError
