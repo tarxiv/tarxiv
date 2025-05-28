@@ -19,9 +19,7 @@ class Gmail(TarxivModule):
     """Module for interfacing with gmail and parsing TNS alerts."""
 
     def __init__(self, *args, **kwargs):
-        """
-        Create module, authenticate gmail and establish connection.
-        """
+        """Create module, authenticate gmail and establish connection."""
         super().__init__("gmail", *args, **kwargs)
 
         # Logging
@@ -63,8 +61,8 @@ class Gmail(TarxivModule):
         signal.signal(signal.SIGTERM, self._signal_handler)
 
     def poll(self, timeout=1):
-        """
-        Once we have began monitoring notices, poll the queue for new messages and alerts
+        """Once we have began monitoring notices, poll the queue for new messages and alerts
+
         :param timeout, seconds; int
         :return: poll result tuple containing the original message and a list of tns object names; (message, alerts)
                  if there is nothing in the queue then poll will return None after the timeout has expired.
@@ -77,8 +75,8 @@ class Gmail(TarxivModule):
         return result
 
     def parse_message(self, msg):
-        """
-        Parse a gmail message for tns object names
+        """Parse a gmail message for tns object names
+
         :param msg: gmail message object
         :return: list of tns object names
         """
@@ -101,8 +99,8 @@ class Gmail(TarxivModule):
         return result
 
     def mark_read(self, message, verbose=False):
-        """
-        Marks message as read in gmail, so it won't show up again in our monitoring stream
+        """Marks message as read in gmail, so it won't show up again in our monitoring stream
+
         :param message: gmail message object
         :return: void
         """
@@ -117,8 +115,8 @@ class Gmail(TarxivModule):
             self.logger.debug(status)
 
     def monitor_notices(self):
-        """
-        Starts thread to monitor gmail account for tns alerts:
+        """Starts thread to monitor gmail account for tns alerts:
+
         :return: void
         """
         self.t = threading.Thread(target=self._monitoring_thread, daemon=True)
@@ -127,8 +125,8 @@ class Gmail(TarxivModule):
         self.logger.info({"status": "starting monitoring thread"})
 
     def stop_monitoring(self):
-        """
-        Kill monitoring thread.
+        """Kill monitoring thread.
+
         :return: void
         """
         if self.t is not None:
@@ -139,10 +137,11 @@ class Gmail(TarxivModule):
         self.logger.info({"status": "stopping monitoring thread"})
 
     def _monitoring_thread(self):
-        """
-        Open a gmail service object and continuously monitor gmail for new messages.
+        """Open a gmail service object and continuously monitor gmail for new messages.
+
         Each new message is parsed of tns object alerts and results are submitted to local queue.
         Also refresh the token every 30 minutes.
+
         :return: void
         """
         # Connect to service

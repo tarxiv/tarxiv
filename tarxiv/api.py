@@ -2,12 +2,13 @@ from tarxiv.database import TarxivDB
 from tarxiv.utils import TarxivModule
 from flask import Flask, Blueprint, request, make_response
 from paste.translogger import TransLogger
-import traceback
 import cherrypy
 import json
 
 
 class API(TarxivModule):
+    """API module for server requests to the tarxiv database."""
+
     def __init__(self, *args, **kwargs):
         super().__init__("api", *args, **kwargs)
 
@@ -68,6 +69,7 @@ class API(TarxivModule):
                 "token": token,
                 "obj_name": obj_name,
             }
+
             try:
                 # Return error if bad token
                 if self.check_token(token) is False:
@@ -79,19 +81,23 @@ class API(TarxivModule):
                     raise LookupError("no such object")
                 # Normal return
                 status_code = 200
+                log["status"] = "Success"
             except PermissionError as e:
                 result = {"error": str(e), "type": "token"}
                 status_code = 401
+                log["status"] = "PermissionError"
             except LookupError as e:
                 result = {"error": str(e), "type": "lookup"}
                 status_code = 404
+                log["status"] = "LookupError"
             except Exception as e:
                 result = {"error": str(e), "type": "server"}
                 status_code = 500
+                log["status"] = "ServerError"
             finally:
-                log["status"] = "success"
                 self.logger.info(log)
-                return server_response(result, status_code)
+
+            return server_response(result, status_code)
 
         @self.app.route("/get_object_lc/<string:obj_name>", methods=["POST"])
         def get_object_lc(obj_name):
@@ -116,19 +122,23 @@ class API(TarxivModule):
                     raise LookupError("no such object")
                 # Normal return
                 status_code = 200
+                log["status"] = "Success"
             except PermissionError as e:
-                result = {"error": str(e)}
+                result = {"error": str(e), "type": "token"}
                 status_code = 401
+                log["status"] = "PermissionError"
             except LookupError as e:
-                result = {"error": str(e)}
+                result = {"error": str(e), "type": "lookup"}
                 status_code = 404
+                log["status"] = "LookupError"
             except Exception as e:
                 result = {"error": str(e), "type": "server"}
                 status_code = 500
+                log["status"] = "ServerError"
             finally:
-                log["status"] = "success"
                 self.logger.info(log)
-                return server_response(result, status_code)
+
+            return server_response(result, status_code)
 
         @self.app.route("/search_objects", methods=["POST"])
         def search_objects():
@@ -165,21 +175,23 @@ class API(TarxivModule):
                 result = self.txv_db.query(query_str)
                 result = [r["obj_name"] for r in result]
                 status_code = 200
-
+                log["status"] = "Success"
             except PermissionError as e:
-                result = {"error": str(e)}
+                result = {"error": str(e), "type": "token"}
                 status_code = 401
+                log["status"] = "PermissionError"
             except LookupError as e:
-                result = {"error": str(e)}
+                result = {"error": str(e), "type": "lookup"}
                 status_code = 404
+                log["status"] = "LookupError"
             except Exception as e:
-                traceback.print_exc()
                 result = {"error": str(e), "type": "server"}
                 status_code = 500
+                log["status"] = "ServerError"
             finally:
-                log["status"] = "success"
                 self.logger.info(log)
-                return server_response(result, status_code)
+
+            return server_response(result, status_code)
 
     def build_condition(self, field, condition):
         # Start condition_string
@@ -212,12 +224,12 @@ class API(TarxivModule):
         if operator not in self.valid_operators:
             raise ValueError(f"bad operator {operator}")
         # Simple check against SQL injection, allow max two words in query string, semicolons or comment str
-        if type(search_value) == str:
+        if isinstance(search_value, str):
             if any(char in search_value for char in [";", "/*", "*/", "--"]):
                 raise ValueError(
                     f"search field contains invalid characters {search_value}"
                 )
-        if type(search_value) == list:
+        if isinstance(search_value, list):
             for item in search_value:
                 if any(char in str(item) for char in [";", "/*", "*/", "--"]):
                     raise ValueError(
