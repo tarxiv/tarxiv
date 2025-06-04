@@ -3,7 +3,6 @@
 from .utils import TarxivModule, SurveyMetaMissingError, SurveyLightCurveMissingError
 
 from pyasassn.client import SkyPatrolClient
-from collections import OrderedDict
 from astropy.time import Time
 
 import pandas as pd
@@ -456,8 +455,6 @@ class TNS(Survey):
             "name": self.config["tns"]["name"],
         }
         self.marker = "tns_marker" + json.dumps(tns_marker_dict, separators=(",", ":"))
-        import logging
-        logging.warning(self.marker)
 
     def get_object(self, obj_name):
         """Get TNS metadata for a given object name.
@@ -473,16 +470,32 @@ class TNS(Survey):
             # Wait to avoid rate limiting
             time.sleep(self.config["tns"]["rate_limit"])
             # Run request to TNS server
-            get_url = self.site + "/api/get/object"
+            # get_url = self.site + "/api/get/object"
             headers = {"User-Agent": self.marker}
-            obj_request = OrderedDict([
-                ("objid", ""),
-                ("objname", obj_name),
-                ("photometry", "0"),
-                ("spectra", "0"),
-            ])
-            get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
-            response = requests.post(get_url, headers=headers, data=get_data)
+            # obj_request = OrderedDict([
+            #     ("objid", ""),
+            #     ("objname", obj_name),
+            #     ("photometry", "0"),
+            #     ("spectra", "0"),
+            # ])
+            # get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
+            # response = requests.post(get_url, headers=headers, data=get_data)
+            data = {
+                "objname": obj_name,
+            }
+
+            # get object type
+            json_data = [
+                ("api_key", (None, self.api_key)),
+                ("data", (None, json.dumps(data))),
+            ]
+
+            response = requests.post(
+                "https://www.wis-tns.org/api/get/object",
+                files=json_data,
+                headers=headers,
+            )
+
             if response.status_code != 200:
                 status["explanation"] = response.content
                 raise SurveyMetaMissingError
