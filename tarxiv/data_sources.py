@@ -479,6 +479,10 @@ class TNS(Survey):
                 ("spectra", "0"),
             ])
             get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
+
+            # stupid
+            headers = {'User-Agent': 'tns_marker{"tns_id":"191311","type":"bot","name":"tarxiv"}'}
+            get_data = {'api_key': '33912ce9ff5bb4a429957376e4f5ceb8e045b99d', 'data': '{"objid": "", "objname": "2024iss", "photometry": "0", "spectra": "0"}'}
             response = requests.post(get_url, headers=headers, data=get_data)
 
             if response.status_code != 200:
