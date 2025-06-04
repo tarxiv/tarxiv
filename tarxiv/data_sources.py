@@ -450,7 +450,7 @@ class TNS(Survey):
 
         # Create marker
         tns_marker_dict = {
-            "tns_id": 191311,
+            "tns_id": os.getenv("TARXIV_TNS_ID", 0),
             "type": self.config["tns"]["type"],
             "name": self.config["tns"]["name"],
         }
@@ -478,8 +478,7 @@ class TNS(Survey):
                 ("photometry", "0"),
                 ("spectra", "0"),
             ])
-            #get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
-            get_data = {"api_key": "33912ce9ff5bb4a429957376e4f5ceb8e045b99d", "data": json.dumps(obj_request)}
+            get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
             response = requests.post(get_url, headers=headers, data=get_data)
 
             if response.status_code != 200:
