@@ -456,6 +456,8 @@ class TNS(Survey):
             "name": self.config["tns"]["name"],
         }
         self.marker = "tns_marker" + json.dumps(tns_marker_dict, separators=(",", ":"))
+        import logging
+        logging.warning(self.marker)
 
     def get_object(self, obj_name):
         """Get TNS metadata for a given object name.
