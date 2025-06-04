@@ -15,7 +15,6 @@ readme = "README.md"
 license = { text = "BSD-3" }
 dependencies = [
     "atlasapiclient",
-    "fink-tns",
     "hop-client",
     "skypatrol",
     "astropy",

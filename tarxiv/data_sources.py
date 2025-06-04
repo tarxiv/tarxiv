@@ -1,13 +1,10 @@
 """Pull and process lightcurves"""
 
 from .utils import TarxivModule, SurveyMetaMissingError, SurveyLightCurveMissingError
-from atlasapiclient.exceptions import ATLASAPIClientError
-import atlasapiclient.client as atlas_client
 
 from pyasassn.client import SkyPatrolClient
-from collections import OrderedDict
 from astropy.time import Time
-
+from collections import OrderedDict
 import pandas as pd
 import requests
 import traceback
@@ -205,7 +202,7 @@ class ASAS_SN(Survey):  # noqa: N801
             })
         finally:
             self.logger.info(status)
-        return meta, lc_df
+        return meta, lc_df, status
 
 
 class ZTF(Survey):
@@ -325,7 +322,7 @@ class ZTF(Survey):
             })
         finally:
             self.logger.info(status)
-        return meta, lc_df
+        return meta, lc_df, status
 
 
 class ATLAS(Survey):
@@ -335,7 +332,7 @@ class ATLAS(Survey):
         super().__init__("atlas", *args, **kwargs)
 
     def get_object(self, obj_name, ra_deg, dec_deg, radius=15):
-        """Get ZTF Lightcurve from coordinates using cone_search.
+        """Get ATLAS Lightcurve from coordinates using cone_search.
 
         :param obj_name: name of object (used for logging); str
         :param ra_deg: right ascension in degrees; float
@@ -349,33 +346,49 @@ class ATLAS(Survey):
         status = {"obj_name": obj_name}
         try:
             # First run cone search to get id
-            cone_res = atlas_client.ConeSearch(
-                api_config_file=self.config_file,
-                payload={
+            # Set up the headers with the token
+            headers = {
+                "Authorization": "Token {}".format(os.getenv("TARXIV_ATLAS_TOKEN", "")),
+            }
+            cone_res = requests.post(
+                f"{self.config['atlas_url']}/cone/",
+                {
                     "ra": ra_deg,
                     "dec": dec_deg,
                     "radius": radius,
                     "requestType": "nearest",
                 },
-                get_response=True,
+                headers=headers,
             )
+            if cone_res.status_code != 200:
+                raise AssertionError("{}".format(cone_res.content))
 
-            if "object" not in cone_res.response_data.keys():
-                raise SurveyMetaMissingError
+            if "object" not in cone_res.json().keys():
+                raise SurveyMetaMissingError(
+                    "ATLAS error code {}".format(cone_res.status_code)
+                )
+
             # Get atlas id and query for data
-            atlas_id = cone_res.response_data["object"]
+            atlas_id = cone_res.json()["object"]
             status.update({"status": "match", "id": atlas_id})
             # Get light curve
-            try:
-                curve_res = atlas_client.RequestSingleSourceData(
-                    api_config_file=self.config_file,
-                    atlas_id=str(atlas_id),
-                    get_response=True,
+            curve_res = requests.get(
+                f"{self.config['atlas_url']}/objects/",
+                {"objects": str(atlas_id)},
+                headers=headers,
+            )
+            if curve_res.status_code == 504:
+                # handle timeout
+                pass
+            elif curve_res.status_code != 200:
+                raise SurveyLightCurveMissingError(
+                    "ATLAS error code {}: {}".format(
+                        curve_res.status_code, curve_res.content
+                    )
                 )
-                # Contains meta and lc
-                result = curve_res.response_data[0]
-            except Exception as err:
-                raise SurveyLightCurveMissingError from err
+
+            # Contains meta and lc
+            result = curve_res.json()[0]
 
             # Insert meta data
             meta = {
@@ -408,10 +421,10 @@ class ATLAS(Survey):
             lc_df["survey"] = "ATLAS"
             status["lc_count"] = len(lc_df)
 
-        except (SurveyMetaMissingError, ATLASAPIClientError):
+        except SurveyMetaMissingError:
             status["status"] = "no match"
         except SurveyLightCurveMissingError:
-            status["status"].append("|no light curve")
+            status["status"] += "|no light curve"
 
         except Exception as e:
             status.update({
@@ -421,7 +434,7 @@ class ATLAS(Survey):
             })
         finally:
             self.logger.info(status)
-        return meta, lc_df
+        return meta, lc_df, status
 
 
 class TNS(Survey):
@@ -433,11 +446,11 @@ class TNS(Survey):
 
         # Set attributes
         self.site = self.config["tns"]["site"]
-        self.api_key = self.config["tns"]["api_key"]
+        self.api_key = os.getenv("TARXIV_TNS_API_KEY", "")
 
         # Create marker
         tns_marker_dict = {
-            "tns_id": self.config["tns"]["id"],
+            "tns_id": os.getenv("TARXIV_TNS_ID", 0),
             "type": self.config["tns"]["type"],
             "name": self.config["tns"]["name"],
         }
@@ -467,7 +480,12 @@ class TNS(Survey):
             ])
             get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
             response = requests.post(get_url, headers=headers, data=get_data)
-            response_json = json.loads(response.text)
+
+            if response.status_code != 200:
+                status["explanation"] = response.content
+                raise SurveyMetaMissingError
+            response_json = response.json()
+
             # Meta
             if "data" not in response_json.keys():
                 raise SurveyMetaMissingError
@@ -511,7 +529,7 @@ class TNS(Survey):
             })
         finally:
             self.logger.info(status)
-        return meta, lc_df
+        return meta, lc_df, status
 
     def download_bulk_tns(self):
         """Download bulk TNS public object csv and convert to dataframe.

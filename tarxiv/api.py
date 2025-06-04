@@ -235,9 +235,7 @@ class API(TarxivModule):
         if isinstance(search_value, list):
             for item in search_value:
                 if any(char in str(item) for char in [";", "/*", "*/", "--"]):
-                    raise ValueError(
-                        f"search field contains invalid characters {item}"
-                    )
+                    raise ValueError(f"search field contains invalid characters {item}")
         # Format predicate search value
         if isinstance(search_value, int) or isinstance(search_value, float):
             value_str = str(search_value)
