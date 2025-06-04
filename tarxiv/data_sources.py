@@ -4,7 +4,7 @@ from .utils import TarxivModule, SurveyMetaMissingError, SurveyLightCurveMissing
 
 from pyasassn.client import SkyPatrolClient
 from astropy.time import Time
-
+from collections import OrderedDict
 import pandas as pd
 import requests
 import traceback
@@ -450,7 +450,7 @@ class TNS(Survey):
 
         # Create marker
         tns_marker_dict = {
-            "tns_id": os.getenv("TARXIV_TNS_ID", 0),
+            "tns_id": 191311,
             "type": self.config["tns"]["type"],
             "name": self.config["tns"]["name"],
         }
@@ -470,31 +470,17 @@ class TNS(Survey):
             # Wait to avoid rate limiting
             time.sleep(self.config["tns"]["rate_limit"])
             # Run request to TNS server
-            # get_url = self.site + "/api/get/object"
+            get_url = self.site + "/api/get/object"
             headers = {"User-Agent": self.marker}
-            # obj_request = OrderedDict([
-            #     ("objid", ""),
-            #     ("objname", obj_name),
-            #     ("photometry", "0"),
-            #     ("spectra", "0"),
-            # ])
-            # get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
-            # response = requests.post(get_url, headers=headers, data=get_data)
-            data = {
-                "objname": obj_name,
-            }
-
-            # get object type
-            json_data = [
-                ("api_key", (None, self.api_key)),
-                ("data", (None, json.dumps(data))),
-            ]
-
-            response = requests.post(
-                "https://www.wis-tns.org/api/get/object",
-                files=json_data,
-                headers=headers,
-            )
+            obj_request = OrderedDict([
+                ("objid", ""),
+                ("objname", obj_name),
+                ("photometry", "0"),
+                ("spectra", "0"),
+            ])
+            #get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
+            get_data = {"api_key": "33912ce9ff5bb4a429957376e4f5ceb8e045b99d", "data": json.dumps(obj_request)}
+            response = requests.post(get_url, headers=headers, data=get_data)
 
             if response.status_code != 200:
                 status["explanation"] = response.content
