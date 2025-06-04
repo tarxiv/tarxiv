@@ -18,12 +18,10 @@ database:
   
 # tns certifications/params
 tns:
-  id: 
   type: "bot"
   name: "tarxiv"
   site: "https://www.wis-tns.org"
   email: "tns@weizmann.ac.il"
-  api_key:
   rate_limit: 4
   # Source info for schema
   associated_sources: ["tns"]
