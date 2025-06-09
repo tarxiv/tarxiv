@@ -24,7 +24,7 @@ txv_ztf = ZTF(args.config_dir, debug=args.debug)
 txv_asas_sn = ASAS_SN(args.config_dir, debug=args.debug)
 
 # Connect to couchbase and get initial schema
-txv_db = TarxivDB(args.config_dir, debug=args.debug)
+txv_db = TarxivDB(user="pipeline", config_dir=args.config_dir, debug=args.debug)
 schema = txv_db.get_object_schema()
 
 # Connect to gmail, and start monitoring thread

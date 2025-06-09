@@ -11,16 +11,26 @@ import os
 class TarxivDB(TarxivModule):
     """Interface for TarXiv couchbase data."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, user, *args, **kwargs):
         """Read in object schema and connect to couchbase."""
         super().__init__("couchbase", *args, **kwargs)
         self.schema_file = os.path.join(self.config_dir, "schema.json")
         # Connect to Couchbase
         self.logger.info({"status": "connecting to couchbase"})
         connection_str = "couchbase://" + self.config["database"]["host"]
+        # Get user
+        if user == "api":
+            username = os.environ["COUCHBASE_API_USER"]
+            password = os.environ["COUCHBASE_API_PASS"]
+        elif user == "pipeline":
+            username = os.environ["COUCHBASE_PIPELINE_USER"]
+            password = os.environ["COUCHBASE_PIPELINE_PASS"]
+        else:
+            raise ValueError("user must be 'api' or 'pipeline'")
+
         options = ClusterOptions(
             PasswordAuthenticator(
-                self.config["database"]["user"], self.config["database"]["pass"]
+                username, password
             )
         )
         self.cluster = Cluster(connection_str, options)
@@ -53,7 +63,7 @@ class TarxivDB(TarxivModule):
         :param collection: couchbase collection; meta or lightcurve; str
         :return: void
         """
-        coll = self.conn.collection(collection)
+        coll = self.conn.scope("tns").collection(collection)
         coll.upsert(object_name, payload)
         self.logger.info({
             "status": "upserted",
@@ -69,7 +79,7 @@ class TarxivDB(TarxivModule):
         :return: object document, either metadata or lightcurve; dict or list of dicts
         """
         try:
-            coll = self.conn.collection(collection)
+            coll = self.conn.scope("tns").collection(collection)
             result = coll.get(object_name).value
             self.logger.info({
                 "status": "retrieved",

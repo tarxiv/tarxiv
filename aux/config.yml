@@ -13,8 +13,6 @@ api_port:
 # database information - default are used in CI
 database:
   host: localhost
-  user: test_user
-  pass: test_pssd
   
 # tns certifications/params
 tns:

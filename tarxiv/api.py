@@ -13,7 +13,7 @@ class API(TarxivModule):
         super().__init__("api", *args, **kwargs)
 
         # Get couchbase connection
-        self.txv_db = TarxivDB(*args, **kwargs)
+        self.txv_db = TarxivDB(user="api", *args, **kwargs)
 
         # Survey name/alias map (could write better, but fuck it)
         self.survey_source_map = {
@@ -163,7 +163,7 @@ class API(TarxivModule):
                 # Build query
                 query_str = (
                     "SELECT meta().id AS `obj_name` "
-                    "FROM tarxiv._default.tns_objects "
+                    "FROM tarxiv.tns.objects "
                     "WHERE 1=1 AND "
                 )
                 # Add restrictions from search fields, then append search params to query
