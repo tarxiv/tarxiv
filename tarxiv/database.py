@@ -62,7 +62,7 @@ class TarxivDB(TarxivModule):
                 f"WHERE                                 " \
                 f" ANY `disc_date` IN `discovery_date`  "\
                 f"  SATISFIES DATE_DIFF_STR(NOW_UTC(), `disc_date`.`value`, 'day') < {active_days} END"
-        result = self.cluster.query()
+        result = self.cluster.query(query)
         return [r["obj_name"] for r in result]
 
     def upsert(self, object_name, payload, collection):

@@ -5,6 +5,7 @@ from .utils import TarxivModule, SurveyMetaMissingError, SurveyLightCurveMissing
 from pyasassn.client import SkyPatrolClient
 from astropy.time import Time
 from collections import OrderedDict
+import numpy as np
 import pandas as pd
 import requests
 import traceback
@@ -441,7 +442,7 @@ class ATLAS(Survey):
             lc_df["survey"] = "ATLAS"
             # Reorder cols
             lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "unit", "survey"]]
-            # Report count 
+            # Report count
             status["lc_count"] = len(lc_df)
 
         except SurveyMetaMissingError:
