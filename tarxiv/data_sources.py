@@ -457,7 +457,7 @@ class ATLAS(Survey):
             })
         finally:
             self.logger.info(status)
-        return meta, lc_df, status
+        return meta, lc_df
 
 
 class TNS(Survey):
@@ -552,7 +552,7 @@ class TNS(Survey):
             })
         finally:
             self.logger.info(status)
-        return meta, lc_df, status
+        return meta, lc_df
 
     def download_bulk_tns(self):
         """Download bulk TNS public object csv and convert to dataframe.
