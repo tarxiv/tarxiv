@@ -20,11 +20,11 @@ class TarxivDB(TarxivModule):
         connection_str = "couchbase://" + self.config["database"]["host"]
         # Get user
         if user == "api":
-            username = os.environ["COUCHBASE_API_USER"]
-            password = os.environ["COUCHBASE_API_PASS"]
+            username = os.environ["TARXIV_COUCHBASE_API_USER"]
+            password = os.environ["TARXIV_COUCHBASE_API_PASS"]
         elif user == "pipeline":
-            username = os.environ["COUCHBASE_PIPELINE_USER"]
-            password = os.environ["COUCHBASE_PIPELINE_PASS"]
+            username = os.environ["TARXIV_COUCHBASE_PIPELINE_USER"]
+            password = os.environ["TARXIV_COUCHBASE_PIPELINE_PASS"]
         else:
             raise ValueError("user must be 'api' or 'pipeline'")
 
@@ -54,6 +54,16 @@ class TarxivDB(TarxivModule):
         # Log
         # self.logger.info({"status": "running sql++ query", "query_str": query_str})
         return self.cluster.query(query_str)
+
+    def get_all_active_objects(self, active_days):
+        query = f"SELECT                                " \
+                f"  meta().id as obj_name               " \
+                f"FROM tarxiv.tns.objects      " \
+                f"WHERE                                 " \
+                f" ANY `disc_date` IN `discovery_date`  "\
+                f"  SATISFIES DATE_DIFF_STR(NOW_UTC(), `disc_date`.`value`, 'day') < {active_days} END"
+        result = self.cluster.query()
+        return [r["obj_name"] for r in result]
 
     def upsert(self, object_name, payload, collection):
         """Insert document into couchbase collection. Update if already exists.

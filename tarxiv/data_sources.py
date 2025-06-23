@@ -182,14 +182,16 @@ class ASAS_SN(Survey):  # noqa: N801
             lc_df = lc_df.rename({"phot_filter": "filter", "camera": "unit"}, axis=1)
             # Do not return data from bad images
             lc_df = lc_df[lc_df["quality"] != "B"]
-            # Throw out non_detections if not specified
-            lc_df = lc_df[lc_df["mag_err"] < 99]
+            # Flag non-detections
+            lc_df['detection'] = np.where(lc_df['mag_err'] > 99, 0, 1)
+            lc_df['mag'] = np.where(lc_df['mag_err'] > 99, np.nan, lc_df['mag'])
+            lc_df['mag_err'] = np.where(lc_df['mag_err'] > 99, np.nan, lc_df['mag_err'])
             lc_df["survey"] = "ASAS-SN"
-            lc_df = lc_df[
-                ["mjd", "mag", "mag_err", "limit", "filter", "unit", "survey"]
-            ]
+            # Reorder cols
+            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "filter", "detection", "unit", "survey"]]
             # Update
             status["lc_count"] = len(lc_df)
+
         except SurveyMetaMissingError:
             status["status"] = "no match"
         except SurveyLightCurveMissingError:
@@ -252,7 +254,7 @@ class ZTF(Survey):
             # Query
             result = requests.post(
                 f"{self.config['fink_url']}/api/v1/objects",
-                json={"objectId": ztf_name, "output-format": "json"},
+                json={"objectId": ztf_name, "withupperlim": True, "output-format": "json"},
             )
             # check status
             if result.status_code != 200 or result.json() == []:
@@ -292,8 +294,10 @@ class ZTF(Survey):
                 "i:fid": "filter",
                 "i:jd": "jd",
                 "i:diffmaglim": "limit",
+                "d:tag": "detection"
             }
             filter_map = {"1": "g", "2": "R", "3": "i"}
+            detection_map = {"valid": 1, "badquality": -1, "upperlim": 0}
             # Push into DataFrame
             lc_df = pd.read_json(io.BytesIO(result.content))
             lc_df = lc_df.rename(cols, axis=1)
@@ -302,11 +306,17 @@ class ZTF(Survey):
                 lambda row: Time(row["jd"], format="jd").mjd, axis=1
             )
             lc_df["filter"] = lc_df["filter"].astype(str).map(filter_map)
+            lc_df["detection"] = lc_df["detection"].astype(str).map(detection_map)
+            # Throw out bad quality
+            lc_df = lc_df[lc_df['detection'] >= 0]
             # JD now unneeded
             lc_df = lc_df.drop("jd", axis=1)
             # Add unit/survey columns
             lc_df["unit"] = "main"
             lc_df["survey"] = "ZTF"
+            # Reorder cols
+            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "filter", "detection", "unit", "survey"]]
+            # Report count
             status["lc_count"] = len(lc_df)
 
         except SurveyMetaMissingError:
@@ -322,7 +332,7 @@ class ZTF(Survey):
             })
         finally:
             self.logger.info(status)
-        return meta, lc_df, status
+        return meta, lc_df
 
 
 class ATLAS(Survey):
@@ -410,15 +420,26 @@ class ATLAS(Survey):
                     meta["redshift"] = {"value": result["sherlock"]["z"], "source": 7}
 
             # DETECTIONS
-            lc_df = pd.DataFrame(result["lc"])[
+            det_df = pd.DataFrame(result["lc"])[
                 ["mjd", "mag", "magerr", "mag5sig", "filter", "expname"]
             ]
-            lc_df.columns = ["mjd", "mag", "mag_err", "limit", "filter", "expname"]
+            det_df.columns = ["mjd", "mag", "mag_err", "limit", "filter", "expname"]
+            # NON DETECTIONS
+            non_df = pd.DataFrame(result["lcnondet"])[
+                    ["mjd", "mag5sig", "filter", "expname"]
+            ]
+            non_df.columns = ["mjd", "limit", "filter", "expname"]
+            non_df["mag"] = np.nan
+            non_df["mag_err"] = np.nan
+            lc_df = pd.concat([det_df, non_df])
 
             # Add a column to record which ATLAS unit the value was taken from
             lc_df["unit"] = lc_df["expname"].str[:3]
             lc_df = lc_df.drop("expname", axis=1)
             lc_df["survey"] = "ATLAS"
+            # Reorder cols
+            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "filter", "detection", "unit", "survey"]]
+            # Report count 
             status["lc_count"] = len(lc_df)
 
         except SurveyMetaMissingError:
