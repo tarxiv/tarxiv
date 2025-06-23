@@ -188,7 +188,7 @@ class ASAS_SN(Survey):  # noqa: N801
             lc_df['mag_err'] = np.where(lc_df['mag_err'] > 99, np.nan, lc_df['mag_err'])
             lc_df["survey"] = "ASAS-SN"
             # Reorder cols
-            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "filter", "detection", "unit", "survey"]]
+            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "unit", "survey"]]
             # Update
             status["lc_count"] = len(lc_df)
 
@@ -204,7 +204,7 @@ class ASAS_SN(Survey):  # noqa: N801
             })
         finally:
             self.logger.info(status)
-        return meta, lc_df, status
+        return meta, lc_df
 
 
 class ZTF(Survey):
@@ -295,6 +295,7 @@ class ZTF(Survey):
                 "i:jd": "jd",
                 "i:diffmaglim": "limit",
                 "d:tag": "detection"
+                "i:fwhm" "fwhm"
             }
             filter_map = {"1": "g", "2": "R", "3": "i"}
             detection_map = {"valid": 1, "badquality": -1, "upperlim": 0}
@@ -315,7 +316,7 @@ class ZTF(Survey):
             lc_df["unit"] = "main"
             lc_df["survey"] = "ZTF"
             # Reorder cols
-            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "filter", "detection", "unit", "survey"]]
+            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "unit", "survey"]]
             # Report count
             status["lc_count"] = len(lc_df)
 
@@ -421,9 +422,9 @@ class ATLAS(Survey):
 
             # DETECTIONS
             det_df = pd.DataFrame(result["lc"])[
-                ["mjd", "mag", "magerr", "mag5sig", "filter", "expname"]
+                ["mjd", "mag", "magerr", "mag5sig", "filter", "expname", "major"]
             ]
-            det_df.columns = ["mjd", "mag", "mag_err", "limit", "filter", "expname"]
+            det_df.columns = ["mjd", "mag", "mag_err", "limit", "filter", "expname", "fwhm"]
             # NON DETECTIONS
             non_df = pd.DataFrame(result["lcnondet"])[
                     ["mjd", "mag5sig", "filter", "expname"]
@@ -431,6 +432,7 @@ class ATLAS(Survey):
             non_df.columns = ["mjd", "limit", "filter", "expname"]
             non_df["mag"] = np.nan
             non_df["mag_err"] = np.nan
+            non_df["fwhm"] = np.nan
             lc_df = pd.concat([det_df, non_df])
 
             # Add a column to record which ATLAS unit the value was taken from
@@ -438,7 +440,7 @@ class ATLAS(Survey):
             lc_df = lc_df.drop("expname", axis=1)
             lc_df["survey"] = "ATLAS"
             # Reorder cols
-            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "filter", "detection", "unit", "survey"]]
+            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "unit", "survey"]]
             # Report count 
             status["lc_count"] = len(lc_df)
 
