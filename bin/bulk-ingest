@@ -49,7 +49,7 @@ for obj_name in obj_list:
     # Collate lightcurves and add peak mag measurements to schema
     lc_df = pd.concat([atlas_lc, ztf_lc, asas_sn_lc])
     # Cut on discovery date
-    lc_df = lc_df[((disc_mjd - lc_df['mjd']) <= 30) & ((lc_df['mjd'] - disc_mjd) <= 180)]
+    lc_df = lc_df[((disc_mjd - lc_df['mjd']) <= 30) & ((lc_df['mjd'] - disc_mjd) <= 60)]
     # Add peak magnitudes to meta
     obj_meta = txv_tns.meta_add_peak_mags(obj_meta, lc_df)
     obj_meta = clean_meta(obj_meta)
