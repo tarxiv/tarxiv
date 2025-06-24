@@ -8,7 +8,7 @@ import os
 class TarxivModule:
     """Base class for all TarXiv modules to ensure unified logging and configuration."""
 
-    def __init__(self, module, config_dir, debug=False):
+    def __init__(self, module, config_dir, log_name, debug=False):
         """Read in configuration file and create module logger
 
         :param module: name of module; str
@@ -42,7 +42,7 @@ class TarxivModule:
 
         # If set in config, log to file
         if self.config["log_dir"]:
-            log_file = os.path.join(self.config["log_dir"], self.module + ".log")
+            log_file = os.path.join(self.config["log_dir"], log_name + ".log")
             handler = logging.FileHandler(log_file)
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)

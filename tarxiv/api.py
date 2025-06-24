@@ -99,8 +99,7 @@ class API(TarxivModule):
                 log["status"] = "ServerError"
             finally:
                 self.logger.info(log)
-
-            return server_response(result, status_code)
+                return server_response(result, status_code)
 
         @self.app.route("/get_object_lc/<string:obj_name>", methods=["POST"])
         def get_object_lc(obj_name):
@@ -140,8 +139,7 @@ class API(TarxivModule):
                 log["status"] = "ServerError"
             finally:
                 self.logger.info(log)
-
-            return server_response(result, status_code)
+                return server_response(result, status_code)
 
         @self.app.route("/search_objects", methods=["POST"])
         def search_objects():
@@ -193,8 +191,7 @@ class API(TarxivModule):
                 log["status"] = "ServerError"
             finally:
                 self.logger.info(log)
-
-            return server_response(result, status_code)
+                return server_response(result, status_code)
 
     def build_condition(self, field, condition):
         # Start condition_string

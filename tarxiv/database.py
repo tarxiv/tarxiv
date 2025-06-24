@@ -11,14 +11,13 @@ import os
 class TarxivDB(TarxivModule):
     """Interface for TarXiv couchbase data."""
 
-    def __init__(self, user, *args, **kwargs):
+    def __init__(self, catalog, user, *args, **kwargs):
         """Read in object schema and connect to couchbase."""
         super().__init__("couchbase", *args, **kwargs)
+        # Set schema file
         self.schema_file = os.path.join(self.config_dir, "schema.json")
-        # Connect to Couchbase
-        self.logger.info({"status": "connecting to couchbase"})
-        connection_str = "couchbase://" + self.config["database"]["host"]
-        # Get user
+
+        # Get user (defines permissions)
         if user == "api":
             username = os.environ["TARXIV_COUCHBASE_API_USER"]
             password = os.environ["TARXIV_COUCHBASE_API_PASS"]
@@ -27,15 +26,18 @@ class TarxivDB(TarxivModule):
             password = os.environ["TARXIV_COUCHBASE_PIPELINE_PASS"]
         else:
             raise ValueError("user must be 'api' or 'pipeline'")
-
-        options = ClusterOptions(
-            PasswordAuthenticator(
-                username, password
-            )
-        )
+        # Authenticate
+        authenticator = PasswordAuthenticator(username, password)
+        options = ClusterOptions(authenticator)
+        # Connect
+        self.logger.info({"status": "connecting to couchbase"})
+        connection_str = "couchbase://" + self.config["database"]["host"]
         self.cluster = Cluster(connection_str, options)
         self.conn = self.cluster.bucket("tarxiv")
-        self.logger.info({"status": "connection sucess"})
+        self.logger.info({"status": "connection success"})
+
+        # Set scope, each catalog will have its own scope
+        self.scope = catalog
 
     def get_object_schema(self):
         """Read object schema from config directory and return it.
@@ -52,13 +54,13 @@ class TarxivDB(TarxivModule):
         :return: list if query results
         """
         # Log
-        # self.logger.info({"status": "running sql++ query", "query_str": query_str})
+        self.logger.info({"status": "running sql++ query", "query_str": query_str})
         return self.cluster.query(query_str)
 
     def get_all_active_objects(self, active_days):
         query = f"SELECT                                " \
                 f"  meta().id as obj_name               " \
-                f"FROM tarxiv.tns.objects      " \
+                f"FROM tarxiv.{self.scope}.objects      " \
                 f"WHERE                                 " \
                 f" ANY `disc_date` IN `discovery_date`  "\
                 f"  SATISFIES DATE_DIFF_STR(NOW_UTC(), `disc_date`.`value`, 'day') < {active_days} END"
@@ -73,7 +75,7 @@ class TarxivDB(TarxivModule):
         :param collection: couchbase collection; meta or lightcurve; str
         :return: void
         """
-        coll = self.conn.scope("tns").collection(collection)
+        coll = self.conn.scope(self.scope).collection(collection)
         coll.upsert(object_name, payload)
         self.logger.info({
             "status": "upserted",
@@ -89,7 +91,7 @@ class TarxivDB(TarxivModule):
         :return: object document, either metadata or lightcurve; dict or list of dicts
         """
         try:
-            coll = self.conn.scope("tns").collection(collection)
+            coll = self.conn.scope(self.scope).collection(collection)
             result = coll.get(object_name).value
             self.logger.info({
                 "status": "retrieved",

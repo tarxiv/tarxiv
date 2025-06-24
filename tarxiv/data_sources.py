@@ -130,7 +130,7 @@ class ASAS_SN(Survey):  # noqa: N801
 
         :param obj_name: name of object (used for logging); str
         :param ra_deg: right ascension in degrees; float
-        :dec_deg: declination in degrees; float
+        :param dec_deg: declination in degrees; float
         :param radius: radius in arcseconds; int
         return asas-sn metadata and lightcurve dataframe
         """
@@ -205,7 +205,7 @@ class ASAS_SN(Survey):  # noqa: N801
             })
         finally:
             self.logger.info(status)
-        return meta, lc_df
+            return meta, lc_df
 
 
 class ZTF(Survey):
@@ -219,7 +219,7 @@ class ZTF(Survey):
 
         :param obj_name: name of object (used for logging); str
         :param ra_deg: right ascension in degrees; float
-        :dec_deg: declination in degrees; float
+        :param dec_deg: declination in degrees; float
         :param radius: radius in arcseconds; int
         return ztf metadata and lightcurve dataframe
         """
@@ -334,7 +334,7 @@ class ZTF(Survey):
             })
         finally:
             self.logger.info(status)
-        return meta, lc_df
+            return meta, lc_df
 
 
 class ATLAS(Survey):
@@ -348,7 +348,7 @@ class ATLAS(Survey):
 
         :param obj_name: name of object (used for logging); str
         :param ra_deg: right ascension in degrees; float
-        :dec_deg: declination in degrees; float
+        :param dec_deg: declination in degrees; float
         :param radius: radius in arcseconds; int
         return ztf metadata and lightcurve dataframe
         """
@@ -452,13 +452,13 @@ class ATLAS(Survey):
 
         except Exception as e:
             status.update({
-                "status": "encontered unexpected error",
+                "status": "encountered unexpected error",
                 "message": str(e),
                 "details": traceback.format_exc(),
             })
         finally:
             self.logger.info(status)
-        return meta, lc_df
+            return meta, lc_df
 
 
 class TNS(Survey):
@@ -553,7 +553,7 @@ class TNS(Survey):
             })
         finally:
             self.logger.info(status)
-        return meta, lc_df
+            return meta, lc_df
 
     def download_bulk_tns(self):
         """Download bulk TNS public object csv and convert to dataframe.
