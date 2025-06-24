@@ -8,10 +8,8 @@ parser = argparse.ArgumentParser('start-api',
                                  description="Run TarXiv Flask API")
 parser.add_argument('--debug', action='store_true', default=False,
                          help='set to enable printing/logging in debug mode')
-parser.add_argument("config_dir", type=str,
-                    help="path to directory containing config files")
 args = parser.parse_args()
 
 # Get API object and start server
-txv_api = API(config_dir=args.config_dir)
+txv_api = API(args.debug)
 txv_api.start_server()

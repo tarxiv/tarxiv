@@ -4,22 +4,20 @@ import yaml
 import sys
 import os
 
-
 class TarxivModule:
     """Base class for all TarXiv modules to ensure unified logging and configuration."""
 
-    def __init__(self, module, config_dir, log_name, debug=False):
+    def __init__(self, module, log_name, debug=False):
         """Read in configuration file and create module logger
 
         :param module: name of module; str
-        :param config_dir: directory containing config files; str.
         :param debug: sets logging level to DEBUG.
         """
         # Set module
         self.module = module
         # Read in config
-        self.config_dir = config_dir
-        self.config_file = os.path.join(config_dir, "config.yml")
+        self.config_dir = os.environ["TARXIV_CONFIG_DIR"]
+        self.config_file = os.path.join(self.config_dir, "config.yml")
         with open(self.config_file) as stream:
             self.config = yaml.safe_load(stream)
 
@@ -53,13 +51,11 @@ class TarxivModule:
 
 class SurveyMetaMissingError(Exception):
     """TBD"""
-
     pass
 
 
 class SurveyLightCurveMissingError(Exception):
     """TBD"""
-
     pass
 
 

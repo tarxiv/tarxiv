@@ -67,6 +67,11 @@ class TarxivDB(TarxivModule):
         result = self.cluster.query(query)
         return [r["obj_name"] for r in result]
 
+    def get_all_objects(self):
+        query = f"SELECT meta().id as obj_name FROM tarxiv.{self.scope}.objects"
+        result = self.cluster.query(query)
+        return [r["obj_name"] for r in result]
+
     def upsert(self, object_name, payload, collection):
         """Insert document into couchbase collection. Update if already exists.
 

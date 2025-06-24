@@ -1,32 +1,39 @@
 from .utils import TarxivModule, clean_meta, SurveyMetaMissingError
-from .data_sources import TNS, ATLAS, ASAS_SN, ZTF
+from .data_sources import TNS, ATLAS, ASAS_SN, ZTF, append_dynamic_values
 from .database import TarxivDB
+from .alerts import Gmail
 from astropy.time import Time
 import pandas as pd
+import requests
+import zipfile
+import signal
+import sys
+import io
 
 class TNSPipeline(TarxivModule):
     def __init__(self,  *args, **kwargs):
-        super().__init__("pipeline", *args, **kwargs)
+        super().__init__("tns_pipeline", *args, **kwargs)
         # Create survey objects
         self.tns = TNS(*args, **kwargs)
         self.atlas = ATLAS(*args, **kwargs)
         self.ztf = ZTF(*args, **kwargs)
         self.asas_sn = ASAS_SN(*args, **kwargs)
+        # Get email interface
+        self.gmail = Gmail(*args, **kwargs)
         # Get database
         self.db = TarxivDB("tns", "pipeline", *args, **kwargs)
-
 
     def get_object(self, obj_name):
         """
         Queries TNS for an object then finds all associated survey data.
         :param obj_name: TNS object name (e.g. 2024iss); str
-        :return: meta data and light curve data dictionaries
+        :return: metadata and light curve data dictionaries
         """
         # Get initial info from TNS
         tns_meta, _ = self.tns.get_object(obj_name)
         if tns_meta is None:
             raise SurveyMetaMissingError("invalid TNS object name")
-        ra_deg, dec_deg = tns_meta['ra_deg']["value"], tns_meta['dec_deg']["value"]
+        ra_deg, dec_deg = tns_meta["ra_deg"]["value"], tns_meta["dec_deg"]["value"]
         # Now get meta and lightcurves from the surveys
         atlas_meta, atlas_lc = self.atlas.get_object(obj_name, ra_deg, dec_deg)
         ztf_meta, ztf_lc = self.ztf.get_object(obj_name, ra_deg, dec_deg)
@@ -42,10 +49,11 @@ class TNSPipeline(TarxivModule):
         # Collate lightcurves and add peak mag measurements to schema
         lc_df = pd.concat([atlas_lc, ztf_lc, asas_sn_lc])
         # Cut on time (1 month before discovery, 6 months after)
-        disc_mjd = Time(obj_meta['discovery_date']['value']).mjd
-        lc_df = lc_df[((disc_mjd - lc_df['mjd']) <= 30) & ((lc_df['mjd'] - disc_mjd) <= 60)]
+        disc_mjd = Time(obj_meta["discovery_date"]["value"]).mjd
+        lc_df = lc_df[((disc_mjd - lc_df["mjd"]) <= self.config['obj_prior_days'])
+                      & ((lc_df["mjd"] - disc_mjd) <= self.config['obj_active_days'])]
         # Add peak magnitudes to meta
-        obj_meta = self.tns.meta_add_peak_mags(obj_meta, lc_df)
+        obj_meta = append_dynamic_values(obj_meta, lc_df)
         obj_meta = clean_meta(obj_meta)
         # Convert to json for submission
         obj_lc = lc_df.to_dict(orient="records")
@@ -61,4 +69,80 @@ class TNSPipeline(TarxivModule):
         :return: void
         """
         self.db.upsert(obj_name, obj_meta, collection="objects")
-        self.db.upsert(obj_name, obj_meta, collection="lightcurves")
+        self.db.upsert(obj_name, obj_lc, collection="lightcurves")
+
+    def download_bulk(self, include_existing=False):
+        """Download bulk TNS public object csv and convert to dataframe.
+
+        Used for bulk back-processing of TNS sources
+        :return: full TNS public object dataframe
+        """
+        # Run request to TNS Server
+        self.logger.info({"status": "retrieving TNS public object catalog"})
+        get_url = (
+            self.tns.site + "/system/files/tns_public_objects/tns_public_objects.csv.zip"
+        )
+        json_data = [
+            ("api_key", (None, self.tns.api_key)),
+        ]
+        headers = {"User-Agent": self.tns.marker}
+        response = requests.post(get_url, files=json_data, headers=headers)
+
+        # Write to bytesio and convert to pandas
+        with zipfile.ZipFile(io.BytesIO(response.content)) as myzip:
+            data = myzip.read(name="tns_public_objects.csv")
+        # Get list of TNS names
+        all_obj_names = pd.read_csv(io.BytesIO(data), skiprows=[0])['name'].tolist()
+
+        if not include_existing:
+            # Only ingest TNS objects NOT already in the database
+            db_obj_names = self.db.get_all_objects()
+            obj_names = list(set(all_obj_names) - set(db_obj_names))
+        else:
+            # Process all TNS objects
+            obj_names = all_obj_names
+
+        for obj_name in obj_names:
+            # Get survey information
+            obj_meta, obj_lc = self.get_object(obj_name)
+            # Upsert to database
+            self.upsert_object(obj_name, obj_meta, obj_lc)
+
+    def daily_update(self):
+        # Get all targets still in "active" window for update
+        daily_objects = self.db.get_all_active_objects(active_days=self.config['obj_active_days'])
+        # Pull TNS info and update
+        for obj_name in daily_objects:
+            # Get survey information
+            obj_meta, obj_lc = self.get_object(obj_name)
+            # Upsert to database
+            self.upsert_object(obj_name, obj_meta, obj_lc)
+
+    def run_pipeline(self):
+        # Set signals
+        signal.signal(signal.SIGINT, handler=self.signal_handler)
+        signal.signal(signal.SIGTERM, handler=self.signal_handler)
+
+       # Run logic loop
+        while True:
+            # Get next message
+            result = self.gmail.poll(timeout=1)
+
+            # Repeat if none
+            if result is None:
+                continue
+
+            # Each result contains message and list of objects
+            message, alerts = result
+            for obj_name in alerts:
+                # Get survey information
+                obj_meta, obj_lc = self.get_object(obj_name)
+                # Upsert to database
+                self.upsert_object(obj_name, obj_meta, obj_lc)
+
+            # Once complete with all objects in message, mark read
+            self.gmail.mark_read(message, verbose=True)
+
+    def signal_handler(self, sig, frame):
+        self.logger.info({"status": "received exit signal", "signal": str(sig), "frame": str(frame)})
+        sys.exit(0)

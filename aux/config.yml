@@ -23,6 +23,8 @@ tns:
   rate_limit: 4
   # Source info for schema
   associated_sources: ["tns"]
+  obj_active_days: 60
+  obj_prior_days: 30
 
 # email certifications (for ingesting TNS notices)
 gmail:

@@ -43,8 +43,8 @@ dev = [
     "jupyter"
 ]
 
-[tool.setuptools.packages.find]
-where = ["tarxiv"]
+[tool.setuptools.packages]
+find = {}
 
 #[tool.setuptools.package-data]
 #"tarxiv.data" = ["*.csv"]

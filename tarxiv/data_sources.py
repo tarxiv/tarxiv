@@ -17,6 +17,72 @@ import re
 import os
 
 
+def append_dynamic_values(obj_meta, obj_lc_df):
+    """Once we have all the object dataframes collated; find peak mag for each filter and append to object_meta.
+
+    :param obj_meta: object meta schema; dict
+    :param obj_lc_df: light curve dataframe; pd.DataFrame
+    :return:object_meta; updated object meta dictionary
+    """
+    if len(obj_lc_df) == 0:
+        return obj_meta
+
+    # We are interested in peak mag, most recent detection, most recent non detection, and recent change
+    peak_mags = []
+    recent_dets = []
+    recent_nondets = []
+    recent_changes = []
+    # Get derived mag information by filter
+    filter_df = obj_lc_df.groupby("filter")
+    for filter_name, filter_grp_df in filter_df.iterrows():
+        # Peak mag info
+        peak_row = filter_grp_df.loc[filter_grp_df["mag"].idxmin()]
+        peak_mag = {
+            "filter": filter_name,
+            "value": peak_row["mag"],
+            "date": Time(peak_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+            "source": peak_row["survey"],
+        }
+        peak_mags.append(peak_mag)
+        # Recent detection info
+        det_row = filter_grp_df.loc[filter_grp_df[filter_grp_df["det"] == 1]["mjd"].idxmax()]
+        recent_det = {
+            "filter": filter_name,
+            "value": det_row["mag"],
+            "date": Time(det_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+            "source": det_row["survey"],
+        }
+        recent_dets.append(recent_det)
+        # Recent non-detection info
+        nondet_row = filter_grp_df.loc[filter_grp_df[filter_grp_df["det"] == 0]["mjd"].idxmax()]
+        recent_nondet = {
+            "filter": filter_name,
+            "value": nondet_row["limit"],
+            "date": Time(nondet_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+            "source": nondet_row["survey"],
+        }
+        recent_nondets.append(recent_nondet)
+        # Get recent change
+        sorted_grp_df = filter_grp_df.sort_values(by="mjd")
+        sorted_grp_df["change"] = sorted_grp_df["mag"].diff()
+        sorted_grp_df["change"] = np.where(sorted_grp_df["change"] > 0, "increasing", "fading")
+        recent_row = sorted_grp_df[sorted_grp_df["mjd"].idxmax()]
+        recent_change = {
+            "filter": filter_name,
+            "value": recent_row["change"],
+            "date": Time(nondet_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+            "source": nondet_row["survey"]
+        }
+        recent_changes.append(recent_change)
+
+    # Append and return
+    obj_meta["peak_mag"] = peak_mags
+    obj_meta["recent_detection"] = recent_dets
+    obj_meta["recent_nondetection"] = recent_nondets
+    obj_meta["recent_change"] = recent_changes
+    return obj_meta
+
+
 class Survey(TarxivModule):
     """Base class to interact with a Tarxiv survey or data source."""
 
@@ -55,7 +121,7 @@ class Survey(TarxivModule):
             mag_err: magnitude error,
             limit: 5-sigma limiting magnitude,
             filter: bandpass filter,
-            unit: telescope or camera for given measurement (if survey only has one unit, use 'main')
+            unit: telescope or camera for given measurement (if survey only has one unit, use "main")
             survey: survey name.
 
         :return: survey_meta; dict (None if no results), survey_lc; DataFrame (empty df if no results)
@@ -83,34 +149,6 @@ class Survey(TarxivModule):
                         obj_meta[field].append(item)
                 else:
                     obj_meta[field].append(meta)
-
-        return obj_meta
-
-    def meta_add_peak_mags(self, obj_meta, obj_lc_df):
-        """Once we have all the object dataframes collated; find peak mag for each filter and append to object_meta.
-
-        :param obj_meta: object meta schema; dict
-        :param obj_lc_df: light curve dataframe; pd.DataFrame
-        :return:object_meta; updated object meta dictionary
-        """
-        if len(obj_lc_df) == 0:
-            return obj_meta
-
-        # Get brightest mag for each filter
-        filter_df = obj_lc_df.groupby("filter").min()
-
-        peak_mags = []
-        for filter_name, row in filter_df.iterrows():
-            peak_mag = {
-                "filter": filter_name,
-                "value": row["mag"],
-                "mjd_recorded": row["mjd"],
-                "source": self.survey_source_map[row["survey"]],
-            }
-            peak_mags.append(peak_mag)
-        # Append if exists
-        if peak_mags:
-            obj_meta["peak_mag"] = peak_mags
 
         return obj_meta
 
@@ -184,9 +222,9 @@ class ASAS_SN(Survey):  # noqa: N801
             # Do not return data from bad images
             lc_df = lc_df[lc_df["quality"] != "B"]
             # Flag non-detections
-            lc_df['detection'] = np.where(lc_df['mag_err'] > 99, 0, 1)
-            lc_df['mag'] = np.where(lc_df['mag_err'] > 99, np.nan, lc_df['mag'])
-            lc_df['mag_err'] = np.where(lc_df['mag_err'] > 99, np.nan, lc_df['mag_err'])
+            lc_df["detection"] = np.where(lc_df["mag_err"] > 99, 0, 1)
+            lc_df["mag"] = np.where(lc_df["mag_err"] > 99, np.nan, lc_df["mag"])
+            lc_df["mag_err"] = np.where(lc_df["mag_err"] > 99, np.nan, lc_df["mag_err"])
             lc_df["survey"] = "ASAS-SN"
             # Reorder cols
             lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "unit", "survey"]]
@@ -230,7 +268,7 @@ class ZTF(Survey):
         try:
             # Hit FINK API
             result = requests.post(
-                f"{self.config['fink_url']}/api/v1/conesearch",
+                f"{self.config["fink_url"]}/api/v1/conesearch",
                 json={
                     "ra": ra_deg,
                     "dec": dec_deg,
@@ -254,7 +292,7 @@ class ZTF(Survey):
 
             # Query
             result = requests.post(
-                f"{self.config['fink_url']}/api/v1/objects",
+                f"{self.config["fink_url"]}/api/v1/objects",
                 json={"objectId": ztf_name, "withupperlim": True, "output-format": "json"},
             )
             # check status
@@ -310,7 +348,7 @@ class ZTF(Survey):
             lc_df["filter"] = lc_df["filter"].astype(str).map(filter_map)
             lc_df["detection"] = lc_df["detection"].astype(str).map(detection_map)
             # Throw out bad quality
-            lc_df = lc_df[lc_df['detection'] >= 0]
+            lc_df = lc_df[lc_df["detection"] >= 0]
             # JD now unneeded
             lc_df = lc_df.drop("jd", axis=1)
             # Add unit/survey columns
@@ -363,7 +401,7 @@ class ATLAS(Survey):
                 "Authorization": "Token {}".format(os.getenv("TARXIV_ATLAS_TOKEN", "")),
             }
             cone_res = requests.post(
-                f"{self.config['atlas_url']}/cone/",
+                f"{self.config["atlas_url"]}/cone/",
                 {
                     "ra": ra_deg,
                     "dec": dec_deg,
@@ -385,7 +423,7 @@ class ATLAS(Survey):
             status.update({"status": "match", "id": atlas_id})
             # Get light curve
             curve_res = requests.get(
-                f"{self.config['atlas_url']}/objects/",
+                f"{self.config["atlas_url"]}/objects/",
                 {"objects": str(atlas_id)},
                 headers=headers,
             )
@@ -554,29 +592,6 @@ class TNS(Survey):
         finally:
             self.logger.info(status)
             return meta, lc_df
-
-    def download_bulk_tns(self):
-        """Download bulk TNS public object csv and convert to dataframe.
-
-        Used for bulk back-processing of TNS sources
-        :return: full TNS public object dataframe
-        """
-        # Run request to TNS Server
-        self.logger.info({"status": "retreiving TNS public object catalog"})
-        get_url = (
-            self.site + "/system/files/tns_public_objects/tns_public_objects.csv.zip"
-        )
-        json_data = [
-            ("api_key", (None, self.api_key)),
-        ]
-        headers = {"User-Agent": self.marker}
-        response = requests.post(get_url, files=json_data, headers=headers)
-
-        # Write to bytesio and convert to pandas
-        with zipfile.ZipFile(io.BytesIO(response.content)) as myzip:
-            data = myzip.read(name="tns_public_objects.csv")
-
-        return pd.read_csv(io.BytesIO(data), skiprows=[0])
 
 
 if __name__ == "__main__":

@@ -1,11 +1,6 @@
 #!/usr/bin/env python
-from tarxiv.data_sources import TNS, ATLAS, ASAS_SN, ZTF
-from tarxiv.database import TarxivDB
-from tarxiv.alerts import Gmail
-from tarxiv.utils import clean_meta
-import pandas as pd
+from tarxiv.pipeline import TNSPipeline
 import argparse
-import signal
 
 # Get config dir from arguments
 parser = argparse.ArgumentParser('tns-ingest',
@@ -13,67 +8,42 @@ parser = argparse.ArgumentParser('tns-ingest',
                                         "Monitor new TNS alerts, and query relevant data into database.'")
 parser.add_argument('--debug', action='store_true', default=False,
                          help='set to enable printing/logging in debug mode')
-parser.add_argument("config_dir", type=str,
-                    help="path to directory containing config files")
+group = parser.add_mutually_exclusive_group()
+group.add_argument("--alerts", action="store_true",
+                   help="Ingest live TNS alerts from email")
+group.add_argument("--bulk_missing", action="store_true",
+                   help="Ingest all TNS objects not already in database")
+group.add_argument("--bulk_update", action="store_true",
+                   help="Update all TNS objects, even if in database")
+group.add_argument("--daily_update", action="store_true",
+                   help="Update current active TNS objects")
+
 args = parser.parse_args()
 
 # Create survey objects
-txv_tns = TNS(args.config_dir, debug=args.debug)
-txv_atlas = ATLAS(args.config_dir, debug=args.debug)
-txv_ztf = ZTF(args.config_dir, debug=args.debug)
-txv_asas_sn = ASAS_SN(args.config_dir, debug=args.debug)
+if args["alerts"]:
+    txv_tns = TNSPipeline(module="pipeline",
+                          log_name="tns_alert_pipeline",
+                          debug=args.debug)
+    # Run the pipeline
+    txv_tns.run_pipeline()
 
-# Connect to couchbase and get initial schema
-txv_db = TarxivDB(user="pipeline", config_dir=args.config_dir, debug=args.debug)
-schema = txv_db.get_object_schema()
+elif args["bulk_missing"]:
+    txv_tns = TNSPipeline(module="pipeline",
+                          log_name="tns_bulk_ingest",
+                          debug=args.debug)
+    # Run the pipeline
+    txv_tns.download_bulk(include_existing=False)
 
-# Connect to gmail, and start monitoring thread
-txv_gmail = Gmail(args.config_dir, debug=args.debug)
-txv_gmail.monitor_notices()
+elif args["bulk_update"]:
+    txv_tns = TNSPipeline(module="pipeline",
+                          log_name="tns_bulk_ingest",
+                          debug=args.debug)
+    # Run the pipeline
+    txv_tns.download_bulk(include_existing=True)
 
-# Extra signal killing
-signal.signal(signal.SIGINT, lambda signum, frame: exit(0))
-signal.signal(signal.SIGTERM, lambda signum, frame: exit(0))
-
-while True:
-    # Get next message
-    result = txv_gmail.poll(timeout=1)
-    if result is None:
-        continue
-
-    # Each result contains message and list of objects
-    message, alerts = result
-    for obj_name in alerts:
-        # Get initial info from TNS
-        tns_meta, _ = txv_tns.get_object(obj_name)
-        if tns_meta is None:
-            continue
-        ra_deg, dec_deg = tns_meta['ra_deg']["value"], tns_meta['dec_deg']["value"]
-        # Now get meta and lightcurves from the surveys
-        atlas_meta, atlas_lc = txv_atlas.get_object(obj_name, ra_deg, dec_deg)
-        ztf_meta, ztf_lc = txv_ztf.get_object(obj_name, ra_deg, dec_deg)
-        asas_sn_meta, asas_sn_lc = txv_asas_sn.get_object(obj_name, ra_deg, dec_deg)
-
-        # Gent a new schema
-        schema = txv_db.get_object_schema()
-        # Now we populate schema with our survey information
-        obj_meta = txv_tns.update_object_meta(schema, tns_meta)
-        obj_meta = txv_atlas.update_object_meta(obj_meta, atlas_meta)
-        obj_meta = txv_ztf.update_object_meta(obj_meta, ztf_meta)
-        obj_meta = txv_asas_sn.update_object_meta(obj_meta, asas_sn_meta)
-        # Collate lightcurves and add peak mag measurements to schema
-        lc_df = pd.concat([atlas_lc, ztf_lc, asas_sn_lc])
-        # Cut on time (1 month before discovery, 6 months after)
-        disc_mjd = Time(obj_meta['discovery_date']['value']).mjd
-        lc_df = lc_df[((disc_mjd - lc_df['mjd']) <= 30) & ((lc_df['mjd'] - disc_mjd) <= 60)]
-        # Add peak magnitudes to meta
-        obj_meta = txv_tns.meta_add_peak_mags(obj_meta, lc_df)
-        obj_meta = clean_meta(obj_meta)
-        # Convert to json for submission
-        obj_lc = lc_df.to_dict(orient="records")
-        # Push to database
-        txv_db.upsert(obj_name, obj_meta, "tns_objects")
-        txv_db.upsert(obj_name, obj_lc, "tns_lightcurves")
-
-    # Once complete with all objects in message, mark read
-    txv_gmail.mark_read(message, verbose=True)
+elif args["daily_update"]:
+    txv_tns = TNSPipeline(module="pipeline",
+                          log_name="tns_bulk_ingest",
+                          debug=args.debug)
+    txv_tns.daily_update()
