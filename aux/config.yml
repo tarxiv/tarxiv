@@ -2,17 +2,14 @@
 # Must be renamed as config.yml!
 
 # General
-log_level: "debug"
 log_dir: "/tmp"
+logstash_host: localhost
+logstash_port: 50000
 
 # hosting information
 host:
 user:
 api_port:
-
-# database information - default are used in CI
-database:
-  host: localhost
   
 # tns certifications/params
 tns:
@@ -38,14 +35,14 @@ gmail:
 # ATLAS Info
 atlas_url: "https://psweb.mp.qub.ac.uk/sne/atlas4/api/"
 atlas:
-  associated_sources: ["atlas_twb", "atlas_survey", "sherlock"]
+  associated_sources: ["atlas", "atlas_twb", "sherlock"]
 
 # Fink/ZTF info
 fink_url: "https://api.fink-portal.org/"
 ztf:
-  associated_sources: ["ztf_survey", "fink", "mangrove"]
+  associated_sources: ["ztf", "fink", "mangrove"]
 
 # ASAS-SN info
 asas-sn:
-  associated_sources: ["asas-sn_survey", "asas-sn_skypatrol"]
+  associated_sources: ["asas-sn", "asas-sn_skypatrol"]
 

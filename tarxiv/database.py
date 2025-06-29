@@ -30,11 +30,14 @@ class TarxivDB(TarxivModule):
         authenticator = PasswordAuthenticator(username, password)
         options = ClusterOptions(authenticator)
         # Connect
-        self.logger.info({"status": "connecting to couchbase"})
-        connection_str = "couchbase://" + self.config["database"]["host"]
+        status = {"status": "connecting to couchbase"}
+        self.logger.info(status, extra=status)
+        connection_str = "couchbase://" + os.environ["TARXIV_COUCHBAS_HOST"]
         self.cluster = Cluster(connection_str, options)
         self.conn = self.cluster.bucket("tarxiv")
-        self.logger.info({"status": "connection success"})
+        status = {"status": "connection success"}
+        self.logger.info(status, extra=status)
+
 
         # Set scope, each catalog will have its own scope
         self.scope = catalog
@@ -54,7 +57,8 @@ class TarxivDB(TarxivModule):
         :return: list if query results
         """
         # Log
-        self.logger.info({"status": "running sql++ query", "query_str": query_str})
+        status = {"status": "running sql++ query", "query_str": query_str}
+        self.logger.info(status, extra=status)
         return self.cluster.query(query_str)
 
     def get_all_active_objects(self, active_days):
@@ -82,11 +86,12 @@ class TarxivDB(TarxivModule):
         """
         coll = self.conn.scope(self.scope).collection(collection)
         coll.upsert(object_name, payload)
-        self.logger.info({
+        status = {
             "status": "upserted",
             "object_name": object_name,
             "collection": collection,
-        })
+        }
+        self.logger.info(status, extra=status)
 
     def get(self, object_name, collection):
         """Retrieve a document from couchbase collection based on object_id
@@ -98,18 +103,22 @@ class TarxivDB(TarxivModule):
         try:
             coll = self.conn.scope(self.scope).collection(collection)
             result = coll.get(object_name).value
-            self.logger.info({
+            status = {
                 "status": "retrieved",
                 "object_name": object_name,
                 "collection": collection,
-            })
+            }
+            self.logger.info(status, extra=status)
         except DocumentNotFoundException:
-            self.logger.warn({
+            status = {
                 "status": "no_document",
                 "object_name": object_name,
                 "collection": collection,
-            })
+            }
+            self.logger.warn(status, extra=status)
             result = None
+
+
         return result
 
     def close(self):

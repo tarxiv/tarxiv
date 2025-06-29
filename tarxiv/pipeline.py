@@ -78,7 +78,8 @@ class TNSPipeline(TarxivModule):
         :return: full TNS public object dataframe
         """
         # Run request to TNS Server
-        self.logger.info({"status": "retrieving TNS public object catalog"})
+        status = {"status": "retrieving TNS public object catalog"}
+        self.logger.info(status, extra=status)
         get_url = (
             self.tns.site + "/system/files/tns_public_objects/tns_public_objects.csv.zip"
         )
@@ -144,5 +145,6 @@ class TNSPipeline(TarxivModule):
             self.gmail.mark_read(message, verbose=True)
 
     def signal_handler(self, sig, frame):
-        self.logger.info({"status": "received exit signal", "signal": str(sig), "frame": str(frame)})
+        status = {"status": "received exit signal", "signal": str(sig), "frame": str(frame)}
+        self.logger.info(status, extra=status)
         sys.exit(0)

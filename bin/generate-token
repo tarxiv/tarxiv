@@ -13,10 +13,13 @@ parser.add_argument('--debug', action='store_true', default=False,
                          help='set to enable printing/logging in debug mode')
 args = parser.parse_args()
 
+# Get remote host information
+txv_user = os.environ["TARXIV_USER"]
+txv_host = os.environ["TARXIV_HOST"]
 # Create object
 txv_gmail = Gmail(debug=args.debug)
 token_file = os.path.join(txv_gmail.config_dir, "gmail_token.json")
-token_dest = f"{txv_gmail.config['user']}@{txv_gmail.config['host']}:~/tarxiv-dev/aux/"
+token_dest = f"{txv_user}@{txv_host}:~/tarxiv-dev/aux/"
 try:
     result = subprocess.run(['scp', token_file, token_dest], capture_output=True, text=True, check=True)
     print(result.stdout)

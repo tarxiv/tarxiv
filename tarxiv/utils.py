@@ -1,4 +1,6 @@
 # Misc. utility functions
+from logstash_async.handler import AsynchronousLogstashHandler
+from logstash_async.handler import LogstashFormatter
 import logging
 import yaml
 import sys
@@ -39,14 +41,23 @@ class TarxivModule:
         self.logger.addHandler(handler)
 
         # If set in config, log to file
-        if self.config["log_dir"]:
-            log_file = os.path.join(self.config["log_dir"], log_name + ".log")
-            handler = logging.FileHandler(log_file)
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
+        log_file = os.path.join(self.config["log_dir"], log_name + ".log")
+        handler = logging.FileHandler(log_file)
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+
+        # Config logstash
+        handler = AsynchronousLogstashHandler(host=self.config['logstash_host'],
+                                              port=self.config['logstash_port'],
+                                              # certfile=self.config['logstash_cert'],
+                                              database_path=None)
+        formatter = LogstashFormatter({"module": self.module})
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
 
         # Status
-        self.logger.info({"status": "initializing", "module": self.module})
+        status = {"status": "initializing"}
+        self.logger.info(status, extra=status)
 
 
 class SurveyMetaMissingError(Exception):

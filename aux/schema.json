@@ -12,5 +12,10 @@
   "discovery_data_source": [],
   "redshift": [],
   "host_name": [],
-  "peak_mag":[]
+  "peak_mag":[],
+  "latest_detection": [],
+  "latest_nondetection": [],
+  "latest_change": []
+
+
 }

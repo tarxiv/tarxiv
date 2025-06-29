@@ -77,9 +77,9 @@ def append_dynamic_values(obj_meta, obj_lc_df):
 
     # Append and return
     obj_meta["peak_mag"] = peak_mags
-    obj_meta["recent_detection"] = recent_dets
-    obj_meta["recent_nondetection"] = recent_nondets
-    obj_meta["recent_change"] = recent_changes
+    obj_meta["latest_detection"] = recent_dets
+    obj_meta["latest_nondetection"] = recent_nondets
+    obj_meta["latest_change"] = recent_changes
     return obj_meta
 
 
@@ -94,16 +94,6 @@ class Survey(TarxivModule):
         schema_sources = os.path.join(self.config_dir, "sources.json")
         with open(schema_sources) as f:
             self.schema_sources = json.load(f)
-
-        # Survey name map (could write better, but fuck it)
-        self.survey_source_map = {
-            "TNS": 0,
-            "ATLAS": 2,
-            "ZTF": 3,
-            "ASAS-SN": 5,
-            "SHERLOCK": 7,
-            "MANGROVE": 8,
-        }
 
     def get_object(self, *args, **kwargs):
         """Query the survey for object at a given set of coordinates.
@@ -204,9 +194,9 @@ class ASAS_SN(Survey):  # noqa: N801
             nearest = lcs.catalog_info.iloc[0]
             nearest_id = nearest["asas_sn_id"]
             meta = {
-                "identifiers": [{"name": str(nearest_id), "source": 6}],
-                "ra_deg": [{"value": nearest["ra_deg"], "source": 6}],
-                "dec_deg": [{"value": nearest["dec_deg"], "source": 6}],
+                "identifiers": [{"name": str(nearest_id), "source": "asas-sn"}],
+                "ra_deg": [{"value": nearest["ra_deg"], "source": "asas-sn"}],
+                "dec_deg": [{"value": nearest["dec_deg"], "source": "asas-sn"}],
             }
             # Log
             status.update({"status": "match", "id": str(nearest_id)})
@@ -225,7 +215,7 @@ class ASAS_SN(Survey):  # noqa: N801
             lc_df["detection"] = np.where(lc_df["mag_err"] > 99, 0, 1)
             lc_df["mag"] = np.where(lc_df["mag_err"] > 99, np.nan, lc_df["mag"])
             lc_df["mag_err"] = np.where(lc_df["mag_err"] > 99, np.nan, lc_df["mag_err"])
-            lc_df["survey"] = "ASAS-SN"
+            lc_df["survey"] = "asas-sn"
             # Reorder cols
             lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "unit", "survey"]]
             # Update
@@ -242,7 +232,7 @@ class ASAS_SN(Survey):  # noqa: N801
                 "details": traceback.format_exc(),
             })
         finally:
-            self.logger.info(status)
+            self.logger.info(status, extra=status)
             return meta, lc_df
 
 
@@ -302,9 +292,9 @@ class ZTF(Survey):
             # Metadata on each line of photometry, we only take first row (d prefix are non-phot)
             result_meta = result.json()[0]
             meta = {
-                "identifiers": [{"name": ztf_name, "source": 3}],
-                "ra_deg": [{"value": result_meta["i:ra"], "source": 3}],
-                "dec_deg": [{"value": result_meta["i:dec"], "source": 3}],
+                "identifiers": [{"name": ztf_name, "source": "ztf"}],
+                "ra_deg": [{"value": result_meta["i:ra"], "source": "ztf"}],
+                "dec_deg": [{"value": result_meta["i:dec"], "source": "ztf"}],
             }
 
             meta["host_name"] = []
@@ -312,7 +302,7 @@ class ZTF(Survey):
                 "d:mangrove_2MASS_name" in result_meta.keys()
                 and result_meta["d:mangrove_2MASS_name"] != "None"
             ):
-                host_name = {"name": result_meta["d:mangrove_2MASS_name"], "source": 8}
+                host_name = {"name": result_meta["d:mangrove_2MASS_name"], "source": "magrove"}
                 meta["host_name"].append(host_name)
             if (
                 "d:mangrove_2MASS_name" in result_meta.keys()
@@ -320,7 +310,7 @@ class ZTF(Survey):
             ):
                 host_name = {
                     "name": result_meta["d:mangrove_HyperLEDA_name"],
-                    "source": 8,
+                    "source": "magrove",
                 }
                 meta["host_name"].append(host_name)
             if len(meta["host_name"]) == 0:
@@ -353,7 +343,7 @@ class ZTF(Survey):
             lc_df = lc_df.drop("jd", axis=1)
             # Add unit/survey columns
             lc_df["unit"] = "main"
-            lc_df["survey"] = "ZTF"
+            lc_df["survey"] = "ztf"
             # Reorder cols
             lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "unit", "survey"]]
             # Report count
@@ -371,7 +361,7 @@ class ZTF(Survey):
                 "details": traceback.format_exc(),
             })
         finally:
-            self.logger.info(status)
+            self.logger.info(status, extra=status)
             return meta, lc_df
 
 
@@ -442,22 +432,22 @@ class ATLAS(Survey):
 
             # Insert meta data
             meta = {
-                "identifiers": [{"name": result["object"]["id"], "source": 1}],
-                "ra_deg": [{"value": result["object"]["ra"], "source": 1}],
-                "dec_deg": [{"value": result["object"]["dec"], "source": 1}],
+                "identifiers": [{"name": result["object"]["id"], "source": "atlas"}],
+                "ra_deg": [{"value": result["object"]["ra"], "source": "atlas"}],
+                "dec_deg": [{"value": result["object"]["dec"], "source": "atlas"}],
             }
 
             if result["object"]["atlas_designation"] is not None:
                 atlas_name = {
                     "name": result["object"]["atlas_designation"],
-                    "source": 2,
+                    "source": "atlas_twb",
                 }
                 meta["identifiers"].append(atlas_name)
             # Add sherlock crossmatch if exists
             if result["sherlock_crossmatches"]:
                 result["sherlock"] = result["sherlock_crossmatches"][0]
                 if result["sherlock"]["z"] is not None:
-                    meta["redshift"] = {"value": result["sherlock"]["z"], "source": 7}
+                    meta["redshift"] = {"value": result["sherlock"]["z"], "source": "sherlock"}
 
             # DETECTIONS
             det_df = pd.DataFrame(result["lc"])[
@@ -477,7 +467,7 @@ class ATLAS(Survey):
             # Add a column to record which ATLAS unit the value was taken from
             lc_df["unit"] = lc_df["expname"].str[:3]
             lc_df = lc_df.drop("expname", axis=1)
-            lc_df["survey"] = "ATLAS"
+            lc_df["survey"] = "atlas"
             # Reorder cols
             lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "unit", "survey"]]
             # Report count
@@ -495,7 +485,7 @@ class ATLAS(Survey):
                 "details": traceback.format_exc(),
             })
         finally:
-            self.logger.info(status)
+            self.logger.info(status, extra=status)
             return meta, lc_df
 
 
@@ -556,29 +546,29 @@ class TNS(Survey):
             status["status"] = "query success"
             result = response_json["data"]
             meta = {
-                "identifiers": {"name": result["objname"], "source": 0},
-                "ra_deg": {"value": result["radeg"], "source": 0},
-                "dec_deg": {"value": result["decdeg"], "source": 0},
-                "ra_hms": {"value": result["ra"], "source": 0},
-                "dec_dms": {"value": result["dec"], "source": 0},
+                "identifiers": {"name": result["objname"], "source": "tns"},
+                "ra_deg": {"value": result["radeg"], "source": "tns"},
+                "dec_deg": {"value": result["decdeg"], "source": "tns"},
+                "ra_hms": {"value": result["ra"], "source": "tns"},
+                "dec_dms": {"value": result["dec"], "source": "tns"},
                 "object_type": [
-                    {"value": result["name_prefix"], "source": 0},
-                    {"value": result["object_type"]["name"], "source": 0},
+                    {"value": result["name_prefix"], "source": "tns"},
+                    {"value": result["object_type"]["name"], "source": "tns"},
                 ],
-                "discovery_date": {"value": result["discoverydate"], "source": 0},
+                "discovery_date": {"value": result["discoverydate"], "source": "tns"},
                 "reporting_group": {
                     "value": result["reporting_group"]["group_name"],
-                    "source": 0,
+                    "source": "tns",
                 },
                 "discovery_data_source": {
                     "value": result["discovery_data_source"]["group_name"],
-                    "source": 0,
+                    "source": "tns",
                 },
             }
             if result["redshift"] is not None:
-                meta["redshift"] = {"value": result["redshift"], "source": 0}
+                meta["redshift"] = {"value": result["redshift"], "source": "tns"}
             if result["hostname"] is not None:
-                meta["host_name"] = {"value": result["hostname"], "source": 0}
+                meta["host_name"] = {"value": result["hostname"], "source": "tns"}
 
         except SurveyMetaMissingError:
             status["status"] = "failed to get TNS metadata"
@@ -590,7 +580,7 @@ class TNS(Survey):
                 "details": traceback.format_exc(),
             })
         finally:
-            self.logger.info(status)
+            self.logger.info(status, extra=status)
             return meta, lc_df
 
 

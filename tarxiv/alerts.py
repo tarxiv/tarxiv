@@ -23,7 +23,8 @@ class Gmail(TarxivModule):
         super().__init__("gmail", *args, **kwargs)
 
         # Logging
-        self.logger.info({"status": "connecting to google mail api"})
+        status = {"status": "connecting to google mail api"}
+        self.logger.info(status, extra=status)
         # Get gmail token
         self.creds = None
         # Absolute paths
@@ -48,7 +49,8 @@ class Gmail(TarxivModule):
         # Connect to service
         self.service = build("gmail", "v1", credentials=self.creds)
         # Connect to email
-        self.logger.info({"status": "connection sucess"})
+        status = {"status": "connection sucess"}
+        self.logger.info(status, extra=status)
 
         # Create thread value
         self.t = None
@@ -110,9 +112,9 @@ class Gmail(TarxivModule):
         ).execute()
         status = {"action": "message_read", "id": message["id"]}
         if verbose:
-            self.logger.info(status)
+            self.logger.info(status, extra=status)
         else:
-            self.logger.debug(status)
+            self.logger.debug(status, extra=status)
 
     def monitor_notices(self):
         """Starts thread to monitor gmail account for tns alerts:
@@ -122,7 +124,8 @@ class Gmail(TarxivModule):
         self.t = threading.Thread(target=self._monitoring_thread, daemon=True)
         self.t.start()
         # Log
-        self.logger.info({"status": "starting monitoring thread"})
+        status = {"status": "starting monitoring thread"}
+        self.logger.info(status, extra=status)
 
     def stop_monitoring(self):
         """Kill monitoring thread.
@@ -134,7 +137,8 @@ class Gmail(TarxivModule):
             self.stop_event.set()
             self.t.join()
         # Log
-        self.logger.info({"status": "stopping monitoring thread"})
+        status = {"status": "stopping monitoring thread"}
+        self.logger.info(status, extra=status)
 
     def _monitoring_thread(self):
         """Open a gmail service object and continuously monitor gmail for new messages.
@@ -150,13 +154,15 @@ class Gmail(TarxivModule):
         while not self.stop_event.is_set():
             now = time.time()
             if now - last_refresh >= (30 * 60):
-                self.logger.info({"status": "refreshing token"})
+                status = {"status": "refreshing token"}
+                self.logger.info(status, extra=status)
                 self.creds.refresh(Request())
                 service = build("gmail", "v1", credentials=self.creds)
                 last_refresh = now
 
             # Call the Gmail API
-            self.logger.info({"action": "checking_messages"})
+            status = {"status": "checking_messages"}
+            self.logger.info(status, extra=status)
             time.sleep(self.config["gmail"]["polling_interval"])
             results = (
                 service.users()
@@ -181,7 +187,8 @@ class Gmail(TarxivModule):
                     )
                 except HttpError:
                     # Rate limit, wait 10 seconds and try again
-                    self.logger.warn({"status": "rate_limited, sleeping 12 seconds"})
+                    status = {"status": "rate_limited, sleeping 12 seconds"}
+                    self.logger.warn(status, extra=status)
                     time.sleep(self.config["gmail"]["polling_interval"] * 3)
                     msg = (
                         service.users()
@@ -197,7 +204,8 @@ class Gmail(TarxivModule):
                     self.mark_read(message)
                     continue
                 # Log
-                self.logger.debug({"status": "recieved alerts", "objects": alerts})
+                status = {"status": "recieved alerts", "objects": alerts}
+                self.logger.debug(status, extra=status)
 
                 # Submit to queue for processing
                 self.q.put((message, alerts))

@@ -5,19 +5,19 @@
     "reference": "Gal-Yam et al. 2021",
     "alias": 0
   },
+  "atlas": {
+    "name": "atlas_survey",
+    "bibcode": "2018PASP..130f4505T",
+    "reference": "Tonry et al. 2018",
+    "alias": 1
+  },
   "atlas_twb": {
     "name": "atlas_twb",
     "bibcode": "2020PASP..132h5002S",
     "reference": "Smith et al. 2020",
-    "alias": 1
-  },
-  "atlas_survey": {
-    "name": "atlas_survey",
-    "bibcode": "2018PASP..130f4505T",
-    "reference": "Tonry et al. 2018",
     "alias": 2
   },
-  "ztf_survey": {
+  "ztf": {
     "name": "ztf_survey",
     "bibcode": "2019PASP..131a8002B",
     "reference": "Belim et al. 2019",
@@ -29,7 +29,7 @@
     "reference": "Möller et al. 2020",
     "alias": 4
   },
-  "asas-sn_survey": {
+  "asas-sn": {
     "name": "asas-sn_survey",
     "bibcode": "2014ApJ...788...48S",
     "reference": "Shappee et al. 2014",

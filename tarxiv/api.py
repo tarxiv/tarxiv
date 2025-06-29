@@ -29,7 +29,8 @@ class API(TarxivModule):
         self.valid_operators = ["<", ">", "=", "<=", ">=", "IN", "LIKE"]
 
         # Build application
-        self.logger.info({"status": "setting up flask application"})
+        status = {"status": "setting up flask application"}
+        self.logger.info(status, extra=status)
         self.app = Flask(__name__)
         # Register routes
         self.routes()
@@ -37,7 +38,8 @@ class API(TarxivModule):
 
     def start_server(self):
         # Log
-        self.logger.info({"status": "starting WSGI server"})
+        status = {"status": "starting WSGI server"}
+        self.logger.info(status, extra=status)
         # Enable WSGI access logging via Paste
         app_logged = TransLogger(self.app)
         # Mount the WSGI callable object (app) on the root directory
@@ -98,7 +100,7 @@ class API(TarxivModule):
                 status_code = 500
                 log["status"] = "ServerError"
             finally:
-                self.logger.info(log)
+                self.logger.info(log, extra=log)
                 return server_response(result, status_code)
 
         @self.app.route("/get_object_lc/<string:obj_name>", methods=["POST"])
@@ -138,7 +140,7 @@ class API(TarxivModule):
                 status_code = 500
                 log["status"] = "ServerError"
             finally:
-                self.logger.info(log)
+                self.logger.info(log, extra=log)
                 return server_response(result, status_code)
 
         @self.app.route("/search_objects", methods=["POST"])
@@ -190,7 +192,7 @@ class API(TarxivModule):
                 status_code = 500
                 log["status"] = "ServerError"
             finally:
-                self.logger.info(log)
+                self.logger.info(log, extra=log)
                 return server_response(result, status_code)
 
     def build_condition(self, field, condition):
