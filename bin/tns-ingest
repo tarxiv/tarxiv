@@ -18,7 +18,8 @@ group.add_argument("--bulk_update", action="store_true",
 group.add_argument("--daily_update", action="store_true",
                    help="Update current active TNS objects")
 
-args = parser.parse_args()
+args = vars(parser.parse_args())
+
 
 # Create survey objects
 if args["alerts"]:

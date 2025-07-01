@@ -31,6 +31,7 @@ dependencies = [
     "flask",
     "paste",
     "cherrypy",
+    "python-logstash-async"
 ]
 requires-python = ">3.9"
 
