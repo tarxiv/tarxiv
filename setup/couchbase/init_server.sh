@@ -1,10 +1,14 @@
 #!/bin/bash
-# used to start couchbase server - can't get around this as docker compose only allows you to start one command - so we have to start couchbase like the standard couchbase Dockerfile would 
-# https://github.com/couchbase/docker/blob/master/enterprise/couchbase-server/7.0.3/Dockerfile#L82
 
-echo "starting couchbase server"
-/entrypoint.sh couchbase-server & 
-sleep 10
+# Run couchbase server in container UNLESS flag set
+if [[ "$1" == -* ]]; then
+  # used to start couchbase server - can't get around this as docker compose only allows you to start one command -
+  # so we have to start couchbase like the standard couchbase Dockerfile would
+  # https://github.com/couchbase/docker/blob/master/enterprise/couchbase-server/7.0.3/Dockerfile#L82
+  echo "starting couchbase server"
+  /entrypoint.sh couchbase-server &
+  sleep 10
+fi
 
 # Initialiaze cluster with new admin credentials
 echo "initializing cluster"
