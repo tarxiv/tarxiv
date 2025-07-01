@@ -43,6 +43,8 @@ services:
       - couchbase
 
   couchbase:
+    profiles:
+      - couchbase
     image: couchbase:latest
     volumes: 
       - ${TARXIV_COUCHBASE_DATA_DIR}:/opt/couchbase/var/lib/couchbase/data:Z
