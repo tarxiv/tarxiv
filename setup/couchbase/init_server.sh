@@ -1,14 +1,12 @@
 #!/bin/bash
+# THIS SCRIPT IS MEANT TO INITIALIZE COUCHBASE IN DOCKER COMPOSE ONLY, ACTUAL PRODUCTION SHOULD BE DONE DIRECTLY ON SERVER
 
-# Run couchbase server in container UNLESS flag set
-if [[ "$1" == -* ]]; then
-  # used to start couchbase server - can't get around this as docker compose only allows you to start one command -
-  # so we have to start couchbase like the standard couchbase Dockerfile would
-  # https://github.com/couchbase/docker/blob/master/enterprise/couchbase-server/7.0.3/Dockerfile#L82
-  echo "starting couchbase server"
-  /entrypoint.sh couchbase-server &
-  sleep 10
-fi
+# used to start couchbase server - can't get around this as docker compose only allows you to start one command -
+# so we have to start couchbase like the standard couchbase Dockerfile would
+# https://github.com/couchbase/docker/blob/master/enterprise/couchbase-server/7.0.3/Dockerfile#L82
+echo "starting couchbase server"
+/entrypoint.sh couchbase-server &
+sleep 10
 
 # Initialiaze cluster with new admin credentials
 echo "initializing cluster"
