@@ -35,7 +35,7 @@ xpack.fleet.agents.fleet_server.hosts: [ http://fleet-server:8220 ]
 xpack.fleet.outputs:
   - id: fleet-default-output
     name: default
-    type: elasticsearch
+    type: elk
     hosts: [ http://elasticsearch:9200 ]
     is_default: true
     is_default_monitoring: true

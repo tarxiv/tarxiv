@@ -1,0 +1,40 @@
+# Docker compose for setting up Couchbase DB, TESTING ONLY
+services:
+  setup:
+    # Setup couchbase server with defined user roles and passwords
+    profiles:
+      - setup
+    image: couchbase:latest
+    init: true
+    volumes:
+      - ./init_server.sh:/init_server.sh:ro,Z
+    entrypoint: /init_server.sh
+    environment:
+      COUCHBASE_HOST: ${TARXIV_COUCHBASE_HOST}
+      COUCHBASE_ADMIN_USERNAME: ${TARXIV_COUCHBASE_ADMIN_USERNAME:-}
+      COUCHBASE_ADMIN_PASSWORD: ${TARXIV_COUCHBASE_ADMIN_PASSWORD:-}
+      COUCHBASE_API_USERNAME: ${TARXIV_COUCHBASE_API_USERNAME:-}
+      COUCHBASE_API_PASSWORD: ${TARXIV_COUCHBASE_API_PASSWORD:-}
+      COUCHBASE_PIPELINE_USERNAME: ${TARXIV_COUCHBASE_PIPELINE_USERNAME:-}
+      COUCHBASE_PIPELINE_PASSWORD: ${TARXIV_COUCHBASE_PIPELINE_PASSWORD:-}
+    networks:
+      - couch
+    depends_on:
+      - couchbase
+
+  couchbase:
+    profiles:
+      - couchbase
+    image: couchbase:latest
+    volumes:
+      - ${TARXIV_COUCHBASE_DATA_DIR}:/opt/couchbase/var/lib/couchbase/data:Z
+    ports:
+      - 8091-8096:8091-8096
+      - 11210-11211:11210-11211
+    networks:
+      - couch
+    restart: unless-stopped
+
+networks:
+  couch:
+    driver: bridge

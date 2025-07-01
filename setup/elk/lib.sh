@@ -20,7 +20,7 @@ function suberr {
 	echo "   ⠍ $1" >&2
 }
 
-# Poll the 'elasticsearch' service until it responds with HTTP code 200.
+# Poll the 'elk' service until it responds with HTTP code 200.
 function wait_for_elasticsearch {
 
 	local -a args=( '-s' '-D-' '-m15' '-w' '%{http_code}' 
