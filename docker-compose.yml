@@ -1,6 +1,6 @@
 services:
   # Setup elasticsearch database with defined user roles and passwords
-  setup_elasticsearch:
+  setup_elastic:
     profiles:
       - setup_elastic
     image: docker.elastic.co/elasticsearch/elasticsearch:9.0.2
