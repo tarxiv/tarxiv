@@ -2,7 +2,7 @@
 # Must be renamed as config.yml!
 
 # General
-log_dir: "/tmp"
+log_dir: "~/logs/"
 logstash_host: localhost
 logstash_port: 50000
 

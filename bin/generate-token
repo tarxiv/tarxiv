@@ -17,7 +17,7 @@ args = parser.parse_args()
 txv_user = os.environ["TARXIV_USER"]
 txv_host = os.environ["TARXIV_HOST"]
 # Create object
-txv_gmail = Gmail(debug=args.debug)
+txv_gmail = Gmail("token_generator", debug=args.debug)
 token_file = os.path.join(txv_gmail.config_dir, "gmail_token.json")
 token_dest = f"{txv_user}@{txv_host}:~/tarxiv-dev/aux/"
 try:
