@@ -18,32 +18,32 @@ group.add_argument("--bulk_update", action="store_true",
 group.add_argument("--daily_update", action="store_true",
                    help="Update current active TNS objects")
 
-args = vars(parser.parse_args())
+args = parser.parse_args()
 
 
 # Create survey objects
-if args["alerts"]:
+if args.alerts:
     txv_tns = TNSPipeline(module="pipeline",
                           log_name="tns_alert_pipeline",
                           debug=args.debug)
     # Run the pipeline
     txv_tns.run_pipeline()
 
-elif args["bulk_missing"]:
+elif args.bulk_missing:
     txv_tns = TNSPipeline(module="pipeline",
                           log_name="tns_bulk_ingest",
                           debug=args.debug)
     # Run the pipeline
     txv_tns.download_bulk(include_existing=False)
 
-elif args["bulk_update"]:
+elif args.bulk_update:
     txv_tns = TNSPipeline(module="pipeline",
                           log_name="tns_bulk_ingest",
                           debug=args.debug)
     # Run the pipeline
     txv_tns.download_bulk(include_existing=True)
 
-elif args["daily_update"]:
+elif args.daily_update:
     txv_tns = TNSPipeline(module="pipeline",
                           log_name="tns_bulk_ingest",
                           debug=args.debug)
