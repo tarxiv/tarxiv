@@ -58,6 +58,7 @@ services:
   elasticsearch:
     profiles:
       - elk
+      - elasticsearch
     image: docker.elastic.co/elasticsearch/elasticsearch:9.0.2
     volumes:
       - ./aux/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro,Z
@@ -77,6 +78,7 @@ services:
   logstash:
     profiles:
       - elk
+      - logstash
     image: docker.elastic.co/logstash/logstash:9.0.2
     volumes:
       - ./aux/logstash.yml:/usr/share/logstash/config/logstash.yml:ro,Z
@@ -98,6 +100,7 @@ services:
   kibana:
     profiles:
       - elk
+      - kibana
     image: docker.elastic.co/kibana/kibana:9.0.2
     volumes:
       - ./aux/kibana.yml:/usr/share/kibana/config/kibana.yml:ro,Z
