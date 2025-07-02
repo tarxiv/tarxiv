@@ -13,7 +13,7 @@ import signal
 import base64
 import time
 import os
-
+import sys
 
 class Gmail(TarxivModule):
     """Module for interfacing with gmail and parsing TNS alerts."""
@@ -60,7 +60,7 @@ class Gmail(TarxivModule):
         self.stop_event = threading.Event()
         # Signals
         signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
+        #signal.signal(signal.SIGTERM, self._signal_handler)
 
     def poll(self, timeout=1):
         """Once we have began monitoring notices, poll the queue for new messages and alerts
@@ -100,7 +100,7 @@ class Gmail(TarxivModule):
 
         return result
 
-    def mark_read(self, message, verbose=False):
+    def mark_read(self, message):
         """Marks message as read in gmail, so it won't show up again in our monitoring stream
 
         :param message: gmail message object
@@ -110,11 +110,9 @@ class Gmail(TarxivModule):
         self.service.users().messages().modify(
             userId="me", id=message["id"], body={"removeLabelIds": ["UNREAD"]}
         ).execute()
+        # Log
         status = {"action": "message_read", "id": message["id"]}
-        if verbose:
-            self.logger.info(status, extra=status)
-        else:
-            self.logger.debug(status, extra=status)
+        self.logger.info(status, extra=status)
 
     def monitor_notices(self):
         """Starts thread to monitor gmail account for tns alerts:
@@ -211,6 +209,8 @@ class Gmail(TarxivModule):
                 self.q.put((message, alerts))
 
     def _signal_handler(self, sig, frame):
+        status = {"status": "received exit signal", "signal": str(sig), "frame": str(frame)}
+        self.logger.info(status, extra=status)
         self.stop_monitoring()
-        sys.exit(0)
+        os._exit(1)
 

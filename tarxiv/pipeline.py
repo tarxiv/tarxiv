@@ -9,6 +9,7 @@ import zipfile
 import signal
 import sys
 import io
+import os
 
 class TNSPipeline(TarxivModule):
     def __init__(self,  *args, **kwargs):
@@ -49,9 +50,10 @@ class TNSPipeline(TarxivModule):
         # Collate lightcurves and add peak mag measurements to schema
         lc_df = pd.concat([atlas_lc, ztf_lc, asas_sn_lc])
         # Cut on time (1 month before discovery, 6 months after)
-        disc_mjd = Time(obj_meta["discovery_date"]["value"]).mjd
-        lc_df = lc_df[((disc_mjd - lc_df["mjd"]) <= self.config['obj_prior_days'])
-                      & ((lc_df["mjd"] - disc_mjd) <= self.config['obj_active_days'])]
+        disc_mjd = Time(obj_meta["discovery_date"][0]["value"]).mjd
+        if len(lc_df) > 0:
+            lc_df = lc_df[((disc_mjd - lc_df["mjd"]) <= self.config['tns']['obj_prior_days'])
+                          & ((lc_df["mjd"] - disc_mjd) <= self.config['tns']['obj_active_days'])]
         # Add peak magnitudes to meta
         obj_meta = append_dynamic_values(obj_meta, lc_df)
         obj_meta = clean_meta(obj_meta)
@@ -122,7 +124,7 @@ class TNSPipeline(TarxivModule):
     def run_pipeline(self):
         # Set signals
         signal.signal(signal.SIGINT, handler=self.signal_handler)
-        signal.signal(signal.SIGTERM, handler=self.signal_handler)
+        # signal.signal(signal.SIGTERM, handler=self.signal_handler)
 
         # Start monitoring notices
         self.gmail.monitor_notices()
@@ -145,9 +147,9 @@ class TNSPipeline(TarxivModule):
                 self.upsert_object(obj_name, obj_meta, obj_lc)
 
             # Once complete with all objects in message, mark read
-            self.gmail.mark_read(message, verbose=True)
+            self.gmail.mark_read(message)
 
     def signal_handler(self, sig, frame):
         status = {"status": "received exit signal", "signal": str(sig), "frame": str(frame)}
         self.logger.info(status, extra=status)
-        sys.exit(0)
+        os._exit(1)

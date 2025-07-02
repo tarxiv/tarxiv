@@ -34,46 +34,48 @@ def append_dynamic_values(obj_meta, obj_lc_df):
     recent_changes = []
     # Get derived mag information by filter
     filter_df = obj_lc_df.groupby("filter")
-    for filter_name, filter_grp_df in filter_df.iterrows():
-        # Peak mag info
-        peak_row = filter_grp_df.loc[filter_grp_df["mag"].idxmin()]
-        peak_mag = {
-            "filter": filter_name,
-            "value": peak_row["mag"],
-            "date": Time(peak_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
-            "source": peak_row["survey"],
-        }
-        peak_mags.append(peak_mag)
-        # Recent detection info
-        det_row = filter_grp_df.loc[filter_grp_df[filter_grp_df["det"] == 1]["mjd"].idxmax()]
-        recent_det = {
-            "filter": filter_name,
-            "value": det_row["mag"],
-            "date": Time(det_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
-            "source": det_row["survey"],
-        }
-        recent_dets.append(recent_det)
-        # Recent non-detection info
-        nondet_row = filter_grp_df.loc[filter_grp_df[filter_grp_df["det"] == 0]["mjd"].idxmax()]
-        recent_nondet = {
-            "filter": filter_name,
-            "value": nondet_row["limit"],
-            "date": Time(nondet_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
-            "source": nondet_row["survey"],
-        }
-        recent_nondets.append(recent_nondet)
-        # Get recent change
-        sorted_grp_df = filter_grp_df.sort_values(by="mjd")
-        sorted_grp_df["change"] = sorted_grp_df["mag"].diff()
-        sorted_grp_df["change"] = np.where(sorted_grp_df["change"] > 0, "increasing", "fading")
-        recent_row = sorted_grp_df[sorted_grp_df["mjd"].idxmax()]
-        recent_change = {
-            "filter": filter_name,
-            "value": recent_row["change"],
-            "date": Time(nondet_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
-            "source": nondet_row["survey"]
-        }
-        recent_changes.append(recent_change)
+    for filter_name, filter_grp_df in filter_df:
+        if len(filter_grp_df[filter_grp_df["detection"] == 1]) > 0:
+            # Peak mag info
+            peak_row = filter_grp_df.loc[filter_grp_df[filter_grp_df["detection"] == 1]["mag"].idxmin()]
+            peak_mag = {
+                "filter": filter_name,
+                "value": peak_row["mag"],
+                "date": Time(peak_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+                "source": peak_row["survey"],
+            }
+            peak_mags.append(peak_mag)
+            # Recent detection info
+            det_row = filter_grp_df.loc[filter_grp_df[filter_grp_df["detection"] == 1]["mjd"].idxmax()]
+            recent_det = {
+                "filter": filter_name,
+                "value": det_row["mag"],
+                "date": Time(det_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+                "source": det_row["survey"],
+            }
+            recent_dets.append(recent_det)
+            # Get recent change
+            sorted_grp_df = filter_grp_df.sort_values(by="mjd")
+            sorted_grp_df["change"] = sorted_grp_df["mag"].diff()
+            sorted_grp_df["change"] = np.where(sorted_grp_df["change"] > 0, "increasing", "fading")
+            recent_row = sorted_grp_df.loc[sorted_grp_df["mjd"].idxmax()]
+            recent_change = {
+                "filter": filter_name,
+                "value": recent_row["change"],
+                "date": Time(recent_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+                "source": recent_row["survey"]
+            }
+            recent_changes.append(recent_change)
+        if len(filter_grp_df[filter_grp_df["detection"] == 0]) > 0:
+            # Recent non-detection info
+            nondet_row = filter_grp_df.loc[filter_grp_df[filter_grp_df["detection"] == 0]["mjd"].idxmax()]
+            recent_nondet = {
+                "filter": filter_name,
+                "value": nondet_row["limit"],
+                "date": Time(nondet_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+                "source": nondet_row["survey"],
+            }
+            recent_nondets.append(recent_nondet)
 
     # Append and return
     obj_meta["peak_mag"] = peak_mags
@@ -323,8 +325,8 @@ class ZTF(Survey):
                 "i:fid": "filter",
                 "i:jd": "jd",
                 "i:diffmaglim": "limit",
-                "d:tag": "detection"
-                "i:fwhm" "fwhm"
+                "d:tag": "detection",
+                "i:fwhm": "fwhm"
             }
             filter_map = {"1": "g", "2": "R", "3": "i"}
             detection_map = {"valid": 1, "badquality": -1, "upperlim": 0}
@@ -454,14 +456,16 @@ class ATLAS(Survey):
                 ["mjd", "mag", "magerr", "mag5sig", "filter", "expname", "major"]
             ]
             det_df.columns = ["mjd", "mag", "mag_err", "limit", "filter", "expname", "fwhm"]
+            det_df["detection"] = 1
             # NON DETECTIONS
-            non_df = pd.DataFrame(result["lcnondet"])[
+            non_df = pd.DataFrame(result["lcnondets"])[
                     ["mjd", "mag5sig", "filter", "expname"]
             ]
             non_df.columns = ["mjd", "limit", "filter", "expname"]
             non_df["mag"] = np.nan
             non_df["mag_err"] = np.nan
             non_df["fwhm"] = np.nan
+            non_df["detection"] = 0
             lc_df = pd.concat([det_df, non_df])
 
             # Add a column to record which ATLAS unit the value was taken from
