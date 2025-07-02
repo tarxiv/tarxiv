@@ -124,6 +124,9 @@ class TNSPipeline(TarxivModule):
         signal.signal(signal.SIGINT, handler=self.signal_handler)
         signal.signal(signal.SIGTERM, handler=self.signal_handler)
 
+        # Start monitoring notices
+        self.gmail.monitor_notices()
+
        # Run logic loop
         while True:
             # Get next message
