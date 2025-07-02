@@ -11,9 +11,11 @@ import os
 class TarxivDB(TarxivModule):
     """Interface for TarXiv couchbase data."""
 
-    def __init__(self, catalog, user, *args, **kwargs):
-        """Read in object schema and connect to couchbase."""
-        super().__init__("couchbase", *args, **kwargs)
+    def __init__(self, catalog, user, script_name, reporting_mode, debug=False):
+        super().__init__(script_name=script_name,
+                         module="couchbase",
+                         reporting_mode=reporting_mode,
+                         debug=debug)
         # Set schema file
         self.schema_file = os.path.join(self.config_dir, "schema.json")
 

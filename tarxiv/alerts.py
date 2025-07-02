@@ -13,14 +13,15 @@ import signal
 import base64
 import time
 import os
-import sys
 
 class Gmail(TarxivModule):
     """Module for interfacing with gmail and parsing TNS alerts."""
 
-    def __init__(self, *args, **kwargs):
-        """Create module, authenticate gmail and establish connection."""
-        super().__init__("gmail", *args, **kwargs)
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(script_name=script_name,
+                         module="gmail",
+                         reporting_mode=reporting_mode,
+                         debug=debug)
 
         # Logging
         status = {"status": "connecting to google mail api"}

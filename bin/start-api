@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from tarxiv.utils import PRINT, LOGFILE, DATABASE
 from tarxiv.api import API
 import argparse
 
@@ -11,5 +12,7 @@ parser.add_argument('--debug', action='store_true', default=False,
 args = parser.parse_args()
 
 # Get API object and start server
-txv_api = API(args.debug)
+txv_api = API(script_name="tarxiv_api",
+              reporting_mode=(PRINT | LOGFILE | DATABASE),
+              debug=args.debug)
 txv_api.start_server()

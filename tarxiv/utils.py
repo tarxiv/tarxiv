@@ -6,10 +6,15 @@ import yaml
 import sys
 import os
 
+# Reporting mode flags
+PRINT = 1
+LOGFILE = 2
+DATABASE = 4
+
 class TarxivModule:
     """Base class for all TarXiv modules to ensure unified logging and configuration."""
 
-    def __init__(self, module, log_name, debug=False):
+    def __init__(self, script_name, module, reporting_mode, debug=False):
         """Read in configuration file and create module logger
 
         :param module: name of module; str
@@ -36,24 +41,30 @@ class TarxivModule:
         formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         )
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
 
-        # If set in config, log to file
-        log_file = os.path.join(self.config["log_dir"], log_name + ".log")
-        handler = logging.FileHandler(log_file)
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+        # Print to system standard out
+        if PRINT & reporting_mode:
+            handler = logging.StreamHandler(sys.stdout)
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+
+        # Log to file
+        if LOGFILE & reporting_mode:
+            log_file = os.path.join(self.config["log_dir"], script_name + ".log")
+            handler = logging.FileHandler(log_file)
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
 
         # Config logstash
-        handler = AsynchronousLogstashHandler(host=self.config['logstash_host'],
-                                              port=self.config['logstash_port'],
-                                              # certfile=self.config['logstash_cert'],
-                                              database_path=None)
-        formatter = LogstashFormatter({"module": self.module, "log_name": log_name})
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+        # Submit to logstash
+        if DATABASE & reporting_mode:
+            handler = AsynchronousLogstashHandler(host=self.config['logstash_host'],
+                                                  port=self.config['logstash_port'],
+                                                  # certfile=self.config['logstash_cert'],
+                                                  database_path=None)
+            formatter = LogstashFormatter({"module": self.module, "script": script_name})
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
 
         # Status
         status = {"status": "initializing"}

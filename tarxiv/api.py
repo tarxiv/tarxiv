@@ -1,5 +1,5 @@
-from tarxiv.database import TarxivDB
-from tarxiv.utils import TarxivModule
+from .database import TarxivDB
+from .utils import TarxivModule
 from flask import Flask, Blueprint, request, make_response
 from paste.translogger import TransLogger
 import cherrypy
@@ -9,11 +9,14 @@ import json
 class API(TarxivModule):
     """API module for server requests to the tarxiv database."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__("api", *args, **kwargs)
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(script_name=script_name,
+                         module="api",
+                         reporting_mode=reporting_mode,
+                         debug=debug)
 
         # Get couchbase connection
-        self.txv_db = TarxivDB(user="api", *args, **kwargs)
+        self.txv_db = TarxivDB("tns", "api", script_name, reporting_mode, debug)
 
         # Survey name/alias map (could write better, but fuck it)
         self.survey_source_map = {

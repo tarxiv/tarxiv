@@ -7,22 +7,25 @@ import pandas as pd
 import requests
 import zipfile
 import signal
-import sys
 import io
 import os
 
 class TNSPipeline(TarxivModule):
-    def __init__(self,  *args, **kwargs):
-        super().__init__("tns_pipeline", *args, **kwargs)
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(script_name=script_name,
+                         module="tns_pipeline",
+                         reporting_mode=reporting_mode,
+                         debug=debug)
+
         # Create survey objects
-        self.tns = TNS(*args, **kwargs)
-        self.atlas = ATLAS(*args, **kwargs)
-        self.ztf = ZTF(*args, **kwargs)
-        self.asas_sn = ASAS_SN(*args, **kwargs)
+        self.tns = TNS(script_name, reporting_mode, debug)
+        self.atlas = ATLAS(script_name, reporting_mode, debug)
+        self.ztf = ZTF(script_name, reporting_mode, debug)
+        self.asas_sn = ASAS_SN(script_name, reporting_mode, debug)
         # Get email interface
-        self.gmail = Gmail(*args, **kwargs)
+        self.gmail = Gmail(script_name, reporting_mode, debug)
         # Get database
-        self.db = TarxivDB("tns", "pipeline", *args, **kwargs)
+        self.db = TarxivDB("tns", "pipeline", script_name, reporting_mode, debug)
 
     def get_object(self, obj_name):
         """

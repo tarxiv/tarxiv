@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import requests
 import traceback
-import zipfile
 import json
 import time
 import io
@@ -148,9 +147,11 @@ class Survey(TarxivModule):
 class ASAS_SN(Survey):  # noqa: N801
     """Interface to ASAS-SN SkyPatrol."""
 
-    def __init__(self, *args, **kwargs):
-        """Connect to ASAS-SN SkyPatrol API."""
-        super().__init__("asas-sn", *args, **kwargs)
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(script_name=script_name,
+                         module="asas-sn",
+                         reporting_mode=reporting_mode,
+                         debug=debug)
 
         # Also need ASAS-SN client
         self.client = SkyPatrolClient(verbose=False)
@@ -241,8 +242,11 @@ class ASAS_SN(Survey):  # noqa: N801
 class ZTF(Survey):
     """Interface to ZTF Fink broker."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__("ztf", *args, **kwargs)
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(script_name=script_name,
+                         module="ztf",
+                         reporting_mode=reporting_mode,
+                         debug=debug)
 
     def get_object(self, obj_name, ra_deg, dec_deg, radius=15):
         """Get ZTF Lightcurve from coordinates using cone_search.
@@ -370,8 +374,11 @@ class ZTF(Survey):
 class ATLAS(Survey):
     """Interface to ATLAS Transient Web Server."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__("atlas", *args, **kwargs)
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(script_name=script_name,
+                         module="atlas",
+                         reporting_mode=reporting_mode,
+                         debug=debug)
 
     def get_object(self, obj_name, ra_deg, dec_deg, radius=15):
         """Get ATLAS Lightcurve from coordinates using cone_search.
@@ -496,9 +503,11 @@ class ATLAS(Survey):
 class TNS(Survey):
     """Interface to Transient Name Server API."""
 
-    def __init__(self, *args, **kwargs):
-        """Read in credentials and construct 'marker' for API calls"""
-        super().__init__("tns", *args, **kwargs)
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(script_name=script_name,
+                         module="tns",
+                         reporting_mode=reporting_mode,
+                         debug=debug)
 
         # Set attributes
         self.site = self.config["tns"]["site"]

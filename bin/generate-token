@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # Run locally to generate a gmail token and copy it up to the deployment server
-
+from tarxiv.utils import PRINT
 from tarxiv.alerts import Gmail
 import subprocess
 import argparse
@@ -17,7 +17,7 @@ args = parser.parse_args()
 txv_user = os.environ["TARXIV_USER"]
 txv_host = os.environ["TARXIV_HOST"]
 # Create object
-txv_gmail = Gmail("token_generator", debug=args.debug)
+txv_gmail = Gmail("token_generator", reporting_mode=PRINT, debug=args.debug)
 token_file = os.path.join(txv_gmail.config_dir, "gmail_token.json")
 token_dest = f"{txv_user}@{txv_host}:~/tarxiv-dev/aux/"
 try:
