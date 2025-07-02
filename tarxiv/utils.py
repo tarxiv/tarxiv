@@ -51,7 +51,7 @@ class TarxivModule:
                                               port=self.config['logstash_port'],
                                               # certfile=self.config['logstash_cert'],
                                               database_path=None)
-        formatter = LogstashFormatter({"module": self.module})
+        formatter = LogstashFormatter({"module": self.module, "log_name": log_name})
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
 
