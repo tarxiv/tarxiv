@@ -228,7 +228,7 @@ class ASAS_SN(Survey):  # noqa: N801
         except Exception as e:
             status.update({
                 "status": "encontered unexpected error",
-                "message": str(e),
+                "error_message": str(e),
                 "details": traceback.format_exc(),
             })
         finally:
@@ -357,7 +357,7 @@ class ZTF(Survey):
         except Exception as e:
             status.update({
                 "status": "encontered unexpected error",
-                "message": str(e),
+                "error_message": str(e),
                 "details": traceback.format_exc(),
             })
         finally:
@@ -481,7 +481,7 @@ class ATLAS(Survey):
         except Exception as e:
             status.update({
                 "status": "encountered unexpected error",
-                "message": str(e),
+                "error_message": str(e),
                 "details": traceback.format_exc(),
             })
         finally:
@@ -576,7 +576,7 @@ class TNS(Survey):
         except Exception as e:
             status.update({
                 "status": "encontered unexpected error",
-                "message": str(e),
+                "error_message": str(e),
                 "details": traceback.format_exc(),
             })
         finally:
