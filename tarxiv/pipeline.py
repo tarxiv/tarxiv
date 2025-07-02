@@ -53,9 +53,10 @@ class TNSPipeline(TarxivModule):
         obj_meta = self.asas_sn.update_object_meta(obj_meta, asas_sn_meta)
         # Collate lightcurves and add peak mag measurements to schema
         lc_df = pd.concat([atlas_lc, ztf_lc, asas_sn_lc])
-        # Sometimes we get bad negative mag/limit values (make positive when over 10 for sanity)
-        lc_df['mag'] = lc_df['mag'].apply(lambda val: abs(val) if abs(val) > 10 else val)
-        lc_df['limit'] = lc_df['limit'].apply(lambda val: abs(val) if abs(val) > 10 else val)
+        if len(lc_df) > 0:
+            # Sometimes we get bad negative mag/limit values (make positive when over 10 for sanity)
+            lc_df['mag'] = lc_df['mag'].apply(lambda val: abs(val) if abs(val) > 10 else val)
+            lc_df['limit'] = lc_df['limit'].apply(lambda val: abs(val) if abs(val) > 10 else val)
 
         # Cut on time (1 month before discovery, 6 months after)
         disc_mjd = Time(obj_meta["discovery_date"][0]["value"]).mjd
