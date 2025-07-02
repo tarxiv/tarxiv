@@ -32,7 +32,7 @@ class TarxivDB(TarxivModule):
         # Connect
         status = {"status": "connecting to couchbase"}
         self.logger.info(status, extra=status)
-        connection_str = "couchbase://" + os.environ["TARXIV_COUCHBAS_HOST"]
+        connection_str = "couchbase://" + os.environ["TARXIV_COUCHBASE_HOST"]
         self.cluster = Cluster(connection_str, options)
         self.conn = self.cluster.bucket("tarxiv")
         status = {"status": "connection success"}

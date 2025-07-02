@@ -212,3 +212,5 @@ class Gmail(TarxivModule):
 
     def _signal_handler(self, sig, frame):
         self.stop_monitoring()
+        sys.exit(0)
+
