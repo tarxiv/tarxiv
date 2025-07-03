@@ -1,6 +1,4 @@
 """Pull and process lightcurves"""
-from IPython.core.pylabtools import find_gui_and_backend
-
 from .utils import TarxivModule, SurveyMetaMissingError, SurveyLightCurveMissingError
 
 from pyasassn.client import SkyPatrolClient
