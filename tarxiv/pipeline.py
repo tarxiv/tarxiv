@@ -65,6 +65,7 @@ class TNSPipeline(TarxivModule):
                           & ((lc_df["mjd"] - disc_mjd) <= self.config['tns']['obj_active_days'])]
         # Add peak magnitudes to meta
         status, obj_meta = append_dynamic_values(obj_meta, lc_df)
+        status.update({"obj_name": obj_name})
         self.logger.info(status, extra=status)
         obj_meta = clean_meta(obj_meta)
         # Convert to json for submission
