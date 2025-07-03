@@ -90,7 +90,7 @@ class TarxivDB(TarxivModule):
         coll.upsert(object_name, payload)
         status = {
             "status": "upserted",
-            "object_name": object_name,
+            "obj_name": object_name,
             "collection": collection,
         }
         self.logger.info(status, extra=status)
@@ -107,14 +107,14 @@ class TarxivDB(TarxivModule):
             result = coll.get(object_name).value
             status = {
                 "status": "retrieved",
-                "object_name": object_name,
+                "obj_name": object_name,
                 "collection": collection,
             }
             self.logger.info(status, extra=status)
         except DocumentNotFoundException:
             status = {
                 "status": "no_document",
-                "object_name": object_name,
+                "obj_name": object_name,
                 "collection": collection,
             }
             self.logger.warn(status, extra=status)

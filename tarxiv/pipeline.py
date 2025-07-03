@@ -115,6 +115,8 @@ class TNSPipeline(TarxivModule):
             # Process all TNS objects
             obj_names = all_obj_names
 
+        status = {"status": "processing bulk object list", "n_objs": len(obj_names)}
+        self.logger.info(status, extra=status)
         for obj_name in obj_names:
             # Get survey information
             obj_meta, obj_lc = self.get_object(obj_name)
