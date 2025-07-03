@@ -23,7 +23,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
     :return:object_meta; updated object meta dictionary
     """
     if len(obj_lc_df) == 0:
-        return obj_meta
+        return {"status": "empty lc"}, obj_meta
     # We are interested in peak mag, most recent detection, most recent non detection, and recent change
     peak_mags = []
     recent_dets = []
