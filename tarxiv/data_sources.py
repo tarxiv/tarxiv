@@ -29,7 +29,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
     recent_dets = []
     recent_nondets = []
     recent_changes = []
-
+    status = {"status": "appending dynamic values"}
     try:
         # Get derived mag information by filter
         filter_df = obj_lc_df.groupby("filter")
@@ -75,7 +75,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                     "source": nondet_row["survey"],
                 }
                 recent_nondets.append(recent_nondet)
-                status = {"status": "appended dynamic values!"}
+                status = {"status": "sucessfully appended dynamic values!"}
     except Exception as e:
         status ={
             "status": "encontered unexpected error",
