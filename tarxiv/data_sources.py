@@ -82,13 +82,13 @@ def append_dynamic_values(obj_meta, obj_lc_df):
             "error_message": str(e),
             "details": traceback.format_exc(),
         }
-    finally:
-        # Append and return
-        obj_meta["peak_mag"] = peak_mags
-        obj_meta["latest_detection"] = recent_dets
-        obj_meta["latest_nondetection"] = recent_nondets
-        obj_meta["latest_change"] = recent_changes
-        return status, obj_meta
+
+    # Append and return
+    obj_meta["peak_mag"] = peak_mags
+    obj_meta["latest_detection"] = recent_dets
+    obj_meta["latest_nondetection"] = recent_nondets
+    obj_meta["latest_change"] = recent_changes
+    return status, obj_meta
 
 
 class Survey(TarxivModule):
@@ -241,9 +241,9 @@ class ASAS_SN(Survey):  # noqa: N801
                 "error_message": str(e),
                 "details": traceback.format_exc(),
             })
-        finally:
-            self.logger.info(status, extra=status)
-            return meta, lc_df
+
+        self.logger.info(status, extra=status)
+        return meta, lc_df
 
 
 class ZTF(Survey):
@@ -373,9 +373,9 @@ class ZTF(Survey):
                 "error_message": str(e),
                 "details": traceback.format_exc(),
             })
-        finally:
-            self.logger.info(status, extra=status)
-            return meta, lc_df
+
+        self.logger.info(status, extra=status)
+        return meta, lc_df
 
 
 class ATLAS(Survey):
@@ -502,9 +502,9 @@ class ATLAS(Survey):
                 "error_message": str(e),
                 "details": traceback.format_exc(),
             })
-        finally:
-            self.logger.info(status, extra=status)
-            return meta, lc_df
+
+        self.logger.info(status, extra=status)
+        return meta, lc_df
 
 
 class TNS(Survey):
@@ -599,9 +599,9 @@ class TNS(Survey):
                 "error_message": str(e),
                 "details": traceback.format_exc(),
             })
-        finally:
-            self.logger.info(status, extra=status)
-            return meta, lc_df
+
+        self.logger.info(status, extra=status)
+        return meta, lc_df
 
 
 if __name__ == "__main__":

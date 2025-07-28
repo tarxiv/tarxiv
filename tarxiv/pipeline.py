@@ -1,4 +1,4 @@
-from .utils import TarxivModule, clean_meta, SurveyMetaMissingError
+from .utils import TarxivModule, clean_meta
 from .data_sources import TNS, ATLAS, ASAS_SN, ZTF, append_dynamic_values
 from .database import TarxivDB
 from .alerts import Gmail
@@ -11,6 +11,8 @@ import io
 import os
 
 class TNSPipeline(TarxivModule):
+    """Pipeline for TNS data processing and storage."""
+
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(script_name=script_name,
                          module="tns_pipeline",
@@ -30,6 +32,7 @@ class TNSPipeline(TarxivModule):
     def get_object(self, obj_name):
         """
         Queries TNS for an object then finds all associated survey data.
+
         :param obj_name: TNS object name (e.g. 2024iss); str
         :return: metadata and light curve data dictionaries
         """
@@ -76,6 +79,7 @@ class TNSPipeline(TarxivModule):
     def upsert_object(self, obj_name, obj_meta, obj_lc):
         """
         Insert a TarXiv TNS object into the database.
+
         :param obj_name: tarxiv obj name; str
         :param obj_meta: tarxiv obj meta data; dict
         :param obj_lc: tarxiv obj light curve data; dict

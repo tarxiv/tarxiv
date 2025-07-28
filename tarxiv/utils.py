@@ -73,11 +73,13 @@ class TarxivModule:
 
 class SurveyMetaMissingError(Exception):
     """TBD"""
+
     pass
 
 
 class SurveyLightCurveMissingError(Exception):
     """TBD"""
+
     pass
 
 
