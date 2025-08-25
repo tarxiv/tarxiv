@@ -33,7 +33,7 @@ dependencies = [
     "cherrypy",
     "python-logstash-async"
 ]
-requires-python = ">3.9"
+requires-python = ">=3.9"
 
 [project.optional-dependencies]
 dev = [
@@ -49,3 +49,10 @@ find = {}
 
 #[tool.setuptools.package-data]
 #"tarxiv.data" = ["*.csv"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "imap",
+    "gmail",
+]
