@@ -146,7 +146,7 @@ class TNSPipeline(TarxivModule):
         # Start monitoring notices
         self.gmail.monitor_notices()
 
-       # Run logic loop
+        # Run logic loop
         while True:
             # Get next message
             result = self.gmail.poll(timeout=1)

@@ -64,7 +64,7 @@ class Gmail(TarxivModule):
         self.stop_event = threading.Event()
         # Signals
         signal.signal(signal.SIGINT, self._signal_handler)
-        #signal.signal(signal.SIGTERM, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
 
     def poll(self, timeout=1):
         """Once we have began monitoring notices, poll the queue for new messages and alerts
@@ -406,7 +406,7 @@ class IMAP(TarxivModule):
                     self.conn.login(self.config["imap"]["username"], self.config["imap"]["password"])
                 except Exception as recon_e:
                     self.logger.error({"status": "reconnection failed", "error": str(recon_e)})
-                    self.stop_event.set() # Stop if we can't reconnect
+                    self.stop_event.set()  # Stop if we can't reconnect
             except Exception as e:
                 self.logger.error({"status": "unexpected error in monitoring thread", "error": str(e)})
                 time.sleep(self.config["imap"]["polling_interval"] * 2)
@@ -417,4 +417,3 @@ class IMAP(TarxivModule):
         self.logger.info(status, extra=status)
         self.stop_monitoring()
         os._exit(1)
-
