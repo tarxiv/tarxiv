@@ -268,4 +268,3 @@ def test_dummy_tns_email(mock_imap, _, mock_config):
 
     alerts = imap_email.parse_message(msg.as_bytes())
     assert alerts == ["2025sae"]
-

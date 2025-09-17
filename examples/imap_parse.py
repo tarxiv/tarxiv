@@ -1,5 +1,5 @@
 # First connect to Gmail client and read messages
-from tarxiv.alerts import IMAP, Gmail
+from tarxiv.alerts import IMAP
 
 txv_imap = IMAP("imap", reporting_mode=1, debug=True)
 
