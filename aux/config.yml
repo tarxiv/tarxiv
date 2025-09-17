@@ -32,6 +32,12 @@ gmail:
     - 'https://www.googleapis.com/auth/gmail.modify'
   polling_interval: 4
 
+imap:
+  server: "mailu.example.com"
+  email: "me@example.net"
+  password: "password"
+  polling_interval: 4s
+
 # ATLAS Info
 atlas_url: "https://psweb.mp.qub.ac.uk/sne/atlas4/api/"
 atlas:
