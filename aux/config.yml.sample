@@ -25,3 +25,10 @@ gmail:
   scopes:
     - 'https://www.googleapis.com/auth/gmail.readonly'
     - 'https://www.googleapis.com/auth/gmail.modify'
+
+# ingesting TNS notices by IMAP
+imap:
+  server: "imap.gmail.com"
+  username: "me@example.net"
+  password: ""
+  polling_intesrval: 4
