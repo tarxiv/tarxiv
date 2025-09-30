@@ -5,6 +5,20 @@ from unittest.mock import MagicMock
 from tarxiv.api import API
 import os
 
+class MockTarxivModule:
+    """Mock version of TarxivModule for testing purposes."""
+
+    def __init__(self, *args, **kwargs):
+        self.module = "mock tarxiv module"
+        self.config_dir = os.environ.get(
+            "TARXIV_CONFIG_DIR",
+            os.path.join(os.path.dirname(__file__), "../aux")
+        )
+        self.config_file = os.path.join(self.config_dir, "config.yml")
+        self.config = {"log_dir": None, "api_port": 5000}
+        self.logger = MagicMock()
+        self.debug = False
+
 
 @pytest.fixture
 def mock_api(monkeypatch, tmp_path):
@@ -13,17 +27,12 @@ def mock_api(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "tarxiv.database.TarxivDB.__init__", lambda self, *args, **kwargs: None
     )
-    monkeypatch.setattr(
-        "tarxiv.utils.TarxivModule.__init__",
-        lambda self, module, config_dir, debug=False: (
-            setattr(self, "module", module),
-            setattr(self, "config_dir", config_dir),
-            setattr(self, "config_file", os.path.join(config_dir, "config.yml")),
-            setattr(self, "logger", MagicMock()),
-            setattr(self, "debug", debug),
-            setattr(self, "config", {"log_dir": None, "api_port": 5000}),
-        ),
-    )
+
+    # JL - 2025-06-05: Mock the TarxivModule to avoid file I/O and logging setup
+    # during tests. Previous incarnation of this mock class was too tightly
+    # coupled to the original TarxivModule, this should be more generic.
+    monkeypatch.setattr("tarxiv.utils.TarxivModule.__init__", MockTarxivModule.__init__)
+
     # HFS - 2025-05-28: MagicMock is a flexible fake object that can act like functions, methods,
     # or even entire objects. It records how it's used so you can assert things later
     # (e.g. mock.call_args)
