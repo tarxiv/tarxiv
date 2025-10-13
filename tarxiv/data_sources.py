@@ -77,7 +77,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 recent_nondets.append(recent_nondet)
                 status = {"status": "sucessfully appended dynamic values!"}
     except Exception as e:
-        status ={
+        status = {
             "status": "encontered unexpected error",
             "error_message": str(e),
             "details": traceback.format_exc(),
@@ -271,7 +271,7 @@ class ZTF(Survey):
         try:
             # Hit FINK API
             result = requests.post(
-                f"{self.config["fink_url"]}/api/v1/conesearch",
+                f"{self.config['fink_url']}/api/v1/conesearch",
                 json={
                     "ra": ra_deg,
                     "dec": dec_deg,
@@ -295,7 +295,7 @@ class ZTF(Survey):
 
             # Query
             result = requests.post(
-                f"{self.config["fink_url"]}/api/v1/objects",
+                f"{self.config['fink_url']}/api/v1/objects",
                 json={"objectId": ztf_name, "withupperlim": True, "output-format": "json"},
             )
             # check status
@@ -407,7 +407,7 @@ class ATLAS(Survey):
                 "Authorization": "Token {}".format(os.getenv("TARXIV_ATLAS_TOKEN", "")),
             }
             cone_res = requests.post(
-                f"{self.config["atlas_url"]}/cone/",
+                f"{self.config['atlas_url']}/cone/",
                 {
                     "ra": ra_deg,
                     "dec": dec_deg,
@@ -429,7 +429,7 @@ class ATLAS(Survey):
             status.update({"status": "match", "id": atlas_id})
             # Get light curve
             curve_res = requests.get(
-                f"{self.config["atlas_url"]}/objects/",
+                f"{self.config['atlas_url']}/objects/",
                 {"objects": str(atlas_id)},
                 headers=headers,
             )

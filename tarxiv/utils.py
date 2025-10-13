@@ -23,7 +23,10 @@ class TarxivModule:
         # Set module
         self.module = module
         # Read in config
-        self.config_dir = os.environ["TARXIV_CONFIG_DIR"]
+        self.config_dir = os.environ.get(
+            "TARXIV_CONFIG_DIR",
+            os.path.join(os.path.dirname(__file__), "../aux")
+        )
         self.config_file = os.path.join(self.config_dir, "config.yml")
         with open(self.config_file) as stream:
             self.config = yaml.safe_load(stream)
