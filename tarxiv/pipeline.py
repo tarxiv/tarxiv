@@ -1,12 +1,13 @@
 from .utils import TarxivModule, clean_meta
 from .data_sources import TNS, ATLAS, ASAS_SN, ZTF, append_dynamic_values
 from .database import TarxivDB
-from .alerts import Gmail
+from .alerts import Gmail, IMAP
 from astropy.time import Time
 import pandas as pd
 import requests
 import zipfile
 import signal
+import json
 import io
 import os
 
@@ -25,7 +26,7 @@ class TNSPipeline(TarxivModule):
         self.ztf = ZTF(script_name, reporting_mode, debug)
         self.asas_sn = ASAS_SN(script_name, reporting_mode, debug)
         # Get email interface
-        self.gmail = Gmail(script_name, reporting_mode, debug)
+        self.gmail = IMAP(script_name, reporting_mode, debug)
         # Get database
         self.db = TarxivDB("tns", "pipeline", script_name, reporting_mode, debug)
 
@@ -72,7 +73,7 @@ class TNSPipeline(TarxivModule):
         self.logger.info(status, extra=status)
         obj_meta = clean_meta(obj_meta)
         # Convert to json for submission
-        obj_lc = lc_df.to_dict(orient="records")
+        obj_lc = json.loads(lc_df.to_json(orient="records"))
 
         return obj_meta, obj_lc
 
@@ -149,22 +150,19 @@ class TNSPipeline(TarxivModule):
         # Run logic loop
         while True:
             # Get next message
-            result = self.gmail.poll(timeout=1)
+            alerts = self.gmail.poll(timeout=1)
 
             # Repeat if none
-            if result is None:
+            if not alerts:
                 continue
 
             # Each result contains message and list of objects
-            message, alerts = result
             for obj_name in alerts:
                 # Get survey information
                 obj_meta, obj_lc = self.get_object(obj_name)
                 # Upsert to database
                 self.upsert_object(obj_name, obj_meta, obj_lc)
 
-            # Once complete with all objects in message, mark read
-            self.gmail.mark_read(message)
 
     def signal_handler(self, sig, frame):
         status = {"status": "received exit signal", "signal": str(sig), "frame": str(frame)}

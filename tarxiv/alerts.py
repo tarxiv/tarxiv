@@ -201,16 +201,17 @@ class Gmail(TarxivModule):
 
                 # Parse message for tns alerts
                 alerts = self.parse_message(msg)
+                self.mark_read(message)
 
-                if alerts is None:
-                    self.mark_read(message)
+                if not alerts:
                     continue
+
                 # Log
                 status = {"status": "recieved alerts", "objects": alerts}
                 self.logger.debug(status, extra=status)
 
                 # Submit to queue for processing
-                self.q.put((message, alerts))
+                self.q.put(alerts)
 
     def _signal_handler(self, sig, frame):
         status = {"status": "received exit signal", "signal": str(sig), "frame": str(frame)}
@@ -237,11 +238,11 @@ class IMAP(TarxivModule):
 
         # IMAP connection
         self.conn = None
+        self.imap_user = os.getenv("TARXIV_IMAP_USERNAME", "")
+        self.imap_pass = os.getenv("TARXIV_IMAP_PASSWORD", "")
         try:
             self.conn = imaplib.IMAP4_SSL(self.config["imap"]["server"])
-            self.conn.login(
-                self.config["imap"]["username"], self.config["imap"]["password"]
-            )
+            self.conn.login(self.imap_user, self.imap_pass)
             self.conn.select("inbox")
             self.logger.info({"status": "connection success"})
         except Exception as e:
@@ -255,8 +256,8 @@ class IMAP(TarxivModule):
         # Create stop flag for monitoring
         self.stop_event = threading.Event()
         # Signals
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
+        #signal.signal(signal.SIGINT, self._signal_handler)
+        #signal.signal(signal.SIGTERM, self._signal_handler)
 
     def poll(self, timeout=1):
         """Once we have began monitoring notices, poll the queue for new messages and alerts
@@ -268,7 +269,7 @@ class IMAP(TarxivModule):
         try:
             result = self.q.get(block=True, timeout=timeout)
         except Empty:
-            result = None, None
+            result = None
 
         return result
 
@@ -386,16 +387,14 @@ class IMAP(TarxivModule):
 
                     raw_email = msg_data[0][1]
                     alerts = self.parse_message(raw_email)
+                    self.mark_read(uid)
 
                     # Treat empty list as "no alerts"
                     if not alerts:
-                        self.mark_read(uid)
                         continue
-                    else:
-                        self.mark_unread(uid)
 
-                    self.logger.debug({"status": "received alerts", "objects": alerts})
-                    self.q.put((uid.decode(), alerts))
+                    self.logger.info({"status": "received alerts", "objects": alerts})
+                    self.q.put(alerts)
 
                 time.sleep(self.config["imap"]["polling_interval"])
 
@@ -403,7 +402,7 @@ class IMAP(TarxivModule):
                 self.logger.warning({"status": "connection error, reconnecting", "error": str(e)})
                 try:
                     self.conn = imaplib.IMAP4_SSL(self.config["imap"]["server"])
-                    self.conn.login(self.config["imap"]["username"], self.config["imap"]["password"])
+                    self.conn.login(self.imap_user, self.imap_pass)
                 except Exception as recon_e:
                     self.logger.error({"status": "reconnection failed", "error": str(recon_e)})
                     self.stop_event.set()  # Stop if we can't reconnect

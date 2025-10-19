@@ -21,11 +21,11 @@ class TarxivDB(TarxivModule):
 
         # Get user (defines permissions)
         if user == "api":
-            username = os.environ["TARXIV_COUCHBASE_API_USER"]
-            password = os.environ["TARXIV_COUCHBASE_API_PASS"]
+            username = os.environ["TARXIV_COUCHBASE_API_USERNAME"]
+            password = os.environ["TARXIV_COUCHBASE_API_PASSWORD"]
         elif user == "pipeline":
-            username = os.environ["TARXIV_COUCHBASE_PIPELINE_USER"]
-            password = os.environ["TARXIV_COUCHBASE_PIPELINE_PASS"]
+            username = os.environ["TARXIV_COUCHBASE_PIPELINE_USERNAME"]
+            password = os.environ["TARXIV_COUCHBASE_PIPELINE_PASSWORD"]
         else:
             raise ValueError("user must be 'api' or 'pipeline'")
         # Authenticate

@@ -29,6 +29,4 @@ gmail:
 # ingesting TNS notices by IMAP
 imap:
   server: "imap.gmail.com"
-  username: "me@example.net"
-  password: ""
-  polling_intesrval: 4
+  polling_interval: 4

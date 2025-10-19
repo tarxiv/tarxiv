@@ -7,9 +7,9 @@ logstash_host: localhost
 logstash_port: 5044
 
 # hosting information
-host:
-user:
-api_port:
+host: localhost
+user: wintergreen
+api_port: 9001
   
 # tns certifications/params
 tns:
@@ -46,3 +46,7 @@ ztf:
 asas-sn:
   associated_sources: ["asas-sn", "asas-sn_skypatrol"]
 
+# ingesting TNS notices by IMAP
+imap:
+  server: "imap.gmail.com"
+  polling_interval: 1

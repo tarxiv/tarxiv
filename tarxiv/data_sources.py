@@ -56,7 +56,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 # Get recent change
                 sorted_grp_df = filter_grp_df.sort_values(by="mjd")
                 sorted_grp_df["change"] = sorted_grp_df["mag"].diff()
-                sorted_grp_df["change"] = np.where(sorted_grp_df["change"] > 0, "increasing", "fading")
+                sorted_grp_df["change"] = np.where(sorted_grp_df["change"] < 0, "increasing", "fading")
                 recent_row = sorted_grp_df.loc[sorted_grp_df["mjd"].idxmax()]
                 recent_change = {
                     "filter": filter_name,
@@ -234,7 +234,7 @@ class ASAS_SN(Survey):  # noqa: N801
         except SurveyMetaMissingError:
             status["status"] = "no match"
         except SurveyLightCurveMissingError:
-            status["status"].append("|no light curve")
+            status["status"] += "|no light curve"
         except Exception as e:
             status.update({
                 "status": "encontered unexpected error",
@@ -365,7 +365,7 @@ class ZTF(Survey):
         except SurveyMetaMissingError:
             status["status"] = "no match"
         except SurveyLightCurveMissingError:
-            status["status"].append("|no light curve")
+            status["status"] += "|no light curve"
 
         except Exception as e:
             status.update({
