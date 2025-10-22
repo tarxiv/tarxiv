@@ -21,10 +21,11 @@ services:
       - couch
     depends_on:
       - couchbase
+
   couchbase:
     profiles:
       - couchbase
-    image: couchbase/sever:latest
+    image: couchbase:latest
     volumes:
       - ${TARXIV_COUCHBASE_DATA_DIR}:/opt/couchbase/var/lib/couchbase/data:Z
     ports:
