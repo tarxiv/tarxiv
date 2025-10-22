@@ -21,7 +21,6 @@ services:
       - couch
     depends_on:
       - couchbase
-
   couchbase:
     profiles:
       - couchbase
