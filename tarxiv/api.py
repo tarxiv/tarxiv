@@ -83,7 +83,7 @@ class API(TarxivModule):
                 if self.check_token(token) is False:
                     raise PermissionError("bad token")
                 # Find object info
-                result = self.txv_db.get(obj_name, "tns_objects")
+                result = self.txv_db.get(obj_name, "objects")
                 # Return nothing if bad request
                 if result is None:
                     raise LookupError("no such object")
@@ -123,7 +123,7 @@ class API(TarxivModule):
                 if self.check_token(token) is False:
                     raise PermissionError("bad token")
                 # Find object info
-                result = self.txv_db.get(obj_name, "tns_lightcurves")
+                result = self.txv_db.get(obj_name, "lightcurves")
                 # Return nothing if bad request
                 if result is None:
                     raise LookupError("no such object")
