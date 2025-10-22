@@ -9,7 +9,8 @@
       "names": [
         "logs-generic-default",
         "logstash-*",
-        "ecs-logstash-*"
+        "ecs-logstash-*",
+        ""
       ],
       "privileges": [
         "write",
@@ -27,6 +28,20 @@
       "privileges": [
         "write",
         "manage"
+      ]
+    },
+    {
+      "names": [
+        "tarxiv-*",
+        "tarxiv_system"
+      ],
+      "privileges": [
+        "write",
+        "create",
+        "create_index",
+        "auto_configure",
+        "manage",
+        "all"
       ]
     }
   ]

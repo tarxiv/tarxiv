@@ -45,12 +45,15 @@ services:
       - ./tarxiv_logstash.conf:/usr/share/logstash/pipeline/tarxiv_logstash.conf:ro,Z
     ports:
       - 5044:5044
+      - 5045:5045
+      - 5046:5046
       - 50000:50000/tcp
       - 50000:50000/udp
       - 9600:9600
     environment:
       LS_JAVA_OPTS: -Xms512m -Xmx512m
       LOGSTASH_INTERNAL_PASSWORD: ${TARXIV_LOGSTASH_INTERNAL_PASSWORD}
+      ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
     networks:
       - tarxiv_net
     depends_on:
@@ -76,7 +79,6 @@ services:
     volumes:
       - ${TARXIV_COUCHBASE_DATA_DIR}:/opt/couchbase/var/lib/couchbase/data:Z
       - ./init_server.sh:/init_server.sh:ro,Z
-
     ports:
       - 8091-8096:8091-8096
       - 11210-11211:11210-11211

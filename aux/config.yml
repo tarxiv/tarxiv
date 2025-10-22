@@ -4,7 +4,7 @@
 # General
 log_dir: "/home/wintergreen/repo/tarxiv/logs"
 logstash_host: localhost
-logstash_port: 5044
+logstash_port: 5046
 
 # hosting information
 host: localhost
