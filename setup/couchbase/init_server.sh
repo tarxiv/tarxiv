@@ -5,19 +5,19 @@
 # so we have to start couchbase like the standard couchbase Dockerfile would
 # https://github.com/couchbase/docker/blob/master/enterprise/couchbase-server/7.0.3/Dockerfile#L82
 echo "starting couchbase server"
-#/entrypoint.sh couchbase-server &
-#sleep 10
+./entrypoint.sh couchbase-server &
+sleep 10
 
 # Initialize node
-echo "initializing node"
-/opt/couchbase/bin/couchbase-cli node-init \
-	-c http://$TARXIV_COUCHBASE_HOST:8091 \
-	--username $TARXIV_COUCHBASE_ADMIN_USERNAME \
-	--password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
-	--node-init-data-path /data/couchbase/data \
-	--node-init-index-path /data/couchbase/indexes \
-	--node-init-analytics-path /data/couchbase/analytics \
-	--node-init-eventing-path /data/couchbase/eventing
+#echo "initializing node"
+#/opt/couchbase/bin/couchbase-cli node-init \
+#	-c http://$TARXIV_COUCHBASE_HOST:8091 \
+#	--username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+#	--password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+#	--node-init-data-path /data/couchbase/data \
+#	--node-init-index-path /data/couchbase/indexes \
+#	--node-init-analytics-path /data/couchbase/analytics \
+#	--node-init-eventing-path /data/couchbase/eventing
 
 # Initialiaze cluster 
 echo "initializing cluster"
