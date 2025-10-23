@@ -29,6 +29,7 @@ jobs:
         run: |
           cd setup
           cp .env.sample .env
+          mkdir -p .data/elastic .data/couchbase .data/redis
           docker compose run setup_elasticsearch
           docker compose up -d elasticsearch logstash kibana couchbase
           sleep 30
