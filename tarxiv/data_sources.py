@@ -78,7 +78,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 status = {"status": "successfully appended dynamic values!"}
     except Exception as e:
         status = {
-            "status": "encontered unexpected error",
+            "status": "encountered unexpected error",
             "error_message": str(e),
             "details": traceback.format_exc(),
         }
