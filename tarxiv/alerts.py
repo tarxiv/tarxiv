@@ -53,7 +53,7 @@ class Gmail(TarxivModule):
         # Connect to service
         self.service = build("gmail", "v1", credentials=self.creds)
         # Connect to email
-        status = {"status": "connection sucess"}
+        status = {"status": "connection success"}
         self.logger.info(status, extra=status)
 
         # Create thread value
