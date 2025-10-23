@@ -191,8 +191,11 @@ def test_gmail_parse_message(mock_gmail_init, mock_config):
 
 @pytest.mark.imap
 @patch("imaplib.IMAP4_SSL")
-def test_imap_init_success(mock_imap, mock_config):
+def test_imap_init_success(mock_imap, mock_config, monkeypatch):
     """Test IMAPEmail initialization success."""
+    monkeypatch.setenv("TARXIV_IMAP_USERNAME", "user")
+    monkeypatch.setenv("TARXIV_IMAP_PASSWORD", "password")
+    
     mock_conn = MagicMock()
     mock_imap.return_value = mock_conn
     imap_email = IMAP(script_name="test", reporting_mode=7)
