@@ -9,7 +9,7 @@ docker compose up  elasticsearch logstash kibana couchbase
 
 The second command will take about one minute to correctly start-up the Couchbase daemon.
 
-###### You can access the Couchbase web interface at http://locahost:8091/.
+###### You can access the Couchbase web interface at http://localhost:8091/.
 
 # Local development setup
 
