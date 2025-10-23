@@ -131,7 +131,7 @@ class TNSPipeline(TarxivModule):
 
     def daily_update(self):
         # Get all targets still in "active" window for update
-        daily_objects = self.db.get_all_active_objects(active_days=self.config['obj_active_days'])
+        daily_objects = self.db.get_all_active_objects(active_days=self.config['tns']['obj_active_days'])
         # Pull TNS info and update
         for obj_name in daily_objects:
             # Get survey information
