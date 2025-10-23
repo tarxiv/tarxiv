@@ -113,13 +113,13 @@ class Survey(TarxivModule):
                                "hostname": [{"value": "NCGXXXX", "source": 9},
                                             {"value": "2MASS XXXXX", "source": 10}]
                                ...}}
-        Also return lightcurve dataframe with columns [mjd, mag, mag_err, limit, filter, unit, survey],
+        Also return lightcurve dataframe with columns [mjd, mag, mag_err, limit, filter, tel_unit, survey],
             mjd: modified julian date,
             mag: magnitude,
             mag_err: magnitude error,
             limit: 5-sigma limiting magnitude,
             filter: bandpass filter,
-            unit: telescope or camera for given measurement (if survey only has one unit, use "main")
+            tel_unit: telescope or camera for given measurement (if survey only has one tel_unit, use "main")
             survey: survey name.
 
         :return: survey_meta; dict (None if no results), survey_lc; DataFrame (empty df if no results)
@@ -218,7 +218,7 @@ class ASAS_SN(Survey):  # noqa: N801
             lc_df["mjd"] = lc_df.apply(
                 lambda row: Time(row["jd"], format="jd").mjd, axis=1
             )
-            lc_df = lc_df.rename({"phot_filter": "filter", "camera": "unit"}, axis=1)
+            lc_df = lc_df.rename({"phot_filter": "filter", "camera": "tel_unit"}, axis=1)
             # Do not return data from bad images
             lc_df = lc_df[lc_df["quality"] != "B"]
             # Flag non-detections
@@ -227,7 +227,7 @@ class ASAS_SN(Survey):  # noqa: N801
             lc_df["mag_err"] = np.where(lc_df["mag_err"] > 99, np.nan, lc_df["mag_err"])
             lc_df["survey"] = "asas-sn"
             # Reorder cols
-            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "unit", "survey"]]
+            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "survey"]]
             # Update
             status["lc_count"] = len(lc_df)
 
@@ -355,10 +355,10 @@ class ZTF(Survey):
             # JD now unneeded
             lc_df = lc_df.drop("jd", axis=1)
             # Add unit/survey columns
-            lc_df["unit"] = "main"
+            lc_df["tel_unit"] = "main"
             lc_df["survey"] = "ztf"
             # Reorder cols
-            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "unit", "survey"]]
+            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "survey"]]
             # Report count
             status["lc_count"] = len(lc_df)
 
@@ -483,11 +483,11 @@ class ATLAS(Survey):
             lc_df = pd.concat([det_df, non_df])
 
             # Add a column to record which ATLAS unit the value was taken from
-            lc_df["unit"] = lc_df["expname"].str[:3]
+            lc_df["tel_unit"] = lc_df["expname"].str[:3]
             lc_df = lc_df.drop("expname", axis=1)
             lc_df["survey"] = "atlas"
             # Reorder cols
-            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "unit", "survey"]]
+            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "survey"]]
             # Report count
             status["lc_count"] = len(lc_df)
 
