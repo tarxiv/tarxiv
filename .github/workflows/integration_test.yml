@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - jl/*
   pull_request:
 
 jobs:
@@ -27,7 +28,7 @@ jobs:
       - name: Setup compose environment
         run: |
           cd setup
-          cp .env.example .env
+          cp .env.sample .env
           docker compose run setup_elasticsearch
           docker compose up -d elasticsearch logstash kibana couchbase
           sleep 30
