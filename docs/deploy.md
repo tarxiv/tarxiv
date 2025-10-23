@@ -1,6 +1,6 @@
 # Cloud deployment
 
-## Development instance
+## VM setup
 
 The development instance of tarxiv is deployed on the cloud at VirtualData (Université Paris-Saclay). We use a single 8 vCPU instance (`vd.8`) running AlmaLinux 9:
 
@@ -25,6 +25,8 @@ The update is important to start with up-to-date packages as the image could be 
 dnf install epel-release
 dnf install git htop wget net-tools
 ```
+
+## Additional storage
 
 The system disk is small (20GB), so an additional storage space can be mounted (200GB) to host data. On your laptop/desktop:
 
@@ -52,6 +54,8 @@ cat >> /etc/fstab << EOF
 $data        /data   xfs    defaults,nofail        0       0
 EOF
 ```
+
+## Service setup
 
 Then on the VM, create a python virtual environment:
 
