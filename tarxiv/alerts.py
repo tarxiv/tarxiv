@@ -207,7 +207,7 @@ class Gmail(TarxivModule):
                     continue
 
                 # Log
-                status = {"status": "recieved alerts", "objects": alerts}
+                status = {"status": "received alerts", "objects": alerts}
                 self.logger.debug(status, extra=status)
 
                 # Submit to queue for processing
