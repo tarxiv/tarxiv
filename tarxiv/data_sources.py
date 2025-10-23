@@ -75,7 +75,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                     "source": nondet_row["survey"],
                 }
                 recent_nondets.append(recent_nondet)
-                status = {"status": "sucessfully appended dynamic values!"}
+                status = {"status": "successfully appended dynamic values!"}
     except Exception as e:
         status = {
             "status": "encontered unexpected error",
