@@ -1,0 +1,114 @@
+services:
+  # Setup elasticsearch database with defined user roles and passwords
+  setup_elasticsearch:
+    profiles:
+      - setup_elasticsearch
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.0.2
+    init: true
+    entrypoint: /entrypoint.sh
+    volumes:
+      - ./entrypoint.sh:/entrypoint.sh:ro,Z
+      - ./lib.sh:/lib.sh:ro,Z
+      - ./roles:/roles:ro,Z
+    environment:
+      ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD:-}
+      LOGSTASH_INTERNAL_PASSWORD: ${TARXIV_LOGSTASH_INTERNAL_PASSWORD:-}
+      KIBANA_SYSTEM_PASSWORD: ${TARXIV_KIBANA_SYSTEM_PASSWORD:-}
+      BEATS_SYSTEM_PASSWORD: ${TARXIV_BEATS_SYSTEM_PASSWORD:-}
+
+    networks:
+      - tarxiv_net
+    depends_on:
+      - elasticsearch
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.0.2
+    volumes:
+      - ./elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro,Z
+      - ${TARXIV_ELASTIC_DATA_DIR}:/usr/share/elasticsearch/data:Z
+    ports:
+      - 9200:9200
+      - 9300:9300
+    environment:
+      node.name: elasticsearch
+      discovery.type: single-node
+      ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
+      ES_JAVA_OPTS: -Xms2048m -Xmx2048m
+    networks:
+      - tarxiv_net
+    restart: unless-stopped
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:9.0.2
+    volumes:
+      - ./logstash.yml:/usr/share/logstash/config/logstash.yml:ro,Z
+      - ./tarxiv_logstash.conf:/usr/share/logstash/pipeline/tarxiv_logstash.conf:ro,Z
+    ports:
+      - 5044:5044
+      - 5045:5045
+      - 5046:5046
+      - 50000:50000/tcp
+      - 50000:50000/udp
+      - 9600:9600
+    environment:
+      LS_JAVA_OPTS: -Xms512m -Xmx512m
+      LOGSTASH_INTERNAL_PASSWORD: ${TARXIV_LOGSTASH_INTERNAL_PASSWORD}
+      ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
+    networks:
+      - tarxiv_net
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:9.0.2
+    volumes:
+      - ./kibana.yml:/usr/share/kibana/config/kibana.yml:ro,Z
+    ports:
+      - 5601:5601
+    environment:
+        KIBANA_SYSTEM_PASSWORD: ${TARXIV_KIBANA_SYSTEM_PASSWORD}
+    networks:
+      - tarxiv_net
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+  couchbase:
+    image: couchbase:latest
+    volumes:
+      - ${TARXIV_COUCHBASE_DATA_DIR}:/opt/couchbase/var/lib/couchbase/data:Z
+      - ./init_server.sh:/init_server.sh:ro,Z
+    ports:
+      - 8091-8096:8091-8096
+      - 11210-11211:11210-11211
+    networks:
+      - tarxiv_net
+    entrypoint: /init_server.sh
+    environment:
+      TARXIV_COUCHBASE_HOST: ${TARXIV_COUCHBASE_HOST}
+      TARXIV_COUCHBASE_ADMIN_USERNAME: ${TARXIV_COUCHBASE_ADMIN_USERNAME:-}
+      TARXIV_COUCHBASE_ADMIN_PASSWORD: ${TARXIV_COUCHBASE_ADMIN_PASSWORD:-}
+      TARXIV_COUCHBASE_API_USERNAME: ${TARXIV_COUCHBASE_API_USERNAME:-}
+      TARXIV_COUCHBASE_API_PASSWORD: ${TARXIV_COUCHBASE_API_PASSWORD:-}
+      TARXIV_COUCHBASE_PIPELINE_USERNAME: ${TARXIV_COUCHBASE_PIPELINE_USERNAME:-}
+      TARXIV_COUCHBASE_PIPELINE_PASSWORD: ${TARXIV_COUCHBASE_PIPELINE_PASSWORD:-}
+    restart: unless-stopped
+
+  redis:
+    image: redis:latest
+    volumes:
+      - ${TARXIV_REDIS_DATA_DIR}:/data
+    ports:
+      - 6379:6379
+    environment:
+      - REDIS_PASSWORD:${TARXIV_REDIS_PASSWORD}
+    networks:
+      - tarxiv_net
+
+networks:
+  tarxiv_net:
+    driver: bridge
+
+volumes:
+  elasticsearch:

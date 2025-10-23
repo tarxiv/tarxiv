@@ -1,0 +1,52 @@
+# Configuration File for the tarxiv system.
+# Must be renamed as config.yml!
+
+# General
+log_dir: "/home/wintergreen/repo/tarxiv/logs"
+logstash_host: localhost
+logstash_port: 5046
+
+# hosting information
+host: localhost
+user: wintergreen
+api_port: 9001
+  
+# tns certifications/params
+tns:
+  type: "bot"
+  name: "tarxiv"
+  site: "https://www.wis-tns.org"
+  email: "tns@weizmann.ac.il"
+  rate_limit: 4
+  # Source info for schema
+  associated_sources: ["tns"]
+  obj_active_days: 60
+  obj_prior_days: 30
+
+# email certifications (for ingesting TNS notices)
+gmail:
+  secrets_file: "my_cred_file.json"
+  token_name: "gmail_token.json"
+  scopes:
+    - 'https://www.googleapis.com/auth/gmail.readonly'
+    - 'https://www.googleapis.com/auth/gmail.modify'
+  polling_interval: 4
+
+# ATLAS Info
+atlas_url: "https://psweb.mp.qub.ac.uk/sne/atlas4/api/"
+atlas:
+  associated_sources: ["atlas", "atlas_twb", "sherlock"]
+
+# Fink/ZTF info
+fink_url: "https://api.fink-portal.org/"
+ztf:
+  associated_sources: ["ztf", "fink", "mangrove"]
+
+# ASAS-SN info
+asas-sn:
+  associated_sources: ["asas-sn", "asas-sn_skypatrol"]
+
+# ingesting TNS notices by IMAP
+imap:
+  server: "imap.gmail.com"
+  polling_interval: 1

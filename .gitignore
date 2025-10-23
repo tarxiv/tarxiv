@@ -12,6 +12,8 @@ distribution.offset
 fink_kafka_logs/
 notes/
 /schema_20190903.av*
+.data
+mailu
 
 # macOS specific file
 .DS_Store
@@ -143,3 +145,12 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+
+# Config files with credentials
+aux/config.yml
+aux/gmail_token.json
+aux/my_cred_file.json
+
+# vscode settings
+.vscode/
+*.code-workspace

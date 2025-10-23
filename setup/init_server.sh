@@ -1,0 +1,99 @@
+#!/bin/bash
+# THIS SCRIPT IS MEANT TO INITIALIZE COUCHBASE IN DOCKER COMPOSE ONLY, ACTUAL PRODUCTION SHOULD BE DONE DIRECTLY ON SERVER
+
+# used to start couchbase server - can't get around this as docker compose only allows you to start one command -
+# so we have to start couchbase like the standard couchbase Dockerfile would
+# https://github.com/couchbase/docker/blob/master/enterprise/couchbase-server/7.0.3/Dockerfile#L82
+
+# UNCOMMENT THESE IF RUNNING AS DOCKER SETUP
+echo "starting couchbase server"
+/entrypoint.sh couchbase-server &
+sleep 20
+
+# track if setup is complete so we don't try to setup again
+FILE=/opt/couchbase/setupComplete.txt
+if ! [ -f "$FILE" ]; then
+
+  # RUN AFTER STARTING COUCHBASE
+  # Initialize cluster
+  echo "initializing cluster"
+  /opt/couchbase/bin/couchbase-cli cluster-init \
+      -c http://$TARXIV_COUCHBASE_HOST:8091 \
+      --cluster-username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+      --cluster-password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+      --services data,index,query,fts,analytics
+
+  sleep 2
+  # Initialize node
+  #echo "initializing node"
+  /opt/couchbase/bin/couchbase-cli node-init \
+    -c http://$TARXIV_COUCHBASE_HOST:8091 \
+    --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+    --password $TARXIV_COUCHBASE_ADMIN_PASSWORD
+  sleep 2
+
+  # Create bucket with 2GiB RAM
+  echo "creating bucket and scopes and collections"
+  /opt/couchbase/bin/couchbase-cli bucket-create \
+    -c http://$TARXIV_COUCHBASE_HOST:8091 \
+    --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+    --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --bucket tarxiv --bucket-type couchbase --bucket-ramsize 2048
+  sleep 2
+  # Create TNS scope
+  /opt/couchbase/bin/couchbase-cli collection-manage \
+    -c http://$TARXIV_COUCHBASE_HOST:8091 \
+    --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+    --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --bucket tarxiv --create-scope tns
+  sleep 2
+  # Create object collection
+  /opt/couchbase/bin/couchbase-cli collection-manage \
+    -c http://$TARXIV_COUCHBASE_HOST:8091 \
+    --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+    --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --bucket tarxiv --create-collection tns.objects
+  sleep 2
+  # Create lightcurve collection`
+  /opt/couchbase/bin/couchbase-cli collection-manage \
+    -c http://$TARXIV_COUCHBASE_HOST:8091 \
+    --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+    --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --bucket tarxiv --create-collection tns.lightcurves
+  sleep 2
+  # Create indexes
+  echo "building indexes"
+  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --script "CREATE PRIMARY INDEX ON tarxiv.tns.objects"
+  sleep 2
+  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --script "CREATE PRIMARY INDEX ON tarxiv.tns.lightcurves"
+  sleep 2
+  # Create user and enable roles
+  echo "Assinging user roles"
+  /opt/couchbase/bin/couchbase-cli user-manage \
+    -c http://$TARXIV_COUCHBASE_HOST:8091 \
+    --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+    --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --set \
+    --auth-domain local \
+    --rbac-username $TARXIV_COUCHBASE_PIPELINE_USERNAME \
+    --rbac-password $TARXIV_COUCHBASE_PIPELINE_PASSWORD \
+    --roles data_reader[tarxiv],data_writer[tarxiv],query_select[tarxiv],query_delete[tarxiv],query_update[tarxiv]
+  sleep 2
+  /opt/couchbase/bin/couchbase-cli user-manage \
+    -c http://$TARXIV_COUCHBASE_HOST:8091 \
+    --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+    --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --set \
+    --auth-domain local \
+    --rbac-username $TARXIV_COUCHBASE_API_USERNAME \
+    --rbac-password $TARXIV_COUCHBASE_API_PASSWORD \
+    --roles data_reader[tarxiv],query_select[tarxiv]
+
+  # create file so we know that the cluster is setup and don't run the setup again
+  touch $FILE
+fi
+# docker compose will stop the container from running unless we do this
+# known issue and workaround
+tail -f /dev/null

@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]                                                                                  
+build-backend = "setuptools.build_meta"   
+
+[project]
+name = "tarxiv"
+version = "0.0.7"
+description = "explosive Transient ArXiv"
+authors = [
+    { name = "Heloise Fanny Stevance", email = "hfstevance@gmail.com"},
+    { name = "Kyle Hart", email = "kylehart@hawaii.edu"},
+    { name = "Julien Peloton", email =  "peloton@ijclab.in2p3.fr"},
+]
+readme = "README.md"
+license = { text = "BSD-3" }
+dependencies = [
+    "atlasapiclient",
+    "hop-client",
+    "skypatrol",
+    "astropy",
+    "requests",
+    "pandas",
+    "pyyaml",
+    "couchbase",
+    "google-cloud",
+    "google-auth",
+    "google-auth-oauthlib",
+    "google-api-python-client",
+    "beautifulsoup4",
+    "pytest",
+    "flask",
+    "paste",
+    "cherrypy",
+    "python-logstash-async",
+    "dash>=3.2.0",
+]
+requires-python = ">=3.9,<3.13"
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "ipython",
+    "jupyter"
+]
+
+[tool.setuptools.packages]
+find = {}
+
+#[tool.setuptools.package-data]
+#"tarxiv.data" = ["*.csv"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "imap",
+    "gmail",
+]
