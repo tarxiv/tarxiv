@@ -32,10 +32,10 @@ jobs:
           chmod 777 .data/elastic .data/couchbase .data/redis
           ls -la .
           ls -la .data
-          docker compose up elasticsearch
-          # docker compose run setup_elasticsearch
-          # docker compose up -d elasticsearch logstash kibana couchbase
-          # sleep 30
+          # docker compose up elasticsearch
+          docker compose run setup_elasticsearch
+          docker compose up -d elasticsearch logstash kibana couchbase
+          sleep 60
       - name: Load test data
         run: |
           uv run --env-file .env ../scripts/db_utils.py -l -f example_dataset.json
