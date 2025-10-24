@@ -67,8 +67,8 @@ class API(TarxivModule):
         # endpoints for the API
         @self.app.route("/get_object_meta/<string:obj_name>", methods=["POST"])
         def get_object_meta(obj_name):
-            # Get request json
-            request_json = request.get_json()
+            # Get request json (HFS: no longer used 2025-10-24)
+            #request_json = request.get_json()
             token = request.headers.get('Authorization')
             # Start log
             log = {
@@ -108,8 +108,8 @@ class API(TarxivModule):
 
         @self.app.route("/get_object_lc/<string:obj_name>", methods=["POST"])
         def get_object_lc(obj_name):
-            # Get request json
-            request_json = request.get_json()
+            # Get request json (HFS: no longer used 2025-10-24)
+            # request_json = request.get_json()
             token = request.headers.get('Authorization')
             # Start log
             log = {

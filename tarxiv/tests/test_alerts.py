@@ -195,7 +195,7 @@ def test_imap_init_success(mock_imap, mock_config, monkeypatch):
     """Test IMAPEmail initialization success."""
     monkeypatch.setenv("TARXIV_IMAP_USERNAME", "user")
     monkeypatch.setenv("TARXIV_IMAP_PASSWORD", "password")
-    
+
     mock_conn = MagicMock()
     mock_imap.return_value = mock_conn
     imap_email = IMAP(script_name="test", reporting_mode=7)
