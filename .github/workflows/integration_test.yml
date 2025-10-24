@@ -29,6 +29,7 @@ jobs:
           cd setup
           cp .env.sample .env
           mkdir -p .data/elastic .data/couchbase .data/redis
+          chmod 777 .data/elastic .data/couchbase .data/redis
           ls -la .
           ls -la .data
           docker compose up elasticsearch
