@@ -8,9 +8,8 @@ on:
   pull_request:
 
 jobs:
-  integration-tests:
+  docker-compose:
     runs-on: ubuntu-latest
-  
 
     steps:
       - uses: actions/checkout@v4
@@ -30,9 +29,11 @@ jobs:
           cd setup
           cp .env.sample .env
           mkdir -p .data/elastic .data/couchbase .data/redis
-          docker compose run setup_elasticsearch
-          docker compose up -d elasticsearch logstash kibana couchbase
-          sleep 30
+          ls -la .
+          docker compose up elasticsearch
+          # docker compose run setup_elasticsearch
+          # docker compose up -d elasticsearch logstash kibana couchbase
+          # sleep 30
       - name: Load test data
         run: |
           uv run --env-file .env ../scripts/db_utils.py -l -f example_dataset.json
