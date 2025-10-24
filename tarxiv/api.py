@@ -69,7 +69,7 @@ class API(TarxivModule):
         def get_object_meta(obj_name):
             # Get request json
             request_json = request.get_json()
-            token = request_json["token"]
+            token = request.headers.get('Authorization')
             # Start log
             log = {
                 "query_type": "meta",
@@ -110,7 +110,7 @@ class API(TarxivModule):
         def get_object_lc(obj_name):
             # Get request json
             request_json = request.get_json()
-            token = request_json["token"]
+            token = request.headers.get('Authorization')
             # Start log
             log = {
                 "query_type": "lightcurve",
@@ -150,7 +150,7 @@ class API(TarxivModule):
         def search_objects():
             # Get request json
             request_json = request.get_json()
-            token = request_json["token"]
+            token = request.headers.get('Authorization')
             search = request_json["search"]
             # Start log
             log = {
