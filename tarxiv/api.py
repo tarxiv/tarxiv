@@ -67,9 +67,9 @@ class API(TarxivModule):
         # endpoints for the API
         @self.app.route("/get_object_meta/<string:obj_name>", methods=["POST"])
         def get_object_meta(obj_name):
-            # Get request json
-            request_json = request.get_json()
-            token = request_json["token"]
+            # Get request json (HFS: no longer used 2025-10-24)
+            #request_json = request.get_json()
+            token = request.headers.get('Authorization')
             # Start log
             log = {
                 "query_type": "meta",
@@ -108,9 +108,9 @@ class API(TarxivModule):
 
         @self.app.route("/get_object_lc/<string:obj_name>", methods=["POST"])
         def get_object_lc(obj_name):
-            # Get request json
-            request_json = request.get_json()
-            token = request_json["token"]
+            # Get request json (HFS: no longer used 2025-10-24)
+            # request_json = request.get_json()
+            token = request.headers.get('Authorization')
             # Start log
             log = {
                 "query_type": "lightcurve",
@@ -150,7 +150,7 @@ class API(TarxivModule):
         def search_objects():
             # Get request json
             request_json = request.get_json()
-            token = request_json["token"]
+            token = request.headers.get('Authorization')
             search = request_json["search"]
             # Start log
             log = {

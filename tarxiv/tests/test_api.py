@@ -57,15 +57,14 @@ def test_get_object_meta_success(mock_api):
     client = mock_api.app.test_client()
     mock_api.txv_db.get.return_value = {"foo": "bar"}
 
-    # TODO - HFS - 2025-05-28: This will fail when real authentication is implemented
-    response = client.post("/get_object_meta/test_obj", json={"token": "TOKEN"})
+    response = client.post("/get_object_meta/test_obj",json={}, headers={"Authorization": "TOKEN"})
     assert response.status_code == 200
     assert response.json == {"foo": "bar"}
 
 
 def test_get_object_meta_bad_token(mock_api):
     client = mock_api.app.test_client()
-    response = client.post("/get_object_meta/test_obj", json={"token": "WRONG"})
+    response = client.post("/get_object_meta/test_obj", json={}, headers={"Authorization": "WRONG"})
     assert response.status_code == 401
     assert response.json["error"] == "bad token"
 
@@ -73,6 +72,6 @@ def test_get_object_meta_bad_token(mock_api):
 def test_get_object_meta_missing_obj(mock_api):
     client = mock_api.app.test_client()
     mock_api.txv_db.get.return_value = None
-    response = client.post("/get_object_meta/test_obj", json={"token": "TOKEN"})
+    response = client.post("/get_object_meta/test_obj", json={},headers={"Authorization": "TOKEN"})
     assert response.status_code == 404
     assert response.json["error"] == "no such object"
