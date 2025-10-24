@@ -38,6 +38,24 @@ jobs:
           sleep 60
       - name: Load test data
         run: |
-          uv run --env-file .env ../scripts/db_utils.py -l -f example_dataset.json
-
-
+          uv run --env-file setup/.env scripts/db_utils.py -l -f setup/example_dataset.json
+      - name: Run integration tests
+        run: 
+          uv run --env-file setup/.env pytest -k "integration"
+      - name: Teardown compose environment
+        if: always()
+        run: |
+          cd setup
+          docker inspect --format='{{.LogPath}}' setup-elasticsearch-1
+          docker compose down -v
+      - name : Save logs on failure
+        if: failure()
+        run: |
+          cd setup
+          docker compose logs > logs.txt
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: tarxiv-logs
+          path: setup/logs.txt
