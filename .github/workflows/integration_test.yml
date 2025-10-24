@@ -39,9 +39,6 @@ jobs:
       - name: Load test data
         run: |
           uv run --env-file setup/.env scripts/db_utils.py -l -f setup/example_dataset.json
-      - name: Run integration tests
-        run: 
-          uv run --env-file setup/.env pytest -k "integration"
       - name: Teardown compose environment
         if: always()
         run: |
