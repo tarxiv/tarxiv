@@ -676,59 +676,26 @@ class GOTO(Survey):
             while time.time() - start < timeout:
                 dat = requests.get(data_url, auth=auth)
                 if dat.status_code == 200:
-                    # TODO this won't work. See the nesting in the schema
-                    # https://goto-observatory.warwick.ac.uk/lightcurve/api-v1/docs#/FP%20query%20execution/lightcurve_api_v1_api_submit_fpe
-                    # TODD: do this step by step to see where and how I need to deal with the GOTO outputs to get the 
-                    # meta data (see dictionary below) and the light curve dataframes
-                    # NOTE: IT'S NOT OBIVOUS FROM THE API BECAUSE THERE ISTHERESPONSE FROM THE SUBMIT POST
-                    # AND THE JSON DATA FROM GRABING THE RESULTS AFTER THE SUBMITED JOB IS DONE
-                    result = pd.DataFrame(dat.json()["results"]), data_url
+                    result = pd.DataFrame(dat.json()["results"])
                 time.sleep(poll_interval)
-
+            # TODO: what happens if don't get the data in this time? Need to handle this with exception
     
-            # Insert meta data
+            # Insert meta data - GOTO doesn't return a specific object it just does the forced photoemtry 
             meta = {
-                "identifiers": [{"name": result["object"]["id"], "source": "goto"}],
-                "ra_deg": [{"value": result["object"]["ra"], "source": "goto"}],
-                "dec_deg": [{"value": result["object"]["dec"], "source": "goto"}],
+                "identifiers": [{"name": "", "source": "goto"}],
+                "ra_deg": [{"value": "", "source": "goto"}],
+                "dec_deg": [{"value": "", "source": "goto"}],
             }
 
-            # TODO: add GOTO internal name? maybe not needed
-            """
-            if result["object"]["atlas_designation"] is not None:
-                atlas_name = {
-                    "name": result["object"]["atlas_designation"],
-                    "source": "atlas_twb",
-                }
-                meta["identifiers"].append(atlas_name)
-            """
 
+            result['tel_unit']=result.tel.astype('str')+"-"+result.ut.astype('str')
+            result['detection']=~result.forced_mag.isna()
+            result['fwhm']=np.nan  # GOTO doesn't provide this info
+            lc_df = result[['mjd', 'forced_mag', 'forced_mag_uncert', 'forced_mag_sigma_limit',  'fwhm', 'filter', 'tel_unit', 'detection', 'survey_name']]
+            lc_df.columns=["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "survey"]
 
-            # DETECTIONS
-            det_df = pd.DataFrame(result["lc"])[
-                ["mjd", "mag", "magerr", "mag5sig", "filter", "expname", "major"]
-            ]
-            det_df.columns = ["mjd", "mag", "mag_err", "limit", "filter", "expname", "fwhm"]
-            det_df["detection"] = 1
-            # NON DETECTIONS
-            non_df = pd.DataFrame(result["lcnondets"])[
-                    ["mjd", "mag5sig", "filter", "expname"]
-            ]
-            non_df.columns = ["mjd", "limit", "filter", "expname"]
-            non_df["mag"] = np.nan
-            non_df["mag_err"] = np.nan
-            non_df["fwhm"] = np.nan
-            non_df["detection"] = 0
-            lc_df = pd.concat([det_df, non_df])
-
-            # Add a column to record which ATLAS unit the value was taken from
-            lc_df["tel_unit"] = lc_df["expname"].str[:3]
-            lc_df = lc_df.drop("expname", axis=1)
-            lc_df["survey"] = "atlas"
-            # Reorder cols
-            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "survey"]]
             # Report count
-            status["lc_count"] = len(lc_df)
+            status["lc_count"] = lc_df.detection.sum()
 
         except SurveyMetaMissingError:
             status["status"] = "no match"
