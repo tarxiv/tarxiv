@@ -13,6 +13,7 @@ import time
 import io
 import re
 import os
+import datetime
 
 
 def append_dynamic_values(obj_meta, obj_lc_df):
@@ -596,6 +597,147 @@ class TNS(Survey):
         except Exception as e:
             status.update({
                 "status": "encontered unexpected error",
+                "error_message": str(e),
+                "details": traceback.format_exc(),
+            })
+
+        self.logger.info(status, extra=status)
+        return meta, lc_df
+
+
+class GOTO(Survey):
+    """Interface to ATLAS Transient Web Server."""
+
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(script_name=script_name,
+                         module="goto",
+                         reporting_mode=reporting_mode,
+                         debug=debug)
+
+    def get_object(self, obj_name, ra_deg, dec_deg, radius=15):
+        """Get GOTO Lightcurve from TRANSIENT NAME (no cone search availabel yet).
+
+        :param obj_name: name of object (used for logging); str
+        :param ra_deg: right ascension in degrees; float
+        :param dec_deg: declination in degrees; float
+        :param radius: radius in arcseconds; int
+        return ztf metadata and lightcurve dataframe
+        """
+        # Set meta and lc_df empty to start
+        meta, lc_df = None, pd.DataFrame()
+        # Initial status
+        status = {"obj_name": obj_name}
+        auth = (self.config["goto_username"], self.config["goto_password"])
+        timeout = 15  # seconds
+        poll_interval = 2  # seconds
+        try:
+            # to understand whats going on here check the GOTO API docs
+            # https://goto-observatory.warwick.ac.uk/lightcurve/api-v1/docs#/FP%20query%20execution/lightcurve_api_v1_api_submit_fpe
+            # First we have to submit the job and then go get the results. This is going to be a problem logn term
+            # also can't do cone search just yet so for now have to search by transient name.
+
+            submit_url = f"{self.config['goto_url']}/lightcurve/api-v1/submit/"
+            data_base_url = f"{self.config['goto_url']}/lightcurve/api-v1/data/"
+
+            json_conf = {
+                    "conf": {
+                        "target_name": obj_name,
+                        "ra": ra_deg,
+                        "dec": dec_deg,
+                        "epoch": "J2000.0",
+                        "pm_ra_mas": None,
+                        "pm_dec_mas": None,
+                        "colour_ref": "g-r",
+                        "colour_mag": 0,
+                        "date_from": (datetime.datetime.now()-datetime.timedelta(30)).strftime("%Y-%m-%d"), # thrity days back HARD CODED! # TODO: don't hardcode
+                        "date_to": datetime.datetime.now().strftime("%Y-%m-%d"),
+                        "centroid": True,
+                        "image_type": "set",
+                        "radius": None,
+                        "snr_limit": 5,
+                        "use_difference_images": True,
+                        "include_thumbnail": False,
+                        "include_cutout": False,
+                        "include_error_frames": True,
+                        "reprocess_error_frames": False,
+                        "reprocess_all": False,
+                        "recalibrate_photometry": False,
+                        "fallback_radius": None
+                    }
+                }
+
+            r = requests.post(submit_url, auth=auth, json=json_conf)
+            r.raise_for_status()
+            dag_id = r.json()["dag_run_id"]
+            data_url = f"{data_base_url}{dag_id}.json"
+
+            # Poll for availability
+            start = time.time()
+            while time.time() - start < timeout:
+                dat = requests.get(data_url, auth=auth)
+                if dat.status_code == 200:
+                    # TODO this won't work. See the nesting in the schema
+                    # https://goto-observatory.warwick.ac.uk/lightcurve/api-v1/docs#/FP%20query%20execution/lightcurve_api_v1_api_submit_fpe
+                    # TODD: do this step by step to see where and how I need to deal with the GOTO outputs to get the 
+                    # meta data (see dictionary below) and the light curve dataframes
+                    # NOTE: IT'S NOT OBIVOUS FROM THE API BECAUSE THERE ISTHERESPONSE FROM THE SUBMIT POST
+                    # AND THE JSON DATA FROM GRABING THE RESULTS AFTER THE SUBMITED JOB IS DONE
+                    result = pd.DataFrame(dat.json()["results"]), data_url
+                time.sleep(poll_interval)
+
+    
+            # Insert meta data
+            meta = {
+                "identifiers": [{"name": result["object"]["id"], "source": "goto"}],
+                "ra_deg": [{"value": result["object"]["ra"], "source": "goto"}],
+                "dec_deg": [{"value": result["object"]["dec"], "source": "goto"}],
+            }
+
+            # TODO: add GOTO internal name? maybe not needed
+            """
+            if result["object"]["atlas_designation"] is not None:
+                atlas_name = {
+                    "name": result["object"]["atlas_designation"],
+                    "source": "atlas_twb",
+                }
+                meta["identifiers"].append(atlas_name)
+            """
+
+
+            # DETECTIONS
+            det_df = pd.DataFrame(result["lc"])[
+                ["mjd", "mag", "magerr", "mag5sig", "filter", "expname", "major"]
+            ]
+            det_df.columns = ["mjd", "mag", "mag_err", "limit", "filter", "expname", "fwhm"]
+            det_df["detection"] = 1
+            # NON DETECTIONS
+            non_df = pd.DataFrame(result["lcnondets"])[
+                    ["mjd", "mag5sig", "filter", "expname"]
+            ]
+            non_df.columns = ["mjd", "limit", "filter", "expname"]
+            non_df["mag"] = np.nan
+            non_df["mag_err"] = np.nan
+            non_df["fwhm"] = np.nan
+            non_df["detection"] = 0
+            lc_df = pd.concat([det_df, non_df])
+
+            # Add a column to record which ATLAS unit the value was taken from
+            lc_df["tel_unit"] = lc_df["expname"].str[:3]
+            lc_df = lc_df.drop("expname", axis=1)
+            lc_df["survey"] = "atlas"
+            # Reorder cols
+            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "survey"]]
+            # Report count
+            status["lc_count"] = len(lc_df)
+
+        except SurveyMetaMissingError:
+            status["status"] = "no match"
+        except SurveyLightCurveMissingError:
+            status["status"] += "|no light curve"
+
+        except Exception as e:
+            status.update({
+                "status": "encountered unexpected error",
                 "error_message": str(e),
                 "details": traceback.format_exc(),
             })

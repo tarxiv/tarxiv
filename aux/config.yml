@@ -46,6 +46,13 @@ ztf:
 asas-sn:
   associated_sources: ["asas-sn", "asas-sn_skypatrol"]
 
+# GOTO Info
+goto_url: "https://goto-observatory.warwick.ac.uk/"
+goto_username: "myusername"
+goto_password: "mypassword"
+goto:
+  associated_sources: ["goto"]
+
 # ingesting TNS notices by IMAP
 imap:
   server: "imap.gmail.com"
