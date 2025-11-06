@@ -2,7 +2,7 @@
 # Must be renamed as config.yml!
 
 # General
-log_dir: "/home/wintergreen/repo/tarxiv/logs"
+log_dir: "/data/tarxiv/logs"
 logstash_host: localhost
 logstash_port: 5046
 

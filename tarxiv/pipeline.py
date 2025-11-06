@@ -1,7 +1,7 @@
 from .utils import TarxivModule, clean_meta
 from .data_sources import TNS, ATLAS, ASAS_SN, ZTF, append_dynamic_values
 from .database import TarxivDB
-from .alerts import Gmail, IMAP
+from .alerts import IMAP
 from astropy.time import Time
 import pandas as pd
 import requests
