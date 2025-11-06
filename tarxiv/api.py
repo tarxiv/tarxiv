@@ -63,7 +63,12 @@ class API(TarxivModule):
         return token == "TOKEN"
 
     def routes(self):
-        # HFS - 2025-05-28: These self.app.route things are Flask decoratoes which become
+        # Basic index route for testing server is running
+        @self.app.route("/", methods=["GET"])
+        def index():
+            return server_response({"status": "TarXiv API is running"}, 200)
+
+        # HFS - 2025-05-28: These self.app.route things are Flask decorators which become
         # endpoints for the API
         @self.app.route("/get_object_meta/<string:obj_name>", methods=["POST"])
         def get_object_meta(obj_name):
