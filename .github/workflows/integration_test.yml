@@ -39,6 +39,16 @@ jobs:
       - name: Load test data
         run: |
           uv run --env-file setup/.env scripts/db_utils.py -l -f setup/example_dataset.json
+      - name: Build tarxiv API image
+        run: |
+          cd setup
+          docker compose build tarxiv-api
+      - name: Start tarxiv API
+        run: |
+          cd setup
+          docker compose up -d tarxiv-api
+          sleep 10
+          curl -f http://localhost:9001/
       - name: Teardown compose environment
         if: always()
         run: |
