@@ -107,6 +107,64 @@ services:
     networks:
       - tarxiv_net
 
+  tarxiv-api:
+    profiles:
+      - tarxiv
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: local/tarxiv:latest
+    container_name: tarxiv-api
+    command: uv run /app/bin/start-api
+    volumes:
+      - ../bin:/app/bin:Z
+      - ../tarxiv:/app/tarxiv:Z
+      - ../aux/config.yml:/app/aux/config.yml:Z
+      - ../examples:/app/examples:Z
+      - ../scripts:/app/scripts:Z
+      - .data/logs:/tmp/tarxiv/logs:rw,z
+    ports:
+      - ${TARXIV_PORT}:${TARXIV_PORT}
+    environment:
+      TARXIV_CONFIG_DIR: /app/aux
+      TARXIV_COUCHBASE_HOST: couchbase
+      TARXIV_COUCHBASE_API_USERNAME: ${TARXIV_COUCHBASE_API_USERNAME}
+      TARXIV_COUCHBASE_API_PASSWORD: ${TARXIV_COUCHBASE_API_PASSWORD}
+      TARXIV_ELASTIC_HOST: elasticsearch
+      TARXIV_ELASTIC_PORT: 9200
+      TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
+    depends_on:
+      - couchbase
+    networks:
+      - tarxiv_net
+
+  # tarxiv-dashboard:
+  #   profiles:
+  #     - tarxiv
+  #   image: local/tarxiv:latest
+  #   command: uv run /app/bin/run_dashboard.py --host 0.0.0.0 --port 8050
+  #   volumes:
+  #     - ../bin:/app/bin:Z
+  #     - ../tarxiv:/app/tarxiv:Z
+  #     - ../aux/config.yml:/app/aux/config.yml:Z
+  #     - ../examples:/app/examples:Z
+  #     - ../scripts:/app/scripts:Z
+  #     - .data/logs:/tmp/tarxiv/logs:rw,z
+  #   ports:
+  #     - 8050:8050
+  #   environment:
+  #     TARXIV_CONFIG_DIR: /app/aux
+  #     TARXIV_COUCHBASE_HOST: couchbase
+  #     TARXIV_COUCHBASE_API_USERNAME: ${TARXIV_COUCHBASE_API_USERNAME}
+  #     TARXIV_COUCHBASE_API_PASSWORD: ${TARXIV_COUCHBASE_API_PASSWORD}
+  #     TARXIV_ELASTIC_HOST: elasticsearch
+  #     TARXIV_ELASTIC_PORT: 9200
+  #     TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
+  #   depends_on:
+  #     - tarxiv-api
+  #   networks:
+  #     - tarxiv_net
+
 networks:
   tarxiv_net:
     driver: bridge

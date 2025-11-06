@@ -1,0 +1,28 @@
+# Ignore the dockerfile itself
+Dockerfile
+.dockerignore
+
+# Ignore virtual environment directories and environment files
+.venv
+.env
+
+# Ignore files and directories related to development, documentation, and configuration
+.github/
+mailu/
+setup/
+docs/
+
+# Ignore common Python and editor temporary files and caches
+*.pyc
+*.pyo
+*.pyd
+*.swp
+.git/
+.gitignore
+.ruff_cache/
+.vscode/
+__pycache__/
+.ipynb_checkpoints
+.pytest_cache/
+*.code-workspace
+*.egg-info

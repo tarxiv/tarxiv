@@ -2,8 +2,8 @@
 # Must be renamed as config.yml!
 
 # General
-log_dir: "/data/tarxiv/logs"
-logstash_host: localhost
+log_dir: "/tmp/tarxiv/logs"
+logstash_host: logstash
 logstash_port: 5046
 
 # hosting information
@@ -22,15 +22,6 @@ tns:
   associated_sources: ["tns"]
   obj_active_days: 60
   obj_prior_days: 30
-
-# email certifications (for ingesting TNS notices)
-gmail:
-  secrets_file: "my_cred_file.json"
-  token_name: "gmail_token.json"
-  scopes:
-    - 'https://www.googleapis.com/auth/gmail.readonly'
-    - 'https://www.googleapis.com/auth/gmail.modify'
-  polling_interval: 4
 
 # ATLAS Info
 atlas_url: "https://psweb.mp.qub.ac.uk/sne/atlas4/api/"
