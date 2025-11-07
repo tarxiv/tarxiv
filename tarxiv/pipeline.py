@@ -3,8 +3,12 @@ from .data_sources import TNS, ATLAS, ASAS_SN, ZTF, append_dynamic_values
 from .database import TarxivDB
 from .alerts import IMAP
 from astropy.time import Time
+from hop.auth import Auth
+from hop import Stream
 import pandas as pd
 import requests
+import datetime
+import deepdiff
 import zipfile
 import signal
 import json
@@ -37,6 +41,9 @@ class TNSPipeline(TarxivModule):
         :param obj_name: TNS object name (e.g. 2024iss); str
         :return: metadata and light curve data dictionaries
         """
+        # Get data if exists already for comparison
+        init_meta = self.db.get(obj_name, "objects")
+
         # Get initial info from TNS
         tns_meta, _ = self.tns.get_object(obj_name)
         # Return empty dicts
@@ -75,7 +82,35 @@ class TNSPipeline(TarxivModule):
         # Convert to json for submission
         obj_lc = json.loads(lc_df.to_json(orient="records"))
 
-        return obj_meta, obj_lc
+        # Now run a quick comparison of the initial metadata to new metadata for updates
+        if init_meta is not None:            # Check to see which fields have been updated
+            diff = deepdiff.DeepDiff(init_meta, obj_meta, ignore_order=True, view='tree')
+            # We only care about the following fields
+            relevant_fields = ['identifiers', 'object_type', 'host_name', 'redshift', 'latest_detection', 'latest_change']
+            update_meta = {field: [] for field in relevant_fields}
+            if 'values_changed' in diff.keys():
+                for field in diff['values_changed']:
+                    field_name = field.get_root_key()
+                    if field_name in relevant_fields:
+                        update_meta[field_name].append(field.t2)
+            if 'iterable_item_added' in diff.keys():
+                for field in diff['iterable_item_added']:
+                    field_name = field.get_root_key()
+                    if field_name in relevant_fields:
+                        update_meta[field_name].append(field.t2)
+            if 'dictionary_item_added' in diff.keys():
+                for field in diff['dictionary_item_added']:
+                    field_name = field.get_root_key()
+                    if field_name in relevant_fields:
+                        update_meta[field_name] += field.t2
+            # Remove blank updates
+            for field, value in update_meta.items():
+                if not value:
+                    del update_meta[field]
+        else:
+            update_meta = None
+
+        return obj_meta, obj_lc, update_meta
 
     def upsert_object(self, obj_name, obj_meta, obj_lc):
         """
@@ -125,7 +160,7 @@ class TNSPipeline(TarxivModule):
         self.logger.info(status, extra=status)
         for obj_name in obj_names:
             # Get survey information
-            obj_meta, obj_lc = self.get_object(obj_name)
+            obj_meta, obj_lc, update_meta = self.get_object(obj_name)
             # Upsert to database
             self.upsert_object(obj_name, obj_meta, obj_lc)
 
@@ -135,7 +170,7 @@ class TNSPipeline(TarxivModule):
         # Pull TNS info and update
         for obj_name in daily_objects:
             # Get survey information
-            obj_meta, obj_lc = self.get_object(obj_name)
+            obj_meta, obj_lc, update_meta = self.get_object(obj_name)
             # Upsert to database
             self.upsert_object(obj_name, obj_meta, obj_lc)
 
@@ -159,7 +194,7 @@ class TNSPipeline(TarxivModule):
             # Each result contains message and list of objects
             for obj_name in alerts:
                 # Get survey information
-                obj_meta, obj_lc = self.get_object(obj_name)
+                obj_meta, obj_lc, update_meta = self.get_object(obj_name)
                 # Upsert to database
                 self.upsert_object(obj_name, obj_meta, obj_lc)
 
