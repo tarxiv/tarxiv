@@ -186,6 +186,8 @@ class TNSPipeline(TarxivModule):
             # Submit to hopskotch
             with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
                 s.write(update_meta)
+                status = {"status": "submitted hopskotch alert", "obj_name": obj_name}
+                self.logger.info(status, extra=status)
 
     def run_pipeline(self):
         # Set signals
@@ -217,6 +219,8 @@ class TNSPipeline(TarxivModule):
                 # Submit to hopskotch
                 with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
                     s.write(update_meta)
+                    status = {"status": "submitted hopskotch alert", "obj_name": obj_name}
+                    self.logger.info(status, extra=status)
 
     def signal_handler(self, sig, frame):
         status = {"status": "received exit signal", "signal": str(sig), "frame": str(frame)}
