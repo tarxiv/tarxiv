@@ -1,3 +1,5 @@
+import hop
+
 from .utils import TarxivModule, clean_meta
 from .data_sources import TNS, ATLAS, ASAS_SN, ZTF, append_dynamic_values
 from .database import TarxivDB
@@ -33,6 +35,9 @@ class TNSPipeline(TarxivModule):
         self.gmail = IMAP(script_name, reporting_mode, debug)
         # Get database
         self.db = TarxivDB("tns", "pipeline", script_name, reporting_mode, debug)
+        # Hopskotch authorization
+        self.hop_auth = Auth(username=os.environ["TARXIV_HOPSKOTCH_USERNAME"],
+                             password=os.environ["TARXIV_HOPSKOTCH_PASSWORD"])
 
     def get_object(self, obj_name):
         """
@@ -104,11 +109,12 @@ class TNSPipeline(TarxivModule):
                     if field_name in relevant_fields:
                         update_meta[field_name] += field.t2
             # Remove blank updates
-            for field, value in update_meta.items():
-                if not value:
-                    del update_meta[field]
+            update_meta = {field: value for field, value in update_meta.items() if value}
+
+            update_meta['status'] = "updated_entry"
         else:
-            update_meta = None
+            update_meta = obj_meta
+            update_meta['status'] = "new_entry"
 
         return obj_meta, obj_lc, update_meta
 
@@ -160,7 +166,7 @@ class TNSPipeline(TarxivModule):
         self.logger.info(status, extra=status)
         for obj_name in obj_names:
             # Get survey information
-            obj_meta, obj_lc, update_meta = self.get_object(obj_name)
+            obj_meta, obj_lc, _ = self.get_object(obj_name)
             # Upsert to database
             self.upsert_object(obj_name, obj_meta, obj_lc)
 
@@ -173,6 +179,13 @@ class TNSPipeline(TarxivModule):
             obj_meta, obj_lc, update_meta = self.get_object(obj_name)
             # Upsert to database
             self.upsert_object(obj_name, obj_meta, obj_lc)
+            # Get timestamp
+            timestamp = datetime.datetime.now().isoformat()
+            update_meta["timestamp"] = timestamp
+            stream = Stream(self.hop_auth)
+            # Submit to hopskotch
+            with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
+                s.write(update_meta)
 
     def run_pipeline(self):
         # Set signals
@@ -197,7 +210,13 @@ class TNSPipeline(TarxivModule):
                 obj_meta, obj_lc, update_meta = self.get_object(obj_name)
                 # Upsert to database
                 self.upsert_object(obj_name, obj_meta, obj_lc)
-
+                # Get timestamp
+                timestamp = datetime.datetime.now().isoformat()
+                update_meta["timestamp"] = timestamp
+                stream = Stream(self.hop_auth)
+                # Submit to hopskotch
+                with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
+                    s.write(update_meta)
 
     def signal_handler(self, sig, frame):
         status = {"status": "received exit signal", "signal": str(sig), "frame": str(frame)}
