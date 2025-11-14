@@ -91,7 +91,7 @@ class TNSPipeline(TarxivModule):
         if init_meta is not None:            # Check to see which fields have been updated
             diff = deepdiff.DeepDiff(init_meta, obj_meta, ignore_order=True, view='tree')
             # We only care about the following fields
-            relevant_fields = ['identifiers', 'object_type', 'host_name', 'redshift', 'latest_detection', 'latest_change']
+            relevant_fields = ['identifiers', 'object_type', 'host_name', 'redshift', 'latest_detection']
             update_meta = {field: [] for field in relevant_fields}
             if 'values_changed' in diff.keys():
                 for field in diff['values_changed']:
