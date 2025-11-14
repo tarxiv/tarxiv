@@ -111,7 +111,7 @@ class TNSPipeline(TarxivModule):
                         update_meta[field_name] += field.t2
             # Remove blank updates
             update_meta = {field: value for field, value in update_meta.items() if value}
-            update_meta |= {"status": "updated_entry"}
+            update_meta |= {"status": "updated_entry", "obj_name": obj_name}
         else:
             update_meta = obj_meta
             update_meta['status'] = "new_entry"
@@ -183,7 +183,7 @@ class TNSPipeline(TarxivModule):
             timestamp = datetime.datetime.now().isoformat()
             update_meta["timestamp"] = timestamp
             # We don't need to send hopskotch alert for objects with no updates
-            if len(update_meta.keys()) <= 2:
+            if len(update_meta.keys()) <= 3:
                 continue
             stream = Stream(auth=self.hop_auth)
             # Submit to hopskotch
