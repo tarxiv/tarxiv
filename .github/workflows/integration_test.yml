@@ -50,10 +50,10 @@ jobs:
           sleep 20
           docker ps -a
           # curl -f http://localhost:9001/
-      - name: Start frontend
+      - name: Start dashboard
         run: |
           cd setup
-          docker compose up -d tarxiv-frontend
+          docker compose up -d tarxiv-dashboard
           sleep 10
           docker ps -a
       - name: Teardown compose environment
