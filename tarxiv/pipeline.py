@@ -109,9 +109,8 @@ class TNSPipeline(TarxivModule):
                     if field_name in relevant_fields:
                         update_meta[field_name] += field.t2
             # Remove blank updates
-            #update_meta = {field: value for field, value in update_meta.items() if value}
-
-            update_meta['status'] = "updated_entry"
+            update_meta = {field: value for field, value in update_meta.items() if value}
+            update_meta |= {"status": "updated_entry"}
         else:
             update_meta = obj_meta
             update_meta['status'] = "new_entry"
