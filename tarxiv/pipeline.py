@@ -36,7 +36,7 @@ class TNSPipeline(TarxivModule):
         # Get database
         self.db = TarxivDB("tns", "pipeline", script_name, reporting_mode, debug)
         # Hopskotch authorization
-        self.hop_auth = Auth(username=os.environ["TARXIV_HOPSKOTCH_USERNAME"],
+        self.hop_auth = Auth(user=os.environ["TARXIV_HOPSKOTCH_USERNAME"],
                              password=os.environ["TARXIV_HOPSKOTCH_PASSWORD"])
 
     def get_object(self, obj_name):
@@ -184,10 +184,8 @@ class TNSPipeline(TarxivModule):
             update_meta["timestamp"] = timestamp
             stream = Stream(auth=self.hop_auth)
             # Submit to hopskotch
-            print("line1")
             with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
                 s.write(update_meta)
-                print("line2")
                 status = {"status": "submitted hopskotch alert", "obj_name": obj_name}
                 self.logger.info(status, extra=status)
 
