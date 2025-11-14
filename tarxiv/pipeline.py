@@ -182,10 +182,12 @@ class TNSPipeline(TarxivModule):
             # Get timestamp
             timestamp = datetime.datetime.now().isoformat()
             update_meta["timestamp"] = timestamp
-            stream = Stream(self.hop_auth)
+            stream = Stream(auth=self.hop_auth)
             # Submit to hopskotch
+            print("line1")
             with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
                 s.write(update_meta)
+                print("line2")
                 status = {"status": "submitted hopskotch alert", "obj_name": obj_name}
                 self.logger.info(status, extra=status)
 
