@@ -1,10 +1,16 @@
+import hop
+
 from .utils import TarxivModule, clean_meta
 from .data_sources import TNS, ATLAS, ASAS_SN, ZTF, append_dynamic_values
 from .database import TarxivDB
 from .alerts import IMAP
 from astropy.time import Time
+from hop.auth import Auth
+from hop import Stream
 import pandas as pd
 import requests
+import datetime
+import deepdiff
 import zipfile
 import signal
 import json
@@ -29,6 +35,9 @@ class TNSPipeline(TarxivModule):
         self.gmail = IMAP(script_name, reporting_mode, debug)
         # Get database
         self.db = TarxivDB("tns", "pipeline", script_name, reporting_mode, debug)
+        # Hopskotch authorization
+        self.hop_auth = Auth(user=os.environ["TARXIV_HOPSKOTCH_USERNAME"],
+                             password=os.environ["TARXIV_HOPSKOTCH_PASSWORD"])
 
     def get_object(self, obj_name):
         """
@@ -37,6 +46,9 @@ class TNSPipeline(TarxivModule):
         :param obj_name: TNS object name (e.g. 2024iss); str
         :return: metadata and light curve data dictionaries
         """
+        # Get data if exists already for comparison
+        init_meta = self.db.get(obj_name, "objects")
+
         # Get initial info from TNS
         tns_meta, _ = self.tns.get_object(obj_name)
         # Return empty dicts
@@ -75,7 +87,35 @@ class TNSPipeline(TarxivModule):
         # Convert to json for submission
         obj_lc = json.loads(lc_df.to_json(orient="records"))
 
-        return obj_meta, obj_lc
+        # Now run a quick comparison of the initial metadata to new metadata for updates
+        if init_meta is not None:            # Check to see which fields have been updated
+            diff = deepdiff.DeepDiff(init_meta, obj_meta, ignore_order=True, view='tree')
+            # We only care about the following fields
+            relevant_fields = ['identifiers', 'object_type', 'host_name', 'redshift', 'latest_detection']
+            update_meta = {field: [] for field in relevant_fields}
+            if 'values_changed' in diff.keys():
+                for field in diff['values_changed']:
+                    field_name = field.get_root_key()
+                    if field_name in relevant_fields:
+                        update_meta[field_name].append(obj_meta[field_name])
+            if 'iterable_item_added' in diff.keys():
+                for field in diff['iterable_item_added']:
+                    field_name = field.get_root_key()
+                    if field_name in relevant_fields:
+                        update_meta[field_name].append(obj_meta[field_name])
+            if 'dictionary_item_added' in diff.keys():
+                for field in diff['dictionary_item_added']:
+                    field_name = field.get_root_key()
+                    if field_name in relevant_fields:
+                        update_meta[field_name] += obj_meta[field_name]
+            # Remove blank updates
+            update_meta = {field: value for field, value in update_meta.items() if value}
+            update_meta |= {"status": "updated_entry", "obj_name": obj_name}
+        else:
+            update_meta = obj_meta
+            update_meta['status'] = "new_entry"
+
+        return obj_meta, obj_lc, update_meta
 
     def upsert_object(self, obj_name, obj_meta, obj_lc):
         """
@@ -125,7 +165,7 @@ class TNSPipeline(TarxivModule):
         self.logger.info(status, extra=status)
         for obj_name in obj_names:
             # Get survey information
-            obj_meta, obj_lc = self.get_object(obj_name)
+            obj_meta, obj_lc, _ = self.get_object(obj_name)
             # Upsert to database
             self.upsert_object(obj_name, obj_meta, obj_lc)
 
@@ -135,9 +175,21 @@ class TNSPipeline(TarxivModule):
         # Pull TNS info and update
         for obj_name in daily_objects:
             # Get survey information
-            obj_meta, obj_lc = self.get_object(obj_name)
+            obj_meta, obj_lc, update_meta = self.get_object(obj_name)
             # Upsert to database
             self.upsert_object(obj_name, obj_meta, obj_lc)
+            # Get timestamp
+            timestamp = datetime.datetime.now().isoformat()
+            update_meta["timestamp"] = timestamp
+            # We don't need to send hopskotch alert for objects with no updates
+            if len(update_meta.keys()) <= 3:
+                continue
+            stream = Stream(auth=self.hop_auth)
+            # Submit to hopskotch
+            with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
+                s.write(update_meta)
+                status = {"status": "submitted hopskotch alert", "obj_name": obj_name}
+                self.logger.info(status, extra=status)
 
     def run_pipeline(self):
         # Set signals
@@ -159,10 +211,18 @@ class TNSPipeline(TarxivModule):
             # Each result contains message and list of objects
             for obj_name in alerts:
                 # Get survey information
-                obj_meta, obj_lc = self.get_object(obj_name)
+                obj_meta, obj_lc, update_meta = self.get_object(obj_name)
                 # Upsert to database
                 self.upsert_object(obj_name, obj_meta, obj_lc)
-
+                # Get timestamp
+                timestamp = datetime.datetime.now().isoformat()
+                update_meta["timestamp"] = timestamp
+                stream = Stream(self.hop_auth)
+                # Submit to hopskotch
+                with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
+                    s.write(update_meta)
+                    status = {"status": "submitted hopskotch alert", "obj_name": obj_name}
+                    self.logger.info(status, extra=status)
 
     def signal_handler(self, sig, frame):
         status = {"status": "received exit signal", "signal": str(sig), "frame": str(frame)}
