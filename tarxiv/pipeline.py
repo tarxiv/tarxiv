@@ -93,7 +93,6 @@ class TNSPipeline(TarxivModule):
             # We only care about the following fields
             relevant_fields = ['identifiers', 'object_type', 'host_name', 'redshift', 'latest_detection', 'latest_change']
             update_meta = {field: [] for field in relevant_fields}
-            print(diff)
             if 'values_changed' in diff.keys():
                 for field in diff['values_changed']:
                     field_name = field.get_root_key()
