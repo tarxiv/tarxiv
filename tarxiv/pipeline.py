@@ -93,6 +93,7 @@ class TNSPipeline(TarxivModule):
             # We only care about the following fields
             relevant_fields = ['identifiers', 'object_type', 'host_name', 'redshift', 'latest_detection', 'latest_change']
             update_meta = {field: [] for field in relevant_fields}
+            print(diff)
             if 'values_changed' in diff.keys():
                 for field in diff['values_changed']:
                     field_name = field.get_root_key()
@@ -109,8 +110,8 @@ class TNSPipeline(TarxivModule):
                     if field_name in relevant_fields:
                         update_meta[field_name] += field.t2
             # Remove blank updates
-            #update_meta = {field: value for field, value in update_meta.items() if value}
-            update_meta |= {"status": "updated_entry"}
+            update_meta = {field: value for field, value in update_meta.items() if value}
+            update_meta |= {"status": "updated_entry", "obj_name": obj_name}
         else:
             update_meta = obj_meta
             update_meta['status'] = "new_entry"
@@ -181,6 +182,9 @@ class TNSPipeline(TarxivModule):
             # Get timestamp
             timestamp = datetime.datetime.now().isoformat()
             update_meta["timestamp"] = timestamp
+            # We don't need to send hopskotch alert for objects with no updates
+            if len(update_meta.keys()) <= 3:
+                continue
             stream = Stream(auth=self.hop_auth)
             # Submit to hopskotch
             with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
