@@ -33,7 +33,7 @@ services:
       node.name: elasticsearch
       discovery.type: single-node
       ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
-      ES_JAVA_OPTS: -Xms2048m -Xmx2048m
+      ES_JAVA_OPTS: -Xms${TARXIV_ELASTIC_MEMORY:-2048}m -Xmx${TARXIV_ELASTIC_MEMORY:-2048}m
     networks:
       - tarxiv_net
     restart: unless-stopped
@@ -51,7 +51,7 @@ services:
       - 50000:50000/udp
       - 9600:9600
     environment:
-      LS_JAVA_OPTS: -Xms512m -Xmx512m
+      LS_JAVA_OPTS: -Xms${TARXIV_LOGSTASH_MEMORY:-512}m -Xmx${TARXIV_LOGSTASH_MEMORY:-512}m
       LOGSTASH_INTERNAL_PASSWORD: ${TARXIV_LOGSTASH_INTERNAL_PASSWORD}
       ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
     networks:
@@ -93,6 +93,7 @@ services:
       TARXIV_COUCHBASE_API_PASSWORD: ${TARXIV_COUCHBASE_API_PASSWORD:-}
       TARXIV_COUCHBASE_PIPELINE_USERNAME: ${TARXIV_COUCHBASE_PIPELINE_USERNAME:-}
       TARXIV_COUCHBASE_PIPELINE_PASSWORD: ${TARXIV_COUCHBASE_PIPELINE_PASSWORD:-}
+      TARXIV_COUCHBASE_BUCKET_SIZE: ${TARXIV_COUCHBASE_BUCKET_SIZE:-2048}
     restart: unless-stopped
 
   redis:
@@ -103,6 +104,64 @@ services:
       - 6379:6379
     environment:
       - REDIS_PASSWORD:${TARXIV_REDIS_PASSWORD}
+    networks:
+      - tarxiv_net
+
+  tarxiv-api:
+    profiles:
+      - tarxiv
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: local/tarxiv:latest
+    container_name: tarxiv-api
+    command: uv run /app/bin/start-api
+    volumes:
+      - ../bin:/app/bin:Z
+      - ../tarxiv:/app/tarxiv:Z
+      - ../aux/config.yml:/app/aux/config.yml:Z
+      - ../examples:/app/examples:Z
+      - ../scripts:/app/scripts:Z
+      - .data/logs:/tmp/tarxiv/logs:rw,z
+    ports:
+      - ${TARXIV_PORT}:${TARXIV_PORT}
+    environment:
+      TARXIV_CONFIG_DIR: /app/aux
+      TARXIV_COUCHBASE_HOST: couchbase
+      TARXIV_COUCHBASE_API_USERNAME: ${TARXIV_COUCHBASE_API_USERNAME}
+      TARXIV_COUCHBASE_API_PASSWORD: ${TARXIV_COUCHBASE_API_PASSWORD}
+      TARXIV_ELASTIC_HOST: elasticsearch
+      TARXIV_ELASTIC_PORT: 9200
+      TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
+    depends_on:
+      - couchbase
+    networks:
+      - tarxiv_net
+
+  tarxiv-dashboard:
+    profiles:
+      - tarxiv
+    image: local/tarxiv:latest
+    command: uv run /app/bin/run_dashboard.py --host 0.0.0.0 --port 8050 --debug
+    volumes:
+      - ../bin:/app/bin:Z
+      - ../tarxiv:/app/tarxiv:Z
+      - ../aux/config.yml:/app/aux/config.yml:Z
+      - ../examples:/app/examples:Z
+      - ../scripts:/app/scripts:Z
+      - .data/logs:/tmp/tarxiv/logs:rw,z
+    ports:
+      - 8050:8050
+    environment:
+      TARXIV_CONFIG_DIR: /app/aux
+      TARXIV_COUCHBASE_HOST: couchbase
+      TARXIV_COUCHBASE_API_USERNAME: ${TARXIV_COUCHBASE_API_USERNAME}
+      TARXIV_COUCHBASE_API_PASSWORD: ${TARXIV_COUCHBASE_API_PASSWORD}
+      TARXIV_ELASTIC_HOST: elasticsearch
+      TARXIV_ELASTIC_PORT: 9200
+      TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
+    depends_on:
+      - tarxiv-api
     networks:
       - tarxiv_net
 

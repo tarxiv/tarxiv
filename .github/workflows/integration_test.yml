@@ -1,0 +1,75 @@
+name: Integration Tests
+
+on:
+  push:
+    branches:
+      - main
+      - jl/*
+  pull_request:
+
+jobs:
+  docker-compose:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install the project
+        run: uv sync --locked --all-extras --dev
+
+      - name: Setup compose environment
+        run: |
+          cd setup
+          cp .env.sample .env
+          mkdir -p .data/elastic .data/couchbase .data/redis
+          chmod 777 .data/elastic .data/couchbase .data/redis
+          ls -la .
+          ls -la .data
+          # docker compose up elasticsearch
+          docker compose run setup_elasticsearch
+          docker compose up -d elasticsearch logstash kibana couchbase
+          sleep 60
+      - name: Load test data
+        run: |
+          uv run --env-file setup/.env scripts/db_utils.py -l -f setup/example_dataset.json
+      - name: Build tarxiv API image
+        run: |
+          cd setup
+          docker compose build tarxiv-api
+      - name: Start tarxiv API
+        run: |
+          cd setup
+          docker compose up -d tarxiv-api
+          sleep 20
+          docker ps -a
+          # curl -f http://localhost:9001/
+      - name: Start dashboard
+        run: |
+          cd setup
+          docker compose up -d tarxiv-dashboard
+          sleep 10
+          docker ps -a
+      - name: Teardown compose environment
+        if: always()
+        run: |
+          cd setup
+          docker inspect --format='{{.LogPath}}' setup-elasticsearch-1
+          docker compose down -v
+      - name : Save logs on failure
+        if: failure()
+        run: |
+          cd setup
+          docker compose logs > logs.txt
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tarxiv-logs
+          path: setup/logs.txt
