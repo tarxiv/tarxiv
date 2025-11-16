@@ -1,5 +1,3 @@
-import hop
-
 from .utils import TarxivModule, clean_meta
 from .data_sources import TNS, ATLAS, ASAS_SN, ZTF, append_dynamic_values
 from .database import TarxivDB

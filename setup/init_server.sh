@@ -38,7 +38,7 @@ if ! [ -f "$FILE" ]; then
     -c http://$TARXIV_COUCHBASE_HOST:8091 \
     --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
     --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
-    --bucket tarxiv --bucket-type couchbase --bucket-ramsize 2048
+    --bucket tarxiv --bucket-type couchbase --bucket-ramsize ${TARXIV_COUCHBASE_BUCKET_SIZE:-2048}
   sleep 2
   # Create TNS scope
   /opt/couchbase/bin/couchbase-cli collection-manage \
