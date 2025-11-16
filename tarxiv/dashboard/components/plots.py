@@ -25,13 +25,17 @@ def create_lightcurve_plot(lc_data, object_id, logger=None):
         logger.debug({"debug": f"Creating lightcurve plot for object: {object_id} with {len(lc_data)} points"})
         logger.debug({"debug": f"Lightcurve data sample: {lc_data[:3]}"})
 
-    # Group data by filter/band
-    filter_data = {}
+    # Group data by both filter/band and survey
+    grouped_data = {}
     for point in lc_data:
         filter_name = point.get("filter", "Unknown")
+        survey_name = point.get("survey", "Unknown")
 
-        if filter_name not in filter_data:
-            filter_data[filter_name] = {
+        # Create a unique key for filter + survey combination
+        group_key = (filter_name, survey_name)
+
+        if group_key not in grouped_data:
+            grouped_data[group_key] = {
                 "mjd": [],
                 "mag": [],
                 "mag_err": [],
@@ -47,16 +51,18 @@ def create_lightcurve_plot(lc_data, object_id, logger=None):
 
         # Handle detections vs limits using detection flag
         if point.get("detection") == 1 and point.get("mag") is not None:
-            filter_data[filter_name]["mjd"].append(mjd)
-            filter_data[filter_name]["mag"].append(point["mag"])
-            filter_data[filter_name]["mag_err"].append(point.get("mag_err", 0))
+            grouped_data[group_key]["mjd"].append(mjd)
+            grouped_data[group_key]["mag"].append(point["mag"])
+            grouped_data[group_key]["mag_err"].append(point.get("mag_err", 0))
         elif point.get("detection") == 0 and point.get("limit") is not None:
-            filter_data[filter_name]["lim_mjd"].append(mjd)
-            filter_data[filter_name]["lim_mag"].append(point["limit"])
+            grouped_data[group_key]["lim_mjd"].append(mjd)
+            grouped_data[group_key]["lim_mag"].append(point["limit"])
 
-    # Add traces for each filter
-    for filter_name, data in filter_data.items():
+    # Add traces for each filter + survey combination
+    # Sort by survey name first to keep legend organized
+    for (filter_name, survey_name), data in sorted(grouped_data.items(), key=lambda x: (x[0][1], x[0][0])):
         color = FILTER_COLORS.get(filter_name, "gray")
+        survey_label = survey_name.upper()
 
         # Plot detections
         if data["mag"]:
@@ -70,7 +76,8 @@ def create_lightcurve_plot(lc_data, object_id, logger=None):
                     name=f"{filter_name}-band",
                     marker=dict(size=8, color=color),
                     error_y=error_y,
-                    legendgroup=filter_name
+                    legendgroup=survey_name,
+                    legendgrouptitle_text=survey_label
                 )
             )
 
@@ -83,20 +90,28 @@ def create_lightcurve_plot(lc_data, object_id, logger=None):
                     mode="markers",
                     name=f"{filter_name}-band (limit)",
                     marker=dict(size=8, color=color, symbol="triangle-down", opacity=0.5),
-                    showlegend=False,
-                    legendgroup=filter_name
+                    showlegend=True,
+                    legendgroup=survey_name,
+                    legendgrouptitle_text=survey_label
                 )
             )
 
     fig.update_layout(
         title=f"Lightcurve: {object_id}",
         xaxis_title="MJD",
-        yaxis_title="Magnitude",
+        yaxis_title="Magnitude (mag)",
         yaxis=dict(autorange="reversed"),  # Magnitude scale is inverted
         hovermode="closest",
         height=500,
         template="plotly_white",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02,
+            groupclick="toggleitem"  # Allow clicking group title to toggle all items
+        )
     )
 
     return dcc.Graph(figure=fig)
