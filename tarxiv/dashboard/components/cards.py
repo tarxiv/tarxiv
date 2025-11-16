@@ -1,5 +1,5 @@
 """Card components for displaying object data."""
-from dash import html, dash_table
+from dash import html
 import json
 from ..styles import CARD_STYLE, COLORS
 from .plots import create_lightcurve_plot, create_sky_plot
