@@ -114,7 +114,7 @@ class TNSPipeline(TarxivModule):
             update_meta = obj_meta
             update_meta['status'] = "new_entry"
 
-        return obj_meta, obj_lc, update_meta, diff
+        return obj_meta, obj_lc, update_meta
 
     def upsert_object(self, obj_name, obj_meta, obj_lc):
         """
