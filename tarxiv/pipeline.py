@@ -95,21 +95,21 @@ class TNSPipeline(TarxivModule):
                 for field in diff['values_changed']:
                     field_name = field.get_root_key()
                     if field_name in relevant_fields:
-                        update_field = field.t2 if type(field.t2) != str and len(field.t2.keys()) > 1 else field.up.t2
+                        update_field = field.t2 if type(field.t2) != dict and len(field.t2.keys()) > 1 else field.up.t2
                         if update_field not in update_meta[field_name]:
                             update_meta[field_name].append(update_field)
             if 'iterable_item_added' in diff.keys():
                 for field in diff['iterable_item_added']:
                     field_name = field.get_root_key()
                     if field_name in relevant_fields:
-                        update_field = field.t2 if type(field.t2) != str and len(field.t2.keys()) > 1 else field.up.t2
+                        update_field = field.t2 if type(field.t2) == dict and len(field.t2.keys()) > 1 else field.up.t2
                         if update_field not in update_meta[field_name]:
                             update_meta[field_name].append(update_field)
             if 'dictionary_item_added' in diff.keys():
                 for field in diff['dictionary_item_added']:
                     field_name = field.get_root_key()
                     if field_name in relevant_fields:
-                        update_field = field.t2 if type(field.t2) != str and len(field.t2.keys()) > 1 else field.up.t2
+                        update_field = field.t2 if type(field.t2) == dict and len(field.t2.keys()) > 1 else field.up.t2
                         if update_field not in update_meta[field_name]:
                             update_meta[field_name].append(update_field)
             # Remove blank updates
