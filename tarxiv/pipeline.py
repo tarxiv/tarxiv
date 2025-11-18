@@ -116,6 +116,86 @@ class TNSPipeline(TarxivModule):
 
         return obj_meta, obj_lc, update_meta
 
+    def get_object_test(self, obj_name):
+        """
+        Queries TNS for an object then finds all associated survey data.
+
+        :param obj_name: TNS object name (e.g. 2024iss); str
+        :return: metadata and light curve data dictionaries
+        """
+        # Get data if exists already for comparison
+        init_meta = self.db.get(obj_name, "objects")
+
+        # Get initial info from TNS
+        tns_meta, _ = self.tns.get_object(obj_name)
+        # Return empty dicts
+        if tns_meta is None:
+            return {}, {}
+        ra_deg, dec_deg = tns_meta["ra_deg"]["value"], tns_meta["dec_deg"]["value"]
+        # Now get meta and lightcurves from the surveys
+        atlas_meta, atlas_lc = self.atlas.get_object(obj_name, ra_deg, dec_deg)
+        ztf_meta, ztf_lc = self.ztf.get_object(obj_name, ra_deg, dec_deg)
+        asas_sn_meta, asas_sn_lc = self.asas_sn.get_object(obj_name, ra_deg, dec_deg)
+
+        # Gent a new schema
+        schema = self.db.get_object_schema()
+        # Now we populate schema with our survey information
+        obj_meta = self.tns.update_object_meta(schema, tns_meta)
+        obj_meta = self.atlas.update_object_meta(obj_meta, atlas_meta)
+        obj_meta = self.ztf.update_object_meta(obj_meta, ztf_meta)
+        obj_meta = self.asas_sn.update_object_meta(obj_meta, asas_sn_meta)
+        # Collate lightcurves and add peak mag measurements to schema
+        lc_df = pd.concat([atlas_lc, ztf_lc, asas_sn_lc])
+        if len(lc_df) > 0:
+            # Sometimes we get bad negative mag/limit values (make positive when over 10 for sanity)
+            lc_df['mag'] = lc_df['mag'].apply(lambda val: abs(val) if abs(val) > 10 else val)
+            lc_df['limit'] = lc_df['limit'].apply(lambda val: abs(val) if abs(val) > 10 else val)
+
+        # Cut on time (1 month before discovery, 6 months after)
+        disc_mjd = Time(obj_meta["discovery_date"][0]["value"]).mjd
+        if len(lc_df) > 0:
+            lc_df = lc_df[((disc_mjd - lc_df["mjd"]) <= self.config['tns']['obj_prior_days'])
+                          & ((lc_df["mjd"] - disc_mjd) <= self.config['tns']['obj_active_days'])]
+        # Add peak magnitudes to meta
+        status, obj_meta = append_dynamic_values(obj_meta, lc_df)
+        status.update({"obj_name": obj_name})
+        self.logger.info(status, extra=status)
+        obj_meta = clean_meta(obj_meta)
+        # Convert to json for submission
+        obj_lc = json.loads(lc_df.to_json(orient="records"))
+
+        # Now run a quick comparison of the initial metadata to new metadata for updates
+        if init_meta is not None:            # Check to see which fields have been updated
+            diff = deepdiff.DeepDiff(init_meta, obj_meta, ignore_order=True, view='tree')
+            # We only care about the following fields
+            relevant_fields = ['identifiers', 'object_type', 'host_name', 'redshift', 'latest_detection']
+            update_meta = {field: [] for field in relevant_fields}
+            if 'values_changed' in diff.keys():
+                for field in diff['values_changed']:
+                    field_name = field.get_root_key()
+                    if field_name in relevant_fields:
+                        update_meta[field_name].append(obj_meta[field_name])
+            if 'iterable_item_added' in diff.keys():
+                for field in diff['iterable_item_added']:
+                    field_name = field.get_root_key()
+                    if field_name in relevant_fields:
+                        update_meta[field_name].append(obj_meta[field_name])
+            if 'dictionary_item_added' in diff.keys():
+                for field in diff['dictionary_item_added']:
+                    field_name = field.get_root_key()
+                    if field_name in relevant_fields:
+                        update_meta[field_name] += obj_meta[field_name]
+            # Remove blank updates
+            update_meta = {field: value for field, value in update_meta.items() if value}
+            update_meta |= {"status": "updated_entry", "obj_name": obj_name}
+
+        else:
+            diff = None
+            update_meta = obj_meta
+            update_meta['status'] = "new_entry"
+
+        return obj_meta, init_meta, update_meta, diff
+
     def upsert_object(self, obj_name, obj_meta, obj_lc):
         """
         Insert a TarXiv TNS object into the database.
