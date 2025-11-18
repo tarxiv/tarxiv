@@ -28,15 +28,16 @@ def append_dynamic_values(obj_meta, obj_lc_df):
     peak_mags = []
     recent_dets = []
     recent_nondets = []
-    recent_changes = []
     status = {"status": "appending dynamic values"}
     try:
         # Get derived mag information by filter
         filter_df = obj_lc_df.groupby("filter")
         for filter_name, filter_grp_df in filter_df:
-            if len(filter_grp_df[filter_grp_df["detection"] == 1]) > 0:
+            detections = filter_grp_df[filter_grp_df["detection"] == 1]
+            non_detections = filter_grp_df[filter_grp_df["detection"] == 0]
+            if len(detections) > 0:
                 # Peak mag info
-                peak_row = filter_grp_df.loc[filter_grp_df[filter_grp_df["detection"] == 1]["mag"].idxmin()]
+                peak_row = detections.loc[filter_grp_df["mag"].idxmin()]
                 peak_mag = {
                     "filter": filter_name,
                     "value": peak_row["mag"],
@@ -44,30 +45,33 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                     "source": peak_row["survey"],
                 }
                 peak_mags.append(peak_mag)
-                # Recent detection info
-                det_row = filter_grp_df.loc[filter_grp_df[filter_grp_df["detection"] == 1]["mjd"].idxmax()]
+
+                # Recent detections
+                # For mag_rate first get most recent non detection if one exists
+                if len(non_detections) > 0:
+                    earliest_det = detections.loc[detections["mjd"].idxmin()]
+                    latest_non_det = non_detections[non_detections["mjd"] <= earliest_det["mjd"]].max()
+                    # Most recent non-detection irrelavent if not deeper than first detection
+                    if latest_non_det["mag"] >= earliest_det["mag"]:
+                        detections = pd.concat([detections, latest_non_det])
+                # Now sort and get the rate
+                sorted_detections = detections.sort_values("mjd")
+                # Negative because reasons
+                sorted_detections["mag_rate"] = -(sorted_detections["mag"].diff() / sorted_detections["mjd"].diff())
+                recent_row = sorted_detections.loc[sorted_detections["mjd"].idxmax()]
+
                 recent_det = {
                     "filter": filter_name,
-                    "value": det_row["mag"],
-                    "date": Time(det_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
-                    "source": det_row["survey"],
+                    "value": recent_row["mag"],
+                    "mag_rate": recent_row["mag_rate"],
+                    "date": Time(recent_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+                    "source": recent_row["survey"],
                 }
                 recent_dets.append(recent_det)
-                # Get recent change
-                sorted_grp_df = filter_grp_df.sort_values(by="mjd")
-                sorted_grp_df["change"] = sorted_grp_df["mag"].diff()
-                sorted_grp_df["change"] = np.where(sorted_grp_df["change"] < 0, "increasing", "fading")
-                recent_row = sorted_grp_df.loc[sorted_grp_df["mjd"].idxmax()]
-                recent_change = {
-                    "filter": filter_name,
-                    "value": recent_row["change"],
-                    "date": Time(recent_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
-                    "source": recent_row["survey"]
-                }
-                recent_changes.append(recent_change)
-            if len(filter_grp_df[filter_grp_df["detection"] == 0]) > 0:
+
+            if len(non_detections) > 0:
                 # Recent non-detection info
-                nondet_row = filter_grp_df.loc[filter_grp_df[filter_grp_df["detection"] == 0]["mjd"].idxmax()]
+                nondet_row = filter_grp_df.loc[non_detections["mjd"].idxmax()]
                 recent_nondet = {
                     "filter": filter_name,
                     "value": nondet_row["limit"],
@@ -87,7 +91,6 @@ def append_dynamic_values(obj_meta, obj_lc_df):
     obj_meta["peak_mag"] = peak_mags
     obj_meta["latest_detection"] = recent_dets
     obj_meta["latest_nondetection"] = recent_nondets
-    obj_meta["latest_change"] = recent_changes
     return status, obj_meta
 
 
