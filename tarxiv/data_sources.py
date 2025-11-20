@@ -53,7 +53,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                     # Get all the non detections before our earliest detection with deeper limit
                     valid_non_dets = non_detections[
                         (non_detections["mjd"] <= earliest_det["mjd"])
-                        & (non_detections["limit"] >= detections["mjd"])
+                        & (non_detections["limit"] >= detections["mag"])
                     ]
                     # Append to data frame if we have any
                     if len(valid_non_dets) > 0:
