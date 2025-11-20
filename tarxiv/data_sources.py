@@ -50,10 +50,16 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 # For mag_rate first get most recent non detection if one exists
                 if len(non_detections) > 0:
                     earliest_det = detections.loc[detections["mjd"].idxmin()]
-                    latest_non_det = non_detections[non_detections["mjd"] <= earliest_det["mjd"]].max()
-                    # Most recent non-detection irrelavent if not deeper than first detection
-                    if latest_non_det["mag"] >= earliest_det["mag"]:
-                        detections = pd.concat([detections, latest_non_det])
+                    # Get all the non detections before our earliest detection with deeper limit
+                    valid_non_dets = non_detections[
+                        (non_detections["mjd"] <= earliest_det["mjd"])
+                        & (non_detections["limit"] >= detections["mjd"])
+                    ]
+                    # Append to data frame if we have any
+                    if len(valid_non_dets) > 0:
+                        recent_non_dets = valid_non_dets.loc[valid_non_dets["mjd"].idxmax()]
+                        detections = pd.concat([detections, recent_non_dets])
+
                 # Now sort and get the rate
                 sorted_detections = detections.sort_values("mjd")
                 # Negative because reasons
