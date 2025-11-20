@@ -59,8 +59,10 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                     # Append to data frame if we have any
                     if len(valid_non_dets) > 0:
                         recent_non_det = valid_non_dets.loc[valid_non_dets["mjd"].idxmax()]
-                        recent_non_det["mag"] = recent_non_det["limit"]
+                        recent_non_det = recent_non_det.rename(columns={"mag": "temp", "limit": "mag"})
+                        recent_non_det = recent_non_det.rename(columns={"temp": "limit"})
                         detections = pd.concat([detections, recent_non_det])
+                        print(detections)
 
                 # Now sort and get the rate
                 sorted_detections = detections.sort_values("mjd")
