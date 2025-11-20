@@ -58,6 +58,8 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 sorted_detections = detections.sort_values("mjd")
                 # Negative because reasons
                 sorted_detections["mag_rate"] = -(sorted_detections["mag"].diff() / sorted_detections["mjd"].diff())
+                # Replace nan
+                sorted_detections['mag_rate'].replace(np.nan, None, inplace=True)
                 recent_row = sorted_detections.loc[sorted_detections["mjd"].idxmax()]
 
                 recent_det = {
