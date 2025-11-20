@@ -49,9 +49,11 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 # Recent detections
                 # For mag_rate first get most recent non detection if one exists
                 if len(non_detections) > 0:
+                    # Reset detection index
+                    detections = detections.reset_index(drop=True)
                     earliest_det = detections.loc[detections["mjd"].idxmin()]
                     # Get all the non detections before our earliest detection with deeper limit
-                    non_det_copy = non_detections.copy(deep=True)
+                    non_det_copy = non_detections.copy(deep=True).reset_index(drop=True)
                     non_det_copy["mag"] = non_det_copy["limit"]
                     valid_non_dets = non_det_copy[
                         (non_det_copy["mjd"] <= earliest_det["mjd"])
