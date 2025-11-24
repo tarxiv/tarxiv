@@ -2,10 +2,9 @@ name: Docker Workflows
 
 on:
   push:
-    branches:
-      - main
-      - jl/*
+    branches: ['main']
   pull_request:
+    branches: ['main']
 
 permissions:
   contents: read
@@ -65,7 +64,7 @@ jobs:
           chmod 777 .data/elastic .data/couchbase .data/redis .data/logs
           docker compose run setup_elasticsearch
           docker compose up -d elasticsearch logstash kibana couchbase
-          sleep 45
+          sleep 60
           docker ps -a
       - name: Load test data
         run: |
