@@ -139,6 +139,7 @@ services:
       - couchbase
     networks:
       - tarxiv_net
+    restart: unless-stopped
 
   tarxiv-dashboard:
     profiles:
@@ -169,6 +170,7 @@ services:
       - tarxiv-api
     networks:
       - tarxiv_net
+    restart: unless-stopped
 
 networks:
   tarxiv_net:
