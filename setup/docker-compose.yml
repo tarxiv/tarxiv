@@ -142,7 +142,7 @@ services:
   tarxiv-dashboard:
     profiles:
       - tarxiv
-    image: local/tarxiv:latest
+    image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:latest
     command: uv run /app/bin/run_dashboard.py --host 0.0.0.0 --port 8050 --debug
     container_name: tarxiv-dashboard
     volumes:
