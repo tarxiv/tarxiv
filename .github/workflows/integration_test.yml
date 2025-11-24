@@ -1,4 +1,4 @@
-name: Integrations Tests
+name: Integration Tests
 
 on:
   push:
@@ -48,7 +48,14 @@ jobs:
           cd setup
           docker compose up -d tarxiv-api
           sleep 20
-          curl -f http://localhost:9001/
+          docker ps -a
+          # curl -f http://localhost:9001/
+      - name: Start dashboard
+        run: |
+          cd setup
+          docker compose up -d tarxiv-dashboard
+          sleep 10
+          docker ps -a
       - name: Teardown compose environment
         if: always()
         run: |

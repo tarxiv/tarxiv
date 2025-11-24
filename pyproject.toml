@@ -16,6 +16,7 @@ license = { text = "BSD-3" }
 dependencies = [
     "atlasapiclient",
     "hop-client",
+    "deepdiff",
     "skypatrol",
     "astropy",
     "requests",

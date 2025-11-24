@@ -2,8 +2,8 @@
 # Must be renamed as config.yml!
 
 # General
-log_dir: "/tmp/tarxiv/logs"
-logstash_host: logstash
+log_dir: "/data/tarxiv/logs"
+logstash_host: localhost
 logstash_port: 5046
 
 # hosting information

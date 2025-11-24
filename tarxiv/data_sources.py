@@ -304,13 +304,10 @@ class ZTF(Survey):
 
             # Metadata on each line of photometry, we only take first row (d prefix are non-phot)
             result_meta = result.json()[0]
-            meta = {
-                "identifiers": [{"name": ztf_name, "source": "ztf"}],
-                "ra_deg": [{"value": result_meta["i:ra"], "source": "ztf"}],
-                "dec_deg": [{"value": result_meta["i:dec"], "source": "ztf"}],
-            }
+            meta = {"identifiers": [{"name": ztf_name, "source": "ztf"}],
+                    "ra_deg": [{"value": result_meta["i:ra"], "source": "ztf"}],
+                    "dec_deg": [{"value": result_meta["i:dec"], "source": "ztf"}], "host_name": []}
 
-            meta["host_name"] = []
             if (
                 "d:mangrove_2MASS_name" in result_meta.keys()
                 and result_meta["d:mangrove_2MASS_name"] != "None"

@@ -123,6 +123,47 @@ class TarxivDB(TarxivModule):
 
         return result
 
+    def cone_search(self, ra_deg, dec_deg, radius_arcsec):
+        """Find objects within radius of coordinates using spherical geometry.
+
+        :param ra_deg: Right Ascension in degrees; float
+        :param dec_deg: Declination in degrees; float
+        :param radius_arcsec: Search radius in arcseconds; float
+        :return: List of matching objects with obj_name, ra, dec, distance_deg
+        """
+        # Convert arcseconds to degrees
+        radius_deg = radius_arcsec / 3600.0
+
+        # TODO: (JL) This is a very loose first approximation, feedback would be 
+        # appreciated. Also not sure how efficient this is in couchbase.
+        #
+        # SQL++ query using haversine formula for spherical distance
+        # Distance = arccos(sin(dec1)*sin(dec2) + cos(dec1)*cos(dec2)*cos(ra1-ra2))
+        # Note: 'value' is a reserved keyword in SQL++ so we escape it with backticks
+        # Using LET to compute distance, then filter with WHERE
+        query = f"""
+            SELECT meta().id as obj_name,
+                   obj.ra_deg[0].`value` as ra,
+                   obj.dec_deg[0].`value` as dec,
+                   distance_deg
+            FROM tarxiv.{self.scope}.objects obj
+            LET distance_deg = ACOS(
+                       SIN(RADIANS({dec_deg})) * SIN(RADIANS(obj.dec_deg[0].`value`)) +
+                       COS(RADIANS({dec_deg})) * COS(RADIANS(obj.dec_deg[0].`value`)) *
+                       COS(RADIANS({ra_deg} - obj.ra_deg[0].`value`))
+                   ) * 180 / PI()
+            WHERE obj.ra_deg IS NOT NULL
+              AND obj.dec_deg IS NOT NULL
+              AND distance_deg <= {radius_deg}
+            ORDER BY distance_deg
+        """
+
+        status = {"status": "cone_search", "ra": ra_deg, "dec": dec_deg, "radius_arcsec": radius_arcsec}
+        self.logger.info(status, extra=status)
+
+        result = self.cluster.query(query)
+        return list(result)
+
     def close(self):
         """Close connection to couchbase
 
