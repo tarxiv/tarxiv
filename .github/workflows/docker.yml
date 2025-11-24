@@ -8,52 +8,53 @@ on:
   pull_request:
 
 jobs:
-  image-build:
-    runs-on: ubuntu-latest
+  # image-build:
+  #   runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      # - name: "Set up Python"
-      #   uses: actions/setup-python@v5
-      #   with:
-      #     python-version-file: "pyproject.toml"
-      # - name: Install uv
-      #   uses: astral-sh/setup-uv@v6
-      #   with:
-      #     enable-cache: true
-      # - name: Install the project
-      #   run: uv sync --locked --all-extras --dev
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #     # - name: "Set up Python"
+  #     #   uses: actions/setup-python@v5
+  #     #   with:
+  #     #     python-version-file: "pyproject.toml"
+  #     # - name: Install uv
+  #     #   uses: astral-sh/setup-uv@v6
+  #     #   with:
+  #     #     enable-cache: true
+  #     # - name: Install the project
+  #     #   run: uv sync --locked --all-extras --dev
 
-      # - name: Build tarxiv base image
-      #   run: |
-      #     cd setup
-      #     docker compose build tarxiv-api
+  #     # - name: Build tarxiv base image
+  #     #   run: |
+  #     #     cd setup
+  #     #     docker compose build tarxiv-api
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v1
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v1
+  #     - name: Log in to GitHub Container Registry
+  #       uses: docker/login-action@v1
+  #       with:
+  #         registry: ghcr.io
+  #         username: ${{ github.actor }}
+  #         password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/tarxiv:${{ github.sha }} 
-            ghcr.io/${{ github.repository_owner }}/tarxiv:latest
+  #     - name: Build and push Docker image
+  #       uses: docker/build-push-action@v6
+  #       with:
+  #         context: .
+  #         file: Dockerfile
+  #         push: true
+  #         tags: |
+  #           ghcr.io/${{ github.repository_owner }}/tarxiv:${{ github.sha }} 
+  #           ghcr.io/${{ github.repository_owner }}/tarxiv:latest
 
   compose-integration-tests:
     runs-on: ubuntu-latest
-    needs: image-build
+    # needs: image-build
     env:
       TARXIV_PORT: 9001
+      TARXIV_IMAGE_SOURCE: local
     steps:
       - uses: actions/checkout@v4
       - name: "Set up Python"
