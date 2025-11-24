@@ -113,7 +113,7 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    image: local/tarxiv:latest
+    image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:latest
     container_name: tarxiv-api
     command: uv run /app/bin/start-api
     volumes:
@@ -133,6 +133,7 @@ services:
       TARXIV_ELASTIC_HOST: elasticsearch
       TARXIV_ELASTIC_PORT: 9200
       TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
+      TARXIV_IMAGE_SOURCE: ${TARXIV_IMAGE_SOURCE:-local}
     depends_on:
       - couchbase
     networks:
