@@ -115,7 +115,7 @@ services:
       dockerfile: Dockerfile
     image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:${TARXIV_IMAGE_TAG:-latest}
     container_name: tarxiv-api
-    command: uv run /app/bin/start-api
+    command: uv run /app/bin/start-api --port ${TARXIV_PORT}
     volumes:
       - ../bin:/app/bin:Z
       - ../tarxiv:/app/tarxiv:Z
@@ -135,8 +135,6 @@ services:
       TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
       TARXIV_IMAGE_SOURCE: ${TARXIV_IMAGE_SOURCE:-local}
       TARXIV_IMAGE_TAG: ${TARXIV_IMAGE_TAG:-latest}
-    depends_on:
-      - couchbase
     networks:
       - tarxiv_net
     restart: unless-stopped
@@ -145,7 +143,7 @@ services:
     profiles:
       - tarxiv
     image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:${TARXIV_IMAGE_TAG:-latest}
-    command: uv run /app/bin/run_dashboard.py --host 0.0.0.0 --port 8050 --debug
+    command: uv run /app/bin/run_dashboard.py --host 0.0.0.0 --port ${TARXIV_DASHBOARD_PORT} --debug
     container_name: tarxiv-dashboard
     volumes:
       - ../bin:/app/bin:Z
@@ -166,8 +164,6 @@ services:
       TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
       TARXIV_IMAGE_TAG: ${TARXIV_IMAGE_TAG:-latest}
       TARXIV_IMAGE_SOURCE: ${TARXIV_IMAGE_SOURCE:-local}
-    depends_on:
-      - tarxiv-api
     networks:
       - tarxiv_net
     restart: unless-stopped
