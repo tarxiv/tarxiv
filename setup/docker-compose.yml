@@ -113,7 +113,7 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:latest
+    image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:${TARXIV_IMAGE_TAG:-latest}
     container_name: tarxiv-api
     command: uv run /app/bin/start-api
     volumes:
@@ -134,6 +134,7 @@ services:
       TARXIV_ELASTIC_PORT: 9200
       TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
       TARXIV_IMAGE_SOURCE: ${TARXIV_IMAGE_SOURCE:-local}
+      TARXIV_IMAGE_TAG: ${TARXIV_IMAGE_TAG:-latest}
     depends_on:
       - couchbase
     networks:
@@ -142,7 +143,7 @@ services:
   tarxiv-dashboard:
     profiles:
       - tarxiv
-    image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:latest
+    image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:${TARXIV_IMAGE_TAG:-latest}
     command: uv run /app/bin/run_dashboard.py --host 0.0.0.0 --port 8050 --debug
     container_name: tarxiv-dashboard
     volumes:
@@ -162,6 +163,8 @@ services:
       TARXIV_ELASTIC_HOST: elasticsearch
       TARXIV_ELASTIC_PORT: 9200
       TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
+      TARXIV_IMAGE_TAG: ${TARXIV_IMAGE_TAG:-latest}
+      TARXIV_IMAGE_SOURCE: ${TARXIV_IMAGE_SOURCE:-local}
     depends_on:
       - tarxiv-api
     networks:
