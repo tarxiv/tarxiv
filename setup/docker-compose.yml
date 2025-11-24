@@ -122,7 +122,7 @@ services:
       - ../aux/config.yml:/app/aux/config.yml:Z
       - ../examples:/app/examples:Z
       - ../scripts:/app/scripts:Z
-      - .data/logs:/tmp/tarxiv/logs:rw,z
+      - ${TARXIV_HOST_LOG_DIR:-.data/logs}:/data/tarxiv/logs:rw,z
     ports:
       - ${TARXIV_PORT}:${TARXIV_PORT}
     environment:
@@ -144,13 +144,14 @@ services:
       - tarxiv
     image: local/tarxiv:latest
     command: uv run /app/bin/run_dashboard.py --host 0.0.0.0 --port 8050 --debug
+    container_name: tarxiv-dashboard
     volumes:
       - ../bin:/app/bin:Z
       - ../tarxiv:/app/tarxiv:Z
       - ../aux/config.yml:/app/aux/config.yml:Z
       - ../examples:/app/examples:Z
       - ../scripts:/app/scripts:Z
-      - .data/logs:/tmp/tarxiv/logs:rw,z
+      - ${TARXIV_HOST_LOG_DIR:-.data/logs}:/data/tarxiv/logs:rw,z
     ports:
       - 8050:8050
     environment:
