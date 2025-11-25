@@ -115,7 +115,7 @@ services:
       dockerfile: Dockerfile
     image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:${TARXIV_IMAGE_TAG:-latest}
     container_name: tarxiv-api
-    command: uv run /app/bin/start-api --port ${TARXIV_PORT}
+    command: uv run /app/bin/start-api
     volumes:
       - ../bin:/app/bin:Z
       - ../tarxiv:/app/tarxiv:Z
