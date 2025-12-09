@@ -133,10 +133,9 @@ services:
       TARXIV_ELASTIC_HOST: elasticsearch
       TARXIV_ELASTIC_PORT: 9200
       TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
-    depends_on:
-      - couchbase
     networks:
       - tarxiv_net
+    restart: unless-stopped
 
   tarxiv-dashboard:
     profiles:
@@ -164,6 +163,7 @@ services:
       - tarxiv-api
     networks:
       - tarxiv_net
+    restart: unless-stopped
 
 networks:
   tarxiv_net:
