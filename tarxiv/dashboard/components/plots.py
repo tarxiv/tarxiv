@@ -12,7 +12,8 @@ def create_lightcurve_plot(lc_data, object_id, logger=None):
         object_id: Object identifier
         logger: Optional logger instance
 
-    Returns:
+    Returns
+    -------
         dcc.Graph or None if no valid data
     """
     if not lc_data:
@@ -125,7 +126,8 @@ def create_sky_plot(results, search_ra, search_dec):
         search_ra: Search position RA (degrees, 0-360)
         search_dec: Search position Dec (degrees, -90 to 90)
 
-    Returns:
+    Returns
+    -------
         dcc.Graph
     """
     # Convert RA from [0, 360] to [-180, 180] for proper spherical projection
