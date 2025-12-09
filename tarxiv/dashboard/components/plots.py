@@ -118,53 +118,103 @@ def create_lightcurve_plot(lc_data, object_id, logger=None):
 
 
 def create_sky_plot(results, search_ra, search_dec):
-    """Create a sky position plot for cone search results.
+    """Create a sky position plot for cone search results with spherical projection.
 
     Args:
         results: List of objects with ra, dec, obj_name
-        search_ra: Search position RA
-        search_dec: Search position Dec
+        search_ra: Search position RA (degrees, 0-360)
+        search_dec: Search position Dec (degrees, -90 to 90)
 
     Returns:
         dcc.Graph
     """
+    # Convert RA from [0, 360] to [-180, 180] for proper spherical projection
+    # This centers RA=0 at the middle of the map
+    def convert_ra(ra):
+        """Convert RA to longitude format for plotting."""
+        if ra is None:
+            return None
+        # Shift RA so it's centered properly: 0-360 -> -180 to 180
+        lon = ra if ra <= 180 else ra - 360
+        return lon
+
+    search_lon = convert_ra(search_ra)
+
     fig = go.Figure()
 
-    # Add search position
-    fig.add_trace(
-        go.Scatter(
-            x=[search_ra],
-            y=[search_dec],
-            mode="markers",
-            marker=dict(size=15, color="red", symbol="x"),
-            name="Search Position",
-        )
-    )
-
-    # Add found objects
+    # Add found objects first (so search position appears on top)
     if results:
-        ras = [obj["ra"] for obj in results if obj["ra"] is not None]
-        decs = [obj["dec"] for obj in results if obj["dec"] is not None]
+        lons = [convert_ra(obj["ra"]) for obj in results if obj["ra"] is not None]
+        lats = [obj["dec"] for obj in results if obj["dec"] is not None]
         names = [obj["obj_name"] for obj in results]
 
         fig.add_trace(
-            go.Scatter(
-                x=ras,
-                y=decs,
+            go.Scattergeo(
+                lon=lons,
+                lat=lats,
                 mode="markers",
-                marker=dict(size=10, color="blue"),
+                marker=dict(size=8, color="blue", line=dict(width=0.5, color='white')),
                 text=names,
+                hovertemplate="<b>%{text}</b><br>RA: %{lon:.4f}°<br>Dec: %{lat:.4f}°<extra></extra>",
                 name="Objects",
             )
         )
 
+    # Add search position on top
+    fig.add_trace(
+        go.Scattergeo(
+            lon=[search_lon],
+            lat=[search_dec],
+            mode="markers",
+            marker=dict(size=15, color="red", symbol="x", line=dict(width=2, color='darkred')),
+            hovertemplate="<b>Search Position</b><br>RA: %{lon:.4f}°<br>Dec: %{lat:.4f}°<extra></extra>",
+            name="Search Position",
+        )
+    )
+
+    # Use Aitoff projection (common in astronomy) centered on the search position
+    fig.update_geos(
+        projection_type="aitoff",
+        showcountries=False,
+        showcoastlines=False,
+        showland=False,
+        showocean=False,
+        showlakes=False,
+        showrivers=False,
+        bgcolor="rgba(240, 240, 255, 0.3)",
+        projection_rotation=dict(
+            lon=search_lon if search_lon is not None else 0,
+            lat=search_dec if search_dec is not None else 0,
+            roll=0
+        ),
+        lataxis=dict(
+            showgrid=True,
+            gridcolor="lightgray",
+            gridwidth=0.5,
+        ),
+        lonaxis=dict(
+            showgrid=True,
+            gridcolor="lightgray",
+            gridwidth=0.5,
+        ),
+    )
+
     fig.update_layout(
-        title="Sky Position Plot",
-        xaxis_title="RA (degrees)",
-        yaxis_title="Dec (degrees)",
-        hovermode="closest",
-        height=500,
-        template="plotly_white",
+        title=dict(
+            text=f"Sky Map (RA: {search_ra:.4f}°, Dec: {search_dec:.4f}°)",
+            x=0.5,
+            xanchor="center"
+        ),
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.15,
+            xanchor="center",
+            x=0.5
+        ),
+        height=600,
+        margin=dict(l=0, r=0, t=50, b=0),
     )
 
     return dcc.Graph(figure=fig)
