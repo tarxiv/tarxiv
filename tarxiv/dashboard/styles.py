@@ -79,6 +79,9 @@ FILTER_COLORS = {
     "c": "cyan",
     "o": "orange",
     "w": "teal",
+    # ASAS-SN filters
+    "V": "blue",
+    "g_ASAS-SN": "green",
     # Other common filters
     "u": "violet",
     "r": "red",

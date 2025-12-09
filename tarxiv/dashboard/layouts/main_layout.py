@@ -10,7 +10,8 @@ from ..components import (
 def create_layout():
     """Create the main dashboard layout.
 
-    Returns:
+    Returns
+    -------
         html.Div containing the complete dashboard layout
     """
     return html.Div(
