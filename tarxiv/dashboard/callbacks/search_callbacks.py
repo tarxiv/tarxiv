@@ -1,6 +1,5 @@
 """Search callbacks for the dashboard."""
-from dash import html, Output, Input, State, ALL, MATCH, ctx, no_update
-import dash
+from dash import html, Output, Input, State, ALL, ctx, no_update
 from ..components import format_object_metadata, format_cone_search_results
 
 
@@ -139,11 +138,10 @@ def create_message_banner(message, message_type="info"):
         message: Message text
         message_type: "success", "error", "warning", or "info"
 
-    Returns:
+    Returns
+    -------
         html.Div with styled message
     """
-    from ..styles import COLORS
-
     color_map = {
         "success": {"bg": "#d4edda", "border": "#c3e6cb", "text": "#155724"},
         "error": {"bg": "#f8d7da", "border": "#f5c6cb", "text": "#721c24"},
@@ -176,7 +174,8 @@ def get_lightcurve_data(txv_db, object_id, logger):
         object_id: Object identifier
         logger: Logger instance
 
-    Returns:
+    Returns
+    -------
         Lightcurve data or None
     """
     try:

@@ -14,7 +14,8 @@ def format_object_metadata(object_id, meta, lc_data, logger=None):
         lc_data: Lightcurve data
         logger: Optional logger instance
 
-    Returns:
+    Returns
+    -------
         html.Div containing formatted cards
     """
     # Create a summary card
@@ -105,7 +106,8 @@ def format_cone_search_results(results, search_ra, search_dec, txv_db=None, logg
         txv_db: Database instance for fetching object details (optional)
         logger: Logger instance (optional)
 
-    Returns:
+    Returns
+    -------
         html.Div containing formatted results
     """
     # Create sky plot

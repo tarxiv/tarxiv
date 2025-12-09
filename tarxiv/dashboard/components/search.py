@@ -6,7 +6,8 @@ from ..styles import SECTION_STYLE, BUTTON_STYLE, INPUT_STYLE, COLORS
 def create_unified_search():
     """Create a unified search interface with tabs.
 
-    Returns:
+    Returns
+    -------
         html.Div containing tabbed search UI
     """
     return html.Div(
@@ -139,7 +140,8 @@ def create_unified_search():
 def create_search_by_id():
     """Create the search by ID component.
 
-    Returns:
+    Returns
+    -------
         html.Div containing search by ID UI
     """
     return html.Div(
@@ -173,7 +175,8 @@ def create_search_by_id():
 def create_cone_search():
     """Create the cone search component.
 
-    Returns:
+    Returns
+    -------
         html.Div containing cone search UI
     """
     return html.Div(
@@ -267,7 +270,8 @@ def create_cone_search():
 def create_results_section():
     """Create the results display section.
 
-    Returns:
+    Returns
+    -------
         html.Div for displaying search results
     """
     return html.Div(

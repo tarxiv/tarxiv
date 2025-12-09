@@ -134,7 +134,7 @@ class TarxivDB(TarxivModule):
         # Convert arcseconds to degrees
         radius_deg = radius_arcsec / 3600.0
 
-        # TODO: (JL) This is a very loose first approximation, feedback would be 
+        # TODO: (JL) This is a very loose first approximation, feedback would be
         # appreciated. Also not sure how efficient this is in couchbase.
         #
         # SQL++ query using haversine formula for spherical distance
