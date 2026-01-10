@@ -49,7 +49,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 if survey == "survey":
                     detections["mag_calc"] = detections.groupby('night')['mag'].transform("median")
                 else:
-                    detections["mag_calc"] = detections["mag"]
+                    detections["mag_calc"] = detections["mag"].copy()
 
 
                 # Recent detections
