@@ -73,8 +73,9 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                         recent_non_det = recent_non_det.rename({"mag": "temp", "limit": "mag"})
                         recent_non_det = recent_non_det.rename({"temp": "limit"})
                         recent_non_det = recent_non_det.to_frame().T
-                        print(recent_non_det)
-                        detections = pd.concat([detections, recent_non_det], ignore_index=True)
+                        with warnings.catch_warnings():
+                            warnings.simplefilter(action='ignore', category=FutureWarning)
+                            detections = pd.concat([detections, recent_non_det], ignore_index=True)
 
                 # Remove duplcate MJDs if exist (avoid divide by zero)
                 detections_non_dup = detections.drop_duplicates(subset=["mjd"], keep="first")
