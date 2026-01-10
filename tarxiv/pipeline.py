@@ -51,7 +51,7 @@ class TNSPipeline(TarxivModule):
         tns_meta, _ = self.tns.get_object(obj_name)
         # Return empty dicts
         if tns_meta is None:
-            return {}, {}
+            return {}, {}, {}
         ra_deg, dec_deg = tns_meta["ra_deg"]["value"], tns_meta["dec_deg"]["value"]
         # Now get meta and lightcurves from the surveys
         atlas_meta, atlas_lc = self.atlas.get_object(obj_name, ra_deg, dec_deg)
