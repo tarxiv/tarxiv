@@ -68,8 +68,12 @@ class TarxivDB(TarxivModule):
                 f"  meta().id as obj_name               " \
                 f"FROM tarxiv.{self.scope}.objects      " \
                 f"WHERE                                 " \
-                f" ANY `disc_date` IN `discovery_date`  "\
-                f"  SATISFIES DATE_DIFF_STR(NOW_UTC(), `disc_date`.`value`, 'day') < {active_days} END"
+                f"  ANY `disc_date` IN `discovery_date`                                                 " \
+                f"   SATISFIES DATE_DIFF_STR(NOW_UTC(), `disc_date`.`value`, 'day') < {active_days} END " \
+                f" OR                                                                                   " \
+                f"  ANY `rep_date` IN `reporting_date`                                                  " \
+                f"   SATISFIES DATE_DIFF_STR(NOW_UTC(), `rep_date`.`value`, 'day') < {active_days} END  "
+
         result = self.cluster.query(query)
         return [r["obj_name"] for r in result]
 
