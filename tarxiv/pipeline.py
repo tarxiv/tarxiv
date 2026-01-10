@@ -86,7 +86,8 @@ class TNSPipeline(TarxivModule):
         # Add peak magnitudes to meta
         status, obj_meta = append_dynamic_values(obj_meta, lc_df)
         # Drop night column from lc, was only necessary for mag_rates
-        lc_df.drop("night", axis=1, inplace=True)
+        if len(lc_df) != 0:
+            lc_df.drop("night", axis=1, inplace=True)
         status.update({"obj_name": obj_name})
         self.logger.info(status, extra=status)
         obj_meta = clean_meta(obj_meta)
