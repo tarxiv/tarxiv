@@ -72,13 +72,21 @@ class TNSPipeline(TarxivModule):
             lc_df['mag'] = lc_df['mag'].apply(lambda val: abs(val) if abs(val) > 10 else val)
             lc_df['limit'] = lc_df['limit'].apply(lambda val: abs(val) if abs(val) > 10 else val)
 
-        # Cut on time (1 month before discovery, 6 months after)
-        disc_mjd = Time(obj_meta["discovery_date"][0]["value"]).mjd
-        if len(lc_df) > 0:
-            lc_df = lc_df[((disc_mjd - lc_df["mjd"]) <= self.config['tns']['obj_prior_days'])
-                          & ((lc_df["mjd"] - disc_mjd) <= self.config['tns']['obj_active_days'])]
+            # Cut on time (1 month before DISCOVERY, 6 months after)
+            disc_mjd = Time(obj_meta["discovery_date"][0]["value"]).mjd
+            # IF we have a reporting date, cut around that as well, IF NOT just sub in discovery for no effect
+            rep_mjd = Time(obj_meta["reporting_date"][0]["value"]).mjd if "reporting_date" in obj_meta.keys() \
+                else Time(obj_meta["discovery_date"][0]["value"]).mjd
+            lc_df = lc_df[(((disc_mjd - lc_df["mjd"]) <= self.config['tns']['obj_prior_days'])
+                                & ((lc_df["mjd"] - disc_mjd) <= self.config['tns']['obj_active_days']))
+                               |
+                               (((rep_mjd - lc_df["mjd"]) <= self.config['tns']['obj_prior_days'])
+                                & ((lc_df["mjd"] - rep_mjd) <= self.config['tns']['obj_active_days']))
+                              ]
         # Add peak magnitudes to meta
         status, obj_meta = append_dynamic_values(obj_meta, lc_df)
+        # Drop night column from lc, was only necessary for mag_rates
+        lc_df.drop("night", axis=1, inplace=True)
         status.update({"obj_name": obj_name})
         self.logger.info(status, extra=status)
         obj_meta = clean_meta(obj_meta)
@@ -155,24 +163,24 @@ class TNSPipeline(TarxivModule):
         # Write to bytesio and convert to pandas
         with zipfile.ZipFile(io.BytesIO(response.content)) as myzip:
             data = myzip.read(name="tns_public_objects.csv")
-        # Get list of TNS names
-        all_obj_names = pd.read_csv(io.BytesIO(data), skiprows=[0])['name'].tolist()
+        # Get list of TNS names and reporting dates
+        tns_df = pd.read_csv(io.BytesIO(data), skiprows=[0])
 
         if not include_existing:
             # Only ingest TNS objects NOT already in the database
             db_obj_names = self.db.get_all_objects()
-            obj_names = list(set(all_obj_names) - set(db_obj_names))
-        else:
-            # Process all TNS objects
-            obj_names = all_obj_names
+            obj_names = list(set(tns_df['name'].tolist()) - set(db_obj_names))
+            tns_df = tns_df[tns_df["name"].isin(obj_names)]
 
-        status = {"status": "processing bulk object list", "n_objs": len(obj_names)}
+        status = {"status": "processing bulk object list", "n_objs": len(tns_df)}
         self.logger.info(status, extra=status)
-        for obj_name in obj_names:
+        for _, row in tns_df.iterrows():
             # Get survey information
-            obj_meta, obj_lc, _ = self.get_object(obj_name)
+            obj_meta, obj_lc, _ = self.get_object(row["name"])
+            # Add reporting date
+            obj_meta["reporting_date"] = [{"value": row["time_received"], "source": "tns"}]
             # Upsert to database
-            self.upsert_object(obj_name, obj_meta, obj_lc)
+            self.upsert_object(row["name"], obj_meta, obj_lc)
 
     def daily_update(self):
         # Get all targets still in "active" window for update

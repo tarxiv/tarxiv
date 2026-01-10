@@ -32,67 +32,74 @@ def append_dynamic_values(obj_meta, obj_lc_df):
     try:
         # Get derived mag information by filter
         filter_df = obj_lc_df.groupby("filter")
-        for filter_name, filter_grp_df in filter_df:
-            detections = filter_grp_df[filter_grp_df["detection"] == 1]
-            non_detections = filter_grp_df[filter_grp_df["detection"] == 0]
-            if len(detections) > 0:
-                # Peak mag info
-                peak_row = detections.loc[filter_grp_df["mag"].idxmin()]
-                peak_mag = {
-                    "filter": filter_name,
-                    "value": peak_row["mag"],
-                    "date": Time(peak_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
-                    "source": peak_row["survey"],
-                }
-                peak_mags.append(peak_mag)
+        for survey, survey_grp_df in filter_df.groupby("survey"):
+            for filter_name, filter_grp_df in survey_grp_df.groupby("filter"):
+                detections = filter_grp_df[filter_grp_df["detection"] == 1]
+                non_detections = filter_grp_df[filter_grp_df["detection"] == 0]
+                if len(detections) > 0:
+                    # Peak mag info
+                    peak_row = detections.loc[filter_grp_df["mag"].idxmin()]
+                    peak_mag = {
+                        "filter": filter_name,
+                        "value": peak_row["mag"],
+                        "date": Time(peak_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+                        "source": peak_row["survey"],
+                    }
+                    peak_mags.append(peak_mag)
 
-                # Recent detections
-                # For mag_rate first get most recent non detection if one exists
+                    # Recent detections
+                    # For mag_rate first get most recent non detection if one exists
+                    if len(non_detections) > 0:
+                        # Reset detection index
+                        earliest_det = detections.loc[detections["mjd"].idxmin()]
+                        # Get all the non detections before our earliest detection with deeper limit
+                        valid_non_dets = non_detections[
+                            (non_detections["mjd"] <= earliest_det["mjd"])
+                            & (non_detections["limit"] >= earliest_det["mag"])
+                        ]
+                        # Append to data frame if we have any
+                        if len(valid_non_dets) > 0:
+                            recent_non_det = valid_non_dets.loc[valid_non_dets["mjd"].idxmax()]
+                            recent_non_det = recent_non_det.rename({"mag": "temp", "limit": "mag"})
+                            recent_non_det = recent_non_det.rename({"temp": "limit"})
+                            recent_non_det = recent_non_det.to_frame().T
+                            detections = pd.concat([detections, recent_non_det], ignore_index=True)
+                            print(detections)
+
+                    # Remove duplcate MJDs if exist (avoid divide by zero)
+                    detections_non_dup = detections.drop_duplicates(subset=["mjd"], keep="first")
+                    # Get median detection value per night(only necessary for ATLAS)
+                    if survey == "atlas":
+                        detections_non_dup = detections_non_dup.groupby('night')['mag'].median().reset_index()
+
+                    # Now sort and get the rate
+                    sorted_detections = detections_non_dup.sort_values("mjd")
+                    # Negative because reasons
+                    sorted_detections["mag_rate"] = -(sorted_detections["mag"].diff() / sorted_detections["mag"].diff())
+                    # Replace nan
+                    sorted_detections["mag_rate"] = sorted_detections["mag_rate"].replace(np.nan, None)
+                    recent_row = sorted_detections.loc[sorted_detections["mjd"].idxmax()]
+
+                    recent_det = {
+                        "filter": filter_name,
+                        "value": recent_row["mag"],
+                        "mag_rate": recent_row["mag_rate"],
+                        "date": Time(recent_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+                        "source": recent_row["survey"],
+                    }
+                    recent_dets.append(recent_det)
+
                 if len(non_detections) > 0:
-                    # Reset detection index
-                    earliest_det = detections.loc[detections["mjd"].idxmin()]
-                    # Get all the non detections before our earliest detection with deeper limit
-                    valid_non_dets = non_detections[
-                        (non_detections["mjd"] <= earliest_det["mjd"])
-                        & (non_detections["limit"] >= earliest_det["mag"])
-                    ]
-                    # Append to data frame if we have any
-                    if len(valid_non_dets) > 0:
-                        recent_non_det = valid_non_dets.loc[valid_non_dets["mjd"].idxmax()]
-                        recent_non_det = recent_non_det.rename({"mag": "temp", "limit": "mag"})
-                        recent_non_det = recent_non_det.rename({"temp": "limit"})
-                        recent_non_det = recent_non_det.to_frame().T
-                        detections = pd.concat([detections, recent_non_det], ignore_index=True)
-                        print(detections)
-
-                # Now sort and get the rate
-                sorted_detections = detections.sort_values("mjd")
-                # Negative because reasons
-                sorted_detections["mag_rate"] = -(sorted_detections["mag"].diff() / sorted_detections["mjd"].diff())
-                # Replace nan
-                sorted_detections["mag_rate"] = sorted_detections["mag_rate"].replace(np.nan, None)
-                recent_row = sorted_detections.loc[sorted_detections["mjd"].idxmax()]
-
-                recent_det = {
-                    "filter": filter_name,
-                    "value": recent_row["mag"],
-                    "mag_rate": recent_row["mag_rate"],
-                    "date": Time(recent_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
-                    "source": recent_row["survey"],
-                }
-                recent_dets.append(recent_det)
-
-            if len(non_detections) > 0:
-                # Recent non-detection info
-                nondet_row = filter_grp_df.loc[non_detections["mjd"].idxmax()]
-                recent_nondet = {
-                    "filter": filter_name,
-                    "value": nondet_row["limit"],
-                    "date": Time(nondet_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
-                    "source": nondet_row["survey"],
-                }
-                recent_nondets.append(recent_nondet)
-                status = {"status": "successfully appended dynamic values!"}
+                    # Recent non-detection info
+                    nondet_row = filter_grp_df.loc[non_detections["mjd"].idxmax()]
+                    recent_nondet = {
+                        "filter": filter_name,
+                        "value": nondet_row["limit"],
+                        "date": Time(nondet_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+                        "source": nondet_row["survey"],
+                    }
+                    recent_nondets.append(recent_nondet)
+                    status = {"status": "successfully appended dynamic values!"}
     except Exception as e:
         status = {
             "status": "encountered unexpected error",
@@ -242,8 +249,10 @@ class ASAS_SN(Survey):  # noqa: N801
             lc_df["mag"] = np.where(lc_df["mag_err"] > 99, np.nan, lc_df["mag"])
             lc_df["mag_err"] = np.where(lc_df["mag_err"] > 99, np.nan, lc_df["mag_err"])
             lc_df["survey"] = "asas-sn"
+            # Add dummy column for night (real values only needed in ATLAS
+            lc_df["night"] = "none"
             # Reorder cols
-            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "survey"]]
+            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "night", "survey"]]
             # Update
             status["lc_count"] = len(lc_df)
 
@@ -370,8 +379,10 @@ class ZTF(Survey):
             # Add unit/survey columns
             lc_df["tel_unit"] = "main"
             lc_df["survey"] = "ztf"
+            # Add dummy column for night (real values only needed in ATLAS
+            lc_df["night"] = "none"
             # Reorder cols
-            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "survey"]]
+            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "night", "survey"]]
             # Report count
             status["lc_count"] = len(lc_df)
 
@@ -480,8 +491,13 @@ class ATLAS(Survey):
 
             # DETECTIONS
             det_df = pd.DataFrame(result["lc"])[
-                ["mjd", "mag", "magerr", "mag5sig", "filter", "expname", "major"]
+                ["mjd", "mag", "magerr", "mag5sig", "filter", "expname", "major", "dup"]
             ]
+            # Drop duplicates
+            det_df = det_df[det_df["dup"] != -1]
+            det_df.drop(["dup"], axis=1, inplace=True)
+
+
             det_df.columns = ["mjd", "mag", "mag_err", "limit", "filter", "expname", "fwhm"]
             det_df["detection"] = 1
             # NON DETECTIONS
@@ -497,10 +513,13 @@ class ATLAS(Survey):
 
             # Add a column to record which ATLAS unit the value was taken from
             lc_df["tel_unit"] = lc_df["expname"].str[:3]
+            # Add a column to record which observation night this was taken
+            lc_df["night"] = lc_df["expname"].str[3:8]
+
             lc_df = lc_df.drop("expname", axis=1)
             lc_df["survey"] = "atlas"
             # Reorder cols
-            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "survey"]]
+            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "night", "survey"]]
             # Report count
             status["lc_count"] = len(lc_df)
 
