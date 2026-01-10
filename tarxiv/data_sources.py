@@ -62,13 +62,13 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                         recent_non_det = recent_non_det.rename({"temp": "limit"})
                         recent_non_det = recent_non_det.to_frame().T
                         detections = pd.concat([detections, recent_non_det], ignore_index=True)
-                        print(detections)
 
                 # Remove duplcate MJDs if exist (avoid divide by zero)
                 detections_non_dup = detections.drop_duplicates(subset=["mjd"], keep="first")
                 # Get median detection value per night(only necessary for ATLAS)
                 if survey == "atlas":
                     detections_non_dup = detections_non_dup.groupby('night')['mag'].median().reset_index()
+                    print(detections_non_dup)
 
                 # Now sort and get the rate
                 sorted_detections = detections_non_dup.sort_values("mjd")
