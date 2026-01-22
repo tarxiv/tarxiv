@@ -1,5 +1,11 @@
 """Pull and process lightcurves"""
-from .utils import TarxivModule, SurveyMetaMissingError, SurveyLightCurveMissingError, precision
+
+from .utils import (
+    TarxivModule,
+    SurveyMetaMissingError,
+    SurveyLightCurveMissingError,
+    precision,
+)
 
 from pyasassn.client import SkyPatrolClient
 from astropy.time import Time
@@ -32,7 +38,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
     status = {"status": "appending dynamic values"}
     try:
         # Get derived mag information by filter
-        for (filter_name, survey), grp_df in obj_lc_df.groupby(["filter","survey"]):
+        for (filter_name, survey), grp_df in obj_lc_df.groupby(["filter", "survey"]):
             detections = grp_df[grp_df["detection"] == 1].copy()
             non_detections = grp_df[grp_df["detection"] == 0].copy()
             if len(detections) > 0:
@@ -41,7 +47,9 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 peak_mag = {
                     "filter": filter_name,
                     "value": peak_row["mag"],
-                    "date": Time(peak_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+                    "date": Time(
+                        peak_row["mjd"], format="mjd", scale="utc"
+                    ).isot.replace("T", " "),
                     "source": peak_row["survey"],
                 }
                 peak_mags.append(peak_mag)
@@ -58,41 +66,70 @@ def append_dynamic_values(obj_meta, obj_lc_df):
 
                     # Append to data frame if we have any
                     if len(valid_non_dets) > 0:
-                        valid_non_dets['mag'] = valid_non_dets['limit']
-                        recent_non_det = valid_non_dets.loc[valid_non_dets["mjd"].idxmax()]
+                        valid_non_dets["mag"] = valid_non_dets["limit"]
+                        recent_non_det = valid_non_dets.loc[
+                            valid_non_dets["mjd"].idxmax()
+                        ]
                         recent_non_det = recent_non_det.to_frame().T
 
                         with warnings.catch_warnings():
-                            warnings.simplefilter(action='ignore', category=FutureWarning)
-                            detections = pd.concat([detections, recent_non_det], ignore_index=True)
+                            warnings.simplefilter(
+                                action="ignore", category=FutureWarning
+                            )
+                            detections = pd.concat(
+                                [detections, recent_non_det], ignore_index=True
+                            )
 
                 # Remove duplcate MJDs if exist (avoid divide by zero)
-                detections_non_dup = detections.drop_duplicates(subset=["mjd"], keep="first")
+                detections_non_dup = detections.drop_duplicates(
+                    subset=["mjd"], keep="first"
+                )
                 # Now sort and get the rate
                 sorted_detections = detections_non_dup.sort_values("mjd")
                 # With atlas we have to deal with median nightly diffs
                 if survey == "atlas":
                     # First get night med mjd_diff and mag diff
-                    mjd_diff = sorted_detections.groupby('night')['mjd'].median().diff().rename('mjd_diff')
-                    mag_diffs = sorted_detections.groupby('night')['mag'].median().diff().rename('mag_diff')
-                    diffs = pd.merge(mag_diffs, mjd_diff, on='night')
+                    mjd_diff = (
+                        sorted_detections.groupby("night")["mjd"]
+                        .median()
+                        .diff()
+                        .rename("mjd_diff")
+                    )
+                    mag_diffs = (
+                        sorted_detections.groupby("night")["mag"]
+                        .median()
+                        .diff()
+                        .rename("mag_diff")
+                    )
+                    diffs = pd.merge(mag_diffs, mjd_diff, on="night")
                     # Then merge to sorted and get full diffs
-                    sorted_detections = pd.merge(sorted_detections, diffs, on='night', how='left')
-                    sorted_detections["mag_rate"] = -(sorted_detections["mag_diff"] / sorted_detections["mjd_diff"])
+                    sorted_detections = pd.merge(
+                        sorted_detections, diffs, on="night", how="left"
+                    )
+                    sorted_detections["mag_rate"] = -(
+                        sorted_detections["mag_diff"] / sorted_detections["mjd_diff"]
+                    )
 
                 # Otherwise just get point-wise diff
                 else:
-                    sorted_detections["mag_rate"] = -(sorted_detections["mag"].diff() / sorted_detections["mjd"].diff())
+                    sorted_detections["mag_rate"] = -(
+                        sorted_detections["mag"].diff()
+                        / sorted_detections["mjd"].diff()
+                    )
 
                 # Replace nan
-                sorted_detections["mag_rate"] = sorted_detections["mag_rate"].replace(np.nan, None)
+                sorted_detections["mag_rate"] = sorted_detections["mag_rate"].replace(
+                    np.nan, None
+                )
                 # print(sorted_detections)
                 recent_row = sorted_detections.loc[sorted_detections["mjd"].idxmax()]
                 recent_det = {
                     "filter": filter_name,
                     "value": recent_row["mag"],
                     "mag_rate": precision(recent_row["mag_rate"], 6),
-                    "date": Time(recent_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+                    "date": Time(
+                        recent_row["mjd"], format="mjd", scale="utc"
+                    ).isot.replace("T", " "),
                     "source": recent_row["survey"],
                 }
                 recent_dets.append(recent_det)
@@ -103,7 +140,9 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 recent_nondet = {
                     "filter": filter_name,
                     "value": nondet_row["limit"],
-                    "date": Time(nondet_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+                    "date": Time(
+                        nondet_row["mjd"], format="mjd", scale="utc"
+                    ).isot.replace("T", " "),
                     "source": nondet_row["survey"],
                 }
                 recent_nondets.append(recent_nondet)
@@ -186,10 +225,12 @@ class ASAS_SN(Survey):  # noqa: N801
     """Interface to ASAS-SN SkyPatrol."""
 
     def __init__(self, script_name, reporting_mode, debug=False):
-        super().__init__(script_name=script_name,
-                         module="asas-sn",
-                         reporting_mode=reporting_mode,
-                         debug=debug)
+        super().__init__(
+            script_name=script_name,
+            module="asas-sn",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
 
         # Also need ASAS-SN client
         self.client = SkyPatrolClient(verbose=False)
@@ -249,7 +290,9 @@ class ASAS_SN(Survey):  # noqa: N801
             lc_df["mjd"] = lc_df.apply(
                 lambda row: Time(row["jd"], format="jd").mjd, axis=1
             )
-            lc_df = lc_df.rename({"phot_filter": "filter", "camera": "tel_unit"}, axis=1)
+            lc_df = lc_df.rename(
+                {"phot_filter": "filter", "camera": "tel_unit"}, axis=1
+            )
             # Do not return data from bad images
             lc_df = lc_df[lc_df["quality"] != "B"]
             # Flag non-detections
@@ -260,7 +303,20 @@ class ASAS_SN(Survey):  # noqa: N801
             # Add dummy column for night (real values only needed in ATLAS
             lc_df["night"] = "none"
             # Reorder cols
-            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "night", "survey"]]
+            lc_df = lc_df[
+                [
+                    "mjd",
+                    "mag",
+                    "mag_err",
+                    "limit",
+                    "fwhm",
+                    "filter",
+                    "detection",
+                    "tel_unit",
+                    "night",
+                    "survey",
+                ]
+            ]
             # Update
             status["lc_count"] = len(lc_df)
 
@@ -269,11 +325,13 @@ class ASAS_SN(Survey):  # noqa: N801
         except SurveyLightCurveMissingError:
             status["status"] += "|no light curve"
         except Exception as e:
-            status.update({
-                "status": "encontered unexpected error",
-                "error_message": str(e),
-                "details": traceback.format_exc(),
-            })
+            status.update(
+                {
+                    "status": "encontered unexpected error",
+                    "error_message": str(e),
+                    "details": traceback.format_exc(),
+                }
+            )
 
         self.logger.info(status, extra=status)
         return meta, lc_df
@@ -283,10 +341,12 @@ class ZTF(Survey):
     """Interface to ZTF Fink broker."""
 
     def __init__(self, script_name, reporting_mode, debug=False):
-        super().__init__(script_name=script_name,
-                         module="ztf",
-                         reporting_mode=reporting_mode,
-                         debug=debug)
+        super().__init__(
+            script_name=script_name,
+            module="ztf",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
 
     def get_object(self, obj_name, ra_deg, dec_deg, radius=15):
         """Get ZTF Lightcurve from coordinates using cone_search.
@@ -329,7 +389,11 @@ class ZTF(Survey):
             # Query
             result = requests.post(
                 f"{self.config['fink_url']}/api/v1/objects",
-                json={"objectId": ztf_name, "withupperlim": True, "output-format": "json"},
+                json={
+                    "objectId": ztf_name,
+                    "withupperlim": True,
+                    "output-format": "json",
+                },
             )
             # check status
             if result.status_code != 200 or result.json() == []:
@@ -337,15 +401,21 @@ class ZTF(Survey):
 
             # Metadata on each line of photometry, we only take first row (d prefix are non-phot)
             result_meta = result.json()[0]
-            meta = {"identifiers": [{"name": ztf_name, "source": "ztf"}],
-                    "ra_deg": [{"value": result_meta["i:ra"], "source": "ztf"}],
-                    "dec_deg": [{"value": result_meta["i:dec"], "source": "ztf"}], "host_name": []}
+            meta = {
+                "identifiers": [{"name": ztf_name, "source": "ztf"}],
+                "ra_deg": [{"value": result_meta["i:ra"], "source": "ztf"}],
+                "dec_deg": [{"value": result_meta["i:dec"], "source": "ztf"}],
+                "host_name": [],
+            }
 
             if (
                 "d:mangrove_2MASS_name" in result_meta.keys()
                 and result_meta["d:mangrove_2MASS_name"] != "None"
             ):
-                host_name = {"name": result_meta["d:mangrove_2MASS_name"], "source": "magrove"}
+                host_name = {
+                    "name": result_meta["d:mangrove_2MASS_name"],
+                    "source": "magrove",
+                }
                 meta["host_name"].append(host_name)
             if (
                 "d:mangrove_2MASS_name" in result_meta.keys()
@@ -367,7 +437,7 @@ class ZTF(Survey):
                 "i:jd": "jd",
                 "i:diffmaglim": "limit",
                 "d:tag": "detection",
-                "i:fwhm": "fwhm"
+                "i:fwhm": "fwhm",
             }
             filter_map = {"1": "g", "2": "R", "3": "i"}
             detection_map = {"valid": 1, "badquality": -1, "upperlim": 0}
@@ -390,7 +460,20 @@ class ZTF(Survey):
             # Add dummy column for night (real values only needed in ATLAS
             lc_df["night"] = "none"
             # Reorder cols
-            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "night", "survey"]]
+            lc_df = lc_df[
+                [
+                    "mjd",
+                    "mag",
+                    "mag_err",
+                    "limit",
+                    "fwhm",
+                    "filter",
+                    "detection",
+                    "tel_unit",
+                    "night",
+                    "survey",
+                ]
+            ]
             # Report count
             status["lc_count"] = len(lc_df)
 
@@ -400,11 +483,13 @@ class ZTF(Survey):
             status["status"] += "|no light curve"
 
         except Exception as e:
-            status.update({
-                "status": "encontered unexpected error",
-                "error_message": str(e),
-                "details": traceback.format_exc(),
-            })
+            status.update(
+                {
+                    "status": "encontered unexpected error",
+                    "error_message": str(e),
+                    "details": traceback.format_exc(),
+                }
+            )
 
         self.logger.info(status, extra=status)
         return meta, lc_df
@@ -414,10 +499,12 @@ class ATLAS(Survey):
     """Interface to ATLAS Transient Web Server."""
 
     def __init__(self, script_name, reporting_mode, debug=False):
-        super().__init__(script_name=script_name,
-                         module="atlas",
-                         reporting_mode=reporting_mode,
-                         debug=debug)
+        super().__init__(
+            script_name=script_name,
+            module="atlas",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
 
     def get_object(self, obj_name, ra_deg, dec_deg, radius=15):
         """Get ATLAS Lightcurve from coordinates using cone_search.
@@ -495,7 +582,10 @@ class ATLAS(Survey):
             if result["sherlock_crossmatches"]:
                 result["sherlock"] = result["sherlock_crossmatches"][0]
                 if result["sherlock"]["z"] is not None:
-                    meta["redshift"] = {"value": result["sherlock"]["z"], "source": "sherlock"}
+                    meta["redshift"] = {
+                        "value": result["sherlock"]["z"],
+                        "source": "sherlock",
+                    }
 
             # DETECTIONS
             det_df = pd.DataFrame(result["lc"])[
@@ -503,14 +593,21 @@ class ATLAS(Survey):
             ]
             # Drop duplicates
             det_df = det_df[det_df["dup"] != -1]
-            det_df.drop(["dup"], axis=1, inplace=True)
+            det_df = det_df.drop(["dup"], axis=1)
 
-
-            det_df.columns = ["mjd", "mag", "mag_err", "limit", "filter", "expname", "fwhm"]
+            det_df.columns = [
+                "mjd",
+                "mag",
+                "mag_err",
+                "limit",
+                "filter",
+                "expname",
+                "fwhm",
+            ]
             det_df["detection"] = 1
             # NON DETECTIONS
             non_df = pd.DataFrame(result["lcnondets"])[
-                    ["mjd", "mag5sig", "filter", "expname"]
+                ["mjd", "mag5sig", "filter", "expname"]
             ]
             non_df.columns = ["mjd", "limit", "filter", "expname"]
             non_df["mag"] = np.nan
@@ -527,7 +624,20 @@ class ATLAS(Survey):
             lc_df = lc_df.drop("expname", axis=1)
             lc_df["survey"] = "atlas"
             # Reorder cols
-            lc_df = lc_df[["mjd", "mag", "mag_err", "limit", "fwhm", "filter", "detection", "tel_unit", "night", "survey"]]
+            lc_df = lc_df[
+                [
+                    "mjd",
+                    "mag",
+                    "mag_err",
+                    "limit",
+                    "fwhm",
+                    "filter",
+                    "detection",
+                    "tel_unit",
+                    "night",
+                    "survey",
+                ]
+            ]
             # Report count
             status["lc_count"] = len(lc_df)
 
@@ -537,11 +647,13 @@ class ATLAS(Survey):
             status["status"] += "|no light curve"
 
         except Exception as e:
-            status.update({
-                "status": "encountered unexpected error",
-                "error_message": str(e),
-                "details": traceback.format_exc(),
-            })
+            status.update(
+                {
+                    "status": "encountered unexpected error",
+                    "error_message": str(e),
+                    "details": traceback.format_exc(),
+                }
+            )
 
         self.logger.info(status, extra=status)
         return meta, lc_df
@@ -551,10 +663,12 @@ class TNS(Survey):
     """Interface to Transient Name Server API."""
 
     def __init__(self, script_name, reporting_mode, debug=False):
-        super().__init__(script_name=script_name,
-                         module="tns",
-                         reporting_mode=reporting_mode,
-                         debug=debug)
+        super().__init__(
+            script_name=script_name,
+            module="tns",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
 
         # Set attributes
         self.site = self.config["tns"]["site"]
@@ -583,12 +697,14 @@ class TNS(Survey):
         # Run request to TNS server
         get_url = self.site + "/api/get/object"
         headers = {"User-Agent": self.marker}
-        obj_request = OrderedDict([
-            ("objid", ""),
-            ("objname", obj_name),
-            ("photometry", "0"),
-            ("spectra", "0"),
-        ])
+        obj_request = OrderedDict(
+            [
+                ("objid", ""),
+                ("objname", obj_name),
+                ("photometry", "0"),
+                ("spectra", "0"),
+            ]
+        )
         get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
         response = requests.post(get_url, headers=headers, data=get_data)
         if response.status_code != 200:
@@ -629,8 +745,6 @@ class TNS(Survey):
 
         self.logger.info(status, extra=status)
         return meta, lc_df
-
-
 
 
 if __name__ == "__main__":
