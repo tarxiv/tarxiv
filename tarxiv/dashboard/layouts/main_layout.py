@@ -1,9 +1,13 @@
 """Main dashboard layout."""
-from dash import html
-from ..styles import HEADER_STYLE, CONTAINER_STYLE, PAGE_STYLE, COLORS
+from dash import dcc, html
+from ..styles import CONTAINER_STYLE, PAGE_STYLE, COLORS
 from ..components import (
+    create_login_modal,
+    create_signup_modal,
+    create_navbar,
+    create_profile_drawer,
     create_unified_search,
-    create_results_section
+    create_results_section,
 )
 
 
@@ -16,34 +20,29 @@ def create_layout():
     """
     return html.Div(
         [
-            # Header
-            html.Div(
-                [
-                    html.H1(
-                        "TarXiv Database Explorer",
-                        style={"marginBottom": "5px", "color": COLORS["secondary"]}
-                    ),
-                    html.P(
-                        "Explore astronomical transients and their lightcurves",
-                        style={"color": COLORS["muted"], "fontSize": "16px"}
-                    ),
-                ],
-                style=HEADER_STYLE
-            ),
-
+            dcc.Store(id="auth-session-store", storage_type="session"),
+            dcc.Store(id="auth-modal-open", data=False),
+            dcc.Store(id="auth-signup-modal-open", data=False),
+            dcc.Store(id="profile-drawer-open", data=False),
+            create_login_modal(),
+            create_signup_modal(),
+            create_navbar(),
+            create_profile_drawer(),
             # Content container
             html.Div(
                 [
-                    # Error/Message banner
+                    html.Div(
+                        "Explore astronomical transients and their lightcurves.",
+                        style={"color": COLORS["muted"], "fontSize": "14px", "margin": "10px 0"},
+                    ),
+                    html.Div(id="auth-message-banner", style={"marginBottom": "10px"}),
                     html.Div(
                         id="message-banner",
                         children=[],
                         style={"marginBottom": "20px"}
                     ),
-
                     # Unified search with tabs
                     create_unified_search(),
-
                     # Results section
                     create_results_section(),
                 ],

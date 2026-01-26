@@ -3,7 +3,7 @@ import dash
 from ..database import TarxivDB
 from ..utils import TarxivModule
 from .layouts import create_layout
-from .callbacks import register_search_callbacks
+from .callbacks import register_search_callbacks, register_auth_callbacks
 
 
 class TarxivDashboard(TarxivModule):
@@ -33,6 +33,7 @@ class TarxivDashboard(TarxivModule):
 
     def setup_callbacks(self):
         """Set up the dashboard callbacks."""
+        register_auth_callbacks(self.app, self.logger)
         register_search_callbacks(self.app, self.txv_db, self.logger)
 
     def run_server(self, port=8050, host="0.0.0.0"):

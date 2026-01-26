@@ -107,6 +107,115 @@ services:
     networks:
       - tarxiv_net
 
+  # Supabase services
+  supabase-db:
+    image: supabase/postgres:15.6.1.117
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${SUPABASE_DB_NAME:-postgres}
+      POSTGRES_USER: ${SUPABASE_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${SUPABASE_DB_PASSWORD:-your-super-secret-password}
+      JWT_SECRET: ${SUPABASE_JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
+      JWT_EXP: 3600
+    volumes:
+      - ${SUPABASE_DB_DATA_DIR:-.data/supabase/db}:/var/lib/postgresql/data:Z
+      - ./supabase-init.sql:/docker-entrypoint-initdb.d/supabase-init.sql:ro
+    networks:
+      - tarxiv_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  supabase-auth:
+    image: supabase/gotrue:v2.158.1
+    ports:
+      - 9999:9999
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${SUPABASE_API_EXTERNAL_URL:-http://localhost:8000}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://${SUPABASE_DB_USER:-postgres}:${SUPABASE_DB_PASSWORD:-your-super-secret-password}@supabase-db:5432/${SUPABASE_DB_NAME:-postgres}?search_path=auth
+      GOTRUE_SITE_URL: ${SUPABASE_SITE_URL:-http://localhost:3000}
+      GOTRUE_URI_ALLOW_LIST: ${SUPABASE_URI_ALLOW_LIST:-*}
+      GOTRUE_DISABLE_SIGNUP: ${SUPABASE_DISABLE_SIGNUP:-false}
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: ${SUPABASE_EXTERNAL_EMAIL_ENABLED:-true}
+      GOTRUE_MAILER_AUTOCONFIRM: ${SUPABASE_MAILER_AUTOCONFIRM:-true}
+      GOTRUE_SMTP_HOST: ${SUPABASE_SMTP_HOST:-}
+      GOTRUE_SMTP_PORT: ${SUPABASE_SMTP_PORT:-587}
+      GOTRUE_SMTP_USER: ${SUPABASE_SMTP_USER:-}
+      GOTRUE_SMTP_PASS: ${SUPABASE_SMTP_PASS:-}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SUPABASE_SMTP_ADMIN_EMAIL:-admin@example.com}
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: ${SUPABASE_MAILER_URLPATHS_CONFIRMATION:-/auth/v1/verify}
+      GOTRUE_MAILER_URLPATHS_INVITE: ${SUPABASE_MAILER_URLPATHS_INVITE:-/auth/v1/verify}
+      GOTRUE_MAILER_URLPATHS_RECOVERY: ${SUPABASE_MAILER_URLPATHS_RECOVERY:-/auth/v1/verify}
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: ${SUPABASE_MAILER_URLPATHS_EMAIL_CHANGE:-/auth/v1/verify}
+    networks:
+      - tarxiv_net
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  supabase-rest:
+    image: postgrest/postgrest:v12.2.0
+    ports:
+      - 3000:3000
+    environment:
+      PGRST_DB_URI: postgres://${SUPABASE_DB_USER:-postgres}:${SUPABASE_DB_PASSWORD:-your-super-secret-password}@supabase-db:5432/${SUPABASE_DB_NAME:-postgres}
+      PGRST_DB_SCHEMAS: public,storage
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+    networks:
+      - tarxiv_net
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  supabase-kong:
+    image: kong:2.8.1
+    ports:
+      - 8000:8000
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl
+    volumes:
+      - ./supabase-kong.yml:/var/lib/kong/kong.yml:ro
+    networks:
+      - tarxiv_net
+    depends_on:
+      - supabase-auth
+      - supabase-rest
+    restart: unless-stopped
+
+  supabase-adminer:
+    image: adminer:4.8.1
+    ports:
+      - 8080:8080
+    environment:
+      ADMINER_DEFAULT_SERVER: supabase-db
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    networks:
+      - tarxiv_net
+    restart: unless-stopped
+
   tarxiv-api:
     profiles:
       - tarxiv
@@ -165,6 +274,8 @@ services:
       TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
       TARXIV_IMAGE_TAG: ${TARXIV_IMAGE_TAG:-latest}
       TARXIV_IMAGE_SOURCE: ${TARXIV_IMAGE_SOURCE:-local}
+      SUPABASE_API_EXTERNAL_URL: http://supabase-kong:8000
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
     networks:
       - tarxiv_net
     restart: unless-stopped
