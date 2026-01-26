@@ -1,10 +1,12 @@
 """Plotting functions for the dashboard."""
-from dash import dcc
+
+import dash_mantine_components as dmc
 import plotly.graph_objects as go
 from ..styles import FILTER_COLORS
+from .theme_manager import apply_theme
 
 
-def create_lightcurve_plot(lc_data, object_id, logger=None):
+def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
     """Create a lightcurve plot from the data.
 
     Args:
@@ -18,12 +20,18 @@ def create_lightcurve_plot(lc_data, object_id, logger=None):
     """
     if not lc_data:
         if logger:
-            logger.warning({"warning": f"No lightcurve data received for object: {object_id}"})
+            logger.warning(
+                {"warning": f"No lightcurve data received for object: {object_id}"}
+            )
         return None
 
     fig = go.Figure()
     if logger:
-        logger.debug({"debug": f"Creating lightcurve plot for object: {object_id} with {len(lc_data)} points"})
+        logger.debug(
+            {
+                "debug": f"Creating lightcurve plot for object: {object_id} with {len(lc_data)} points"
+            }
+        )
         logger.debug({"debug": f"Lightcurve data sample: {lc_data[:3]}"})
 
     # Group data by both filter/band and survey
@@ -41,13 +49,17 @@ def create_lightcurve_plot(lc_data, object_id, logger=None):
                 "mag": [],
                 "mag_err": [],
                 "lim_mjd": [],
-                "lim_mag": []
+                "lim_mag": [],
             }
 
         mjd = point.get("mjd")
         if mjd is None:
             if logger:
-                logger.warning({"warning": f"Missing MJD in lightcurve point for object: {object_id}"})
+                logger.warning(
+                    {
+                        "warning": f"Missing MJD in lightcurve point for object: {object_id}"
+                    }
+                )
             continue
 
         # Handle detections vs limits using detection flag
@@ -61,13 +73,19 @@ def create_lightcurve_plot(lc_data, object_id, logger=None):
 
     # Add traces for each filter + survey combination
     # Sort by survey name first to keep legend organized
-    for (filter_name, survey_name), data in sorted(grouped_data.items(), key=lambda x: (x[0][1], x[0][0])):
+    for (filter_name, survey_name), data in sorted(
+        grouped_data.items(), key=lambda x: (x[0][1], x[0][0])
+    ):
         color = FILTER_COLORS.get(filter_name, "gray")
         survey_label = survey_name.upper()
 
         # Plot detections
         if data["mag"]:
-            error_y = dict(type='data', array=data["mag_err"], visible=True) if any(data["mag_err"]) else None
+            error_y = (
+                dict(type="data", array=data["mag_err"], visible=True)
+                if any(data["mag_err"])
+                else None
+            )
 
             fig.add_trace(
                 go.Scatter(
@@ -78,7 +96,7 @@ def create_lightcurve_plot(lc_data, object_id, logger=None):
                     marker=dict(size=8, color=color),
                     error_y=error_y,
                     legendgroup=survey_name,
-                    legendgrouptitle_text=survey_label
+                    legendgrouptitle_text=survey_label,
                 )
             )
 
@@ -90,13 +108,16 @@ def create_lightcurve_plot(lc_data, object_id, logger=None):
                     y=data["lim_mag"],
                     mode="markers",
                     name=f"{filter_name}-band (limit)",
-                    marker=dict(size=8, color=color, symbol="triangle-down", opacity=0.5),
+                    marker=dict(
+                        size=8, color=color, symbol="triangle-down", opacity=0.5
+                    ),
                     showlegend=True,
                     legendgroup=survey_name,
-                    legendgrouptitle_text=survey_label
+                    legendgrouptitle_text=survey_label,
                 )
             )
 
+    dmc.add_figure_templates()  # Enables light/dark mode support
     fig.update_layout(
         title=f"Lightcurve: {object_id}",
         xaxis_title="MJD",
@@ -104,21 +125,21 @@ def create_lightcurve_plot(lc_data, object_id, logger=None):
         yaxis=dict(autorange="reversed"),  # Magnitude scale is inverted
         hovermode="closest",
         height=500,
-        template="plotly_white",
         legend=dict(
             orientation="v",
             yanchor="top",
             y=1,
             xanchor="left",
             x=1.02,
-            groupclick="toggleitem"  # Allow clicking group title to toggle all items
-        )
+            groupclick="toggleitem",  # Allow clicking group title to toggle all items
+        ),
     )
 
-    return dcc.Graph(figure=fig)
+    fig = apply_theme(fig, theme_template)
+    return fig
 
 
-def create_sky_plot(results, search_ra, search_dec):
+def create_sky_plot(results, search_ra, search_dec, theme_template, logger=None):
     """Create a sky position plot for cone search results.
 
     Args:
@@ -128,7 +149,7 @@ def create_sky_plot(results, search_ra, search_dec):
 
     Returns
     -------
-        dcc.Graph
+        go.Figure
     """
     fig = go.Figure()
 
@@ -160,13 +181,14 @@ def create_sky_plot(results, search_ra, search_dec):
             )
         )
 
+    dmc.add_figure_templates()  # Enables light/dark mode support
     fig.update_layout(
         title="Sky Position Plot",
         xaxis_title="RA (degrees)",
         yaxis_title="Dec (degrees)",
         hovermode="closest",
         height=500,
-        template="plotly_white",
     )
 
-    return dcc.Graph(figure=fig)
+    fig = apply_theme(fig, theme_template)
+    return fig

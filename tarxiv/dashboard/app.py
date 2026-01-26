@@ -1,9 +1,14 @@
 """Main dashboard application."""
+
 import dash
 from ..database import TarxivDB
 from ..utils import TarxivModule
 from .layouts import create_layout
-from .callbacks import register_search_callbacks
+from .callbacks import (
+    register_search_callbacks,
+    register_style_callbacks,
+    register_plotting_callbacks,
+)
 
 
 class TarxivDashboard(TarxivModule):
@@ -29,11 +34,14 @@ class TarxivDashboard(TarxivModule):
 
     def setup_layout(self):
         """Set up the dashboard layout."""
+        # self.app.layout = dmc.MantineProvider([create_layout()])
         self.app.layout = create_layout()
 
     def setup_callbacks(self):
         """Set up the dashboard callbacks."""
         register_search_callbacks(self.app, self.txv_db, self.logger)
+        register_style_callbacks(self.app, self.logger)
+        register_plotting_callbacks(self.app, self.logger)
 
     def run_server(self, port=8050, host="0.0.0.0"):
         """Start the Dash server.
@@ -45,10 +53,7 @@ class TarxivDashboard(TarxivModule):
         status = {"status": "starting dash server", "port": port, "host": host}
         self.logger.info(status, extra=status)
         self.app.run(
-            debug=self.debug,
-            host=host,
-            port=port,
-            dev_tools_hot_reload=self.debug
+            debug=self.debug, host=host, port=port, dev_tools_hot_reload=self.debug
         )
 
     def close(self):
