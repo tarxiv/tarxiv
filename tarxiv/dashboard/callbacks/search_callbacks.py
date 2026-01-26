@@ -1,6 +1,11 @@
 """Search callbacks for the dashboard."""
+
 from dash import html, Output, Input, State, ALL, ctx, no_update
-from ..components import format_object_metadata, format_cone_search_results
+import dash_mantine_components as dmc
+from ..components import (
+    format_object_metadata,
+    format_cone_search_results,
+)
 
 
 def register_search_callbacks(app, txv_db, logger):
@@ -21,7 +26,7 @@ def register_search_callbacks(app, txv_db, logger):
         ],
         [Input({"type": "object-link", "index": ALL}, "n_clicks")],
         [State({"type": "object-id-store", "index": ALL}, "data")],
-        prevent_initial_call=True
+        prevent_initial_call=True,
     )
     def handle_object_link_click(n_clicks_list, object_ids):
         """Handle clicks on object links in cone search results."""
@@ -39,96 +44,119 @@ def register_search_callbacks(app, txv_db, logger):
 
     @app.callback(
         [
-            Output("results-container", "children"),
-            Output("search-status", "children"),
-            Output("message-banner", "children")
+            Output("results-container", "children", allow_duplicate=True),
+            Output("search-status", "children", allow_duplicate=True),
+            Output("message-banner", "children", allow_duplicate=True),
+            Output("lightcurve-store", "data"),
         ],
-        [Input("search-id-button", "n_clicks"), Input("cone-search-button", "n_clicks")],
-        [
-            State("object-id-input", "value"),
-            State("ra-input", "value"),
-            State("dec-input", "value"),
-            State("radius-input", "value"),
-        ],
+        [Input("search-id-button", "n_clicks")],
+        [State("object-id-input", "value")],
+        prevent_initial_call=True,
     )
-    def handle_search(id_clicks, cone_clicks, object_id, ra, dec, radius):
-        """Handle search button clicks."""
-        if not ctx.triggered:
-            return html.Div("Enter search criteria above."), "", []
-
-        button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    def handle_id_search(n_clicks, object_id):
+        """Handle search by ID button clicks."""
+        if not n_clicks:
+            return no_update, no_update, no_update, no_update
 
         try:
-            # Search by ID
-            if button_id == "search-id-button" and object_id:
-                status_msg = f"Searching for object: {object_id}"
-                logger.info({"search_type": "id", "object_id": object_id})
-
-                # Get metadata
-                meta = txv_db.get(object_id, "objects")
-                if meta is None:
-                    error_banner = create_message_banner(
-                        f"No object found with ID: {object_id}",
-                        "error"
-                    )
-                    return html.Div(), status_msg, error_banner
-
-                # Get lightcurve data
-                lc_data = get_lightcurve_data(txv_db, object_id, logger)
-
-                # Display metadata and lightcurve
-                result = format_object_metadata(object_id, meta, lc_data, logger)
-                success_banner = create_message_banner(
-                    f"Successfully loaded object: {object_id}",
-                    "success"
-                )
-                return result, status_msg, success_banner
-
-            # Cone search
-            elif button_id == "cone-search-button" and ra is not None and dec is not None:
-                if radius is None:
-                    radius = 30.0
-
-                status_msg = f"Cone search: RA={ra}, Dec={dec}, radius={radius} arcsec"
-                logger.info(
-                    {
-                        "search_type": "cone",
-                        "ra": ra,
-                        "dec": dec,
-                        "radius": radius,
-                    }
-                )
-
-                # Perform cone search
-                results = txv_db.cone_search(ra, dec, radius)
-
-                if not results:
-                    warning_banner = create_message_banner(
-                        "No objects found in search region.",
-                        "warning"
-                    )
-                    return html.Div(), status_msg, warning_banner
-
-                # Display results
-                result = format_cone_search_results(results, ra, dec)
-                success_banner = create_message_banner(
-                    f"Found {len(results)} object(s) in search region",
-                    "success"
-                )
-                return result, status_msg, success_banner
-
-            else:
+            if not object_id:
                 warning_banner = create_message_banner(
-                    "Please provide valid search criteria.",
-                    "warning"
+                    "Please provide an object ID.", "warning"
                 )
-                return html.Div(), "", warning_banner
+                logger.warning({"warning": "No object ID provided for search."})
+                return no_update, "", warning_banner, no_update
+
+            status_msg = f"Searching for object: {object_id}"
+            logger.info({"search_type": "id", "object_id": object_id})
+
+            # Get metadata
+            meta = txv_db.get(object_id, "objects")
+            if meta is None:
+                error_banner = create_message_banner(
+                    f"No object found with ID: {object_id}", "error"
+                )
+                logger.warning({"warning": f"Object ID not found: {object_id}"})
+                return no_update, status_msg, error_banner, no_update
+
+            # Get lightcurve data
+            lc_data = get_lightcurve_data(txv_db, object_id, logger)
+
+            # Display metadata
+            result = format_object_metadata(object_id, meta, logger)
+            success_banner = create_message_banner(
+                f"Successfully loaded object: {object_id}", "success"
+            )
+            logger.info({"info": f"Object {object_id} loaded successfully."})
+
+            store_data = {"data": lc_data, "id": object_id}
+
+            return result, status_msg, success_banner, store_data
 
         except Exception as e:
             error_msg = f"Error: {str(e)}"
             logger.error({"error": error_msg})
             error_banner = create_message_banner(error_msg, "error")
-            return html.Div(), "Error occurred", error_banner
+            return html.Div(), "Error occurred", error_banner, no_update
+
+    @app.callback(
+        [
+            Output("results-container", "children", allow_duplicate=True),
+            Output("search-status", "children", allow_duplicate=True),
+            Output("message-banner", "children", allow_duplicate=True),
+            Output("cone-search-store", "data"),
+        ],
+        [Input("cone-search-button", "n_clicks")],
+        [
+            State("ra-input", "value"),
+            State("dec-input", "value"),
+            State("radius-input", "value"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_cone_search(n_clicks, ra, dec, radius):
+        """Handle cone search button clicks."""
+        if not n_clicks:
+            return no_update, no_update, no_update, no_update
+
+        try:
+            if ra is None or dec is None:
+                warning_banner = create_message_banner(
+                    "Please provide valid RA and Dec coordinates.", "warning"
+                )
+                return html.Div(), "", warning_banner, no_update
+
+            if radius is None:
+                radius = 30.0
+
+            status_msg = f"Cone search: RA={ra}, Dec={dec}, radius={radius} arcsec"
+            logger.info(
+                {
+                    "search_type": "cone",
+                    "ra": ra,
+                    "dec": dec,
+                    "radius": radius,
+                }
+            )
+
+            # Perform cone search
+            results = get_cone_search_results(txv_db, ra, dec, radius, logger)
+
+            # Display results
+            result = format_cone_search_results(results, ra, dec)
+            success_banner = create_message_banner(
+                f"Found {len(results)} object(s) in search region", "success"
+            )
+            logger.info({"info": f"Cone search found {len(results)} objects."})
+
+            store_data = {"results": results, "ra": ra, "dec": dec}
+
+            return result, status_msg, success_banner, store_data
+
+        except Exception as e:
+            error_msg = f"Error: {str(e)}"
+            logger.error({"error": error_msg})
+            error_banner = create_message_banner(error_msg, "error")
+            return html.Div(), "Error occurred", error_banner, no_update
 
 
 def create_message_banner(message, message_type="info"):
@@ -151,7 +179,7 @@ def create_message_banner(message, message_type="info"):
 
     colors = color_map.get(message_type, color_map["info"])
 
-    return html.Div(
+    return dmc.Alert(
         message,
         style={
             "padding": "12px 20px",
@@ -162,7 +190,7 @@ def create_message_banner(message, message_type="info"):
             "color": colors["text"],
             "fontSize": "14px",
             "fontWeight": "500",
-        }
+        },
     )
 
 
@@ -180,11 +208,41 @@ def get_lightcurve_data(txv_db, object_id, logger):
     """
     try:
         lc_data = txv_db.get(object_id, "lightcurves")
-        logger.debug({
-            "debug": f"Fetched lightcurve data for object: {object_id}: "
-                     f"{len(lc_data) if lc_data else lc_data}"
-        })
+        logger.debug(
+            {
+                "debug": f"Fetched lightcurve data for object: {object_id}: "
+                f"{len(lc_data) if lc_data else lc_data}"
+            }
+        )
         return lc_data
     except Exception as e:
         logger.error({"error": f"Failed to fetch lightcurve: {str(e)}"})
         return None
+
+
+def get_cone_search_results(txv_db, ra, dec, radius, logger) -> list:
+    """Perform a cone search.
+
+    Args:
+        txv_db: TarxivDB instance
+        ra: Right Ascension
+        dec: Declination
+        radius: Search radius in arcseconds
+        logger: Logger instance
+
+    Returns
+    -------
+        List of search results
+    """
+    try:
+        results = txv_db.cone_search(ra, dec, radius)
+        logger.debug(
+            {
+                "debug": f"Cone search results for RA={ra}, Dec={dec}, "
+                f"radius={radius} arcsec: {len(results)} objects found"
+            }
+        )
+        return results
+    except Exception as e:
+        logger.error({"error": f"Cone search failed: {str(e)}"})
+        return []
