@@ -1,4 +1,41 @@
 services:
+  nginx-proxy:
+    image: nginxproxy/nginx-proxy:1.6
+    profiles:
+      - proxy
+    container_name: tarxiv-nginx-proxy
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - nginx_certs:/etc/nginx/certs:rw
+      - nginx_vhost:/etc/nginx/vhost.d
+      - nginx_html:/usr/share/nginx/html
+    networks:
+      - tarxiv_net
+    restart: unless-stopped
+
+  nginx-letsencrypt:
+    image: nginxproxy/acme-companion:2.4
+    profiles:
+      - proxy
+    container_name: tarxiv-nginx-letsencrypt
+    environment:
+      DEFAULT_EMAIL: ${TARXIV_LETSENCRYPT_EMAIL}
+      NGINX_PROXY_CONTAINER: tarxiv-nginx-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - nginx_certs:/etc/nginx/certs:rw
+      - nginx_vhost:/etc/nginx/vhost.d
+      - nginx_html:/usr/share/nginx/html
+      - nginx_acme:/etc/acme.sh
+    networks:
+      - tarxiv_net
+    depends_on:
+      - nginx-proxy
+    restart: unless-stopped
+
   # Setup elasticsearch database with defined user roles and passwords
   setup_elasticsearch:
     profiles:
@@ -136,6 +173,12 @@ services:
       TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
       TARXIV_IMAGE_SOURCE: ${TARXIV_IMAGE_SOURCE:-local}
       TARXIV_IMAGE_TAG: ${TARXIV_IMAGE_TAG:-latest}
+      TARXIV_ORCID_BASE_URL: ${TARXIV_ORCID_BASE_URL:-https://orcid.org}
+      TARXIV_ORCID_REDIRECT_URI: ${TARXIV_ORCID_REDIRECT_URI:-}
+      VIRTUAL_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.tarxiv.com}
+      VIRTUAL_PORT: ${TARXIV_PORT}
+      LETSENCRYPT_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.tarxiv.com}
+      LETSENCRYPT_EMAIL: ${TARXIV_LETSENCRYPT_EMAIL:-}
     networks:
       - tarxiv_net
     restart: unless-stopped
@@ -165,6 +208,10 @@ services:
       TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
       TARXIV_IMAGE_TAG: ${TARXIV_IMAGE_TAG:-latest}
       TARXIV_IMAGE_SOURCE: ${TARXIV_IMAGE_SOURCE:-local}
+      VIRTUAL_HOST: ${TARXIV_DASHBOARD_VIRTUAL_HOST:-tarxiv.com}
+      VIRTUAL_PORT: ${TARXIV_DASHBOARD_PORT:-8050}
+      LETSENCRYPT_HOST: ${TARXIV_DASHBOARD_VIRTUAL_HOST:-tarxiv.com}
+      LETSENCRYPT_EMAIL: ${TARXIV_LETSENCRYPT_EMAIL:-}
     networks:
       - tarxiv_net
     restart: unless-stopped
@@ -175,3 +222,7 @@ networks:
 
 volumes:
   elasticsearch:
+  nginx_certs:
+  nginx_vhost:
+  nginx_html:
+  nginx_acme:
