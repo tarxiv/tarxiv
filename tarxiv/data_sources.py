@@ -7,6 +7,7 @@ from collections import OrderedDict
 import numpy as np
 import pandas as pd
 import requests
+import warnings
 import traceback
 import json
 import time
@@ -31,75 +32,81 @@ def append_dynamic_values(obj_meta, obj_lc_df):
     status = {"status": "appending dynamic values"}
     try:
         # Get derived mag information by filter
-        filter_df = obj_lc_df.groupby("filter")
-        for survey, survey_grp_df in filter_df.groupby("survey"):
-            for filter_name, filter_grp_df in survey_grp_df.groupby("filter"):
-                detections = filter_grp_df[filter_grp_df["detection"] == 1]
-                non_detections = filter_grp_df[filter_grp_df["detection"] == 0]
-                if len(detections) > 0:
-                    # Peak mag info
-                    peak_row = detections.loc[filter_grp_df["mag"].idxmin()]
-                    peak_mag = {
-                        "filter": filter_name,
-                        "value": peak_row["mag"],
-                        "date": Time(peak_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
-                        "source": peak_row["survey"],
-                    }
-                    peak_mags.append(peak_mag)
+        for (filter_name, survey), grp_df in obj_lc_df.groupby(["filter","survey"]):
+            detections = grp_df[grp_df["detection"] == 1]
+            non_detections = grp_df[grp_df["detection"] == 0]
+            if len(detections) > 0:
+                # Peak mag info
+                peak_row = detections.loc[grp_df["mag"].idxmin()]
+                peak_mag = {
+                    "filter": filter_name,
+                    "value": peak_row["mag"],
+                    "date": Time(peak_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+                    "source": peak_row["survey"],
+                }
+                peak_mags.append(peak_mag)
+                # We will add a nightly medium mag for ATLAS ONLY
+                if survey == "survey":
+                    detections["mag_calc"] = detections.groupby('night')['mag'].transform("median")
+                else:
+                    detections.loc[:, "mag_calc"] = detections["mag"]
 
-                    # Recent detections
-                    # For mag_rate first get most recent non detection if one exists
-                    if len(non_detections) > 0:
-                        # Reset detection index
-                        earliest_det = detections.loc[detections["mjd"].idxmin()]
-                        # Get all the non detections before our earliest detection with deeper limit
-                        valid_non_dets = non_detections[
-                            (non_detections["mjd"] <= earliest_det["mjd"])
-                            & (non_detections["limit"] >= earliest_det["mag"])
-                        ]
-                        # Append to data frame if we have any
-                        if len(valid_non_dets) > 0:
-                            recent_non_det = valid_non_dets.loc[valid_non_dets["mjd"].idxmax()]
-                            recent_non_det = recent_non_det.rename({"mag": "temp", "limit": "mag"})
-                            recent_non_det = recent_non_det.rename({"temp": "limit"})
-                            recent_non_det = recent_non_det.to_frame().T
-                            detections = pd.concat([detections, recent_non_det], ignore_index=True)
-                            print(detections)
 
-                    # Remove duplcate MJDs if exist (avoid divide by zero)
-                    detections_non_dup = detections.drop_duplicates(subset=["mjd"], keep="first")
-                    # Get median detection value per night(only necessary for ATLAS)
-                    if survey == "atlas":
-                        detections_non_dup = detections_non_dup.groupby('night')['mag'].median().reset_index()
-
-                    # Now sort and get the rate
-                    sorted_detections = detections_non_dup.sort_values("mjd")
-                    # Negative because reasons
-                    sorted_detections["mag_rate"] = -(sorted_detections["mag"].diff() / sorted_detections["mag"].diff())
-                    # Replace nan
-                    sorted_detections["mag_rate"] = sorted_detections["mag_rate"].replace(np.nan, None)
-                    recent_row = sorted_detections.loc[sorted_detections["mjd"].idxmax()]
-
-                    recent_det = {
-                        "filter": filter_name,
-                        "value": recent_row["mag"],
-                        "mag_rate": recent_row["mag_rate"],
-                        "date": Time(recent_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
-                        "source": recent_row["survey"],
-                    }
-                    recent_dets.append(recent_det)
-
+                # Recent detections
+                # For mag_rate first get most recent non detection if one exists
                 if len(non_detections) > 0:
-                    # Recent non-detection info
-                    nondet_row = filter_grp_df.loc[non_detections["mjd"].idxmax()]
-                    recent_nondet = {
-                        "filter": filter_name,
-                        "value": nondet_row["limit"],
-                        "date": Time(nondet_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
-                        "source": nondet_row["survey"],
-                    }
-                    recent_nondets.append(recent_nondet)
-                    status = {"status": "successfully appended dynamic values!"}
+                    # Reset detection index
+                    earliest_det = detections.loc[detections["mjd"].idxmin()]
+                    # Get all the non detections before our earliest detection with deeper limit
+                    valid_non_dets = non_detections[
+                        (non_detections["mjd"] <= earliest_det["mjd"])
+                        & (non_detections["limit"] >= earliest_det["mag"])
+                    ]
+                    # We will add a nightly medium mag for ATLAS ONLY
+                    if survey == "survey":
+                        valid_non_dets["mag_calc"] = valid_non_dets.groupby('night')['mag'].transform("median")
+                    else:
+                        valid_non_dets.loc[:, "mag_calc"] = valid_non_dets["mag"]
+                    # Append to data frame if we have any
+                    if len(valid_non_dets) > 0:
+                        recent_non_det = valid_non_dets.loc[valid_non_dets["mjd"].idxmax()]
+                        recent_non_det = recent_non_det.rename({"mag": "temp", "limit": "mag"})
+                        recent_non_det = recent_non_det.rename({"temp": "limit"})
+                        recent_non_det = recent_non_det.to_frame().T
+                        with warnings.catch_warnings():
+                            warnings.simplefilter(action='ignore', category=FutureWarning)
+                            detections = pd.concat([detections, recent_non_det], ignore_index=True)
+
+                # Remove duplcate MJDs if exist (avoid divide by zero)
+                detections_non_dup = detections.drop_duplicates(subset=["mjd"], keep="first")
+                # Now sort and get the rate
+                sorted_detections = detections_non_dup.sort_values("mjd")
+                # Negative because reasons
+                sorted_detections["mag_rate"] = -(sorted_detections["mag_calc"].diff() / sorted_detections["mag_calc"].diff())
+                # Replace nan
+                sorted_detections["mag_rate"] = sorted_detections["mag_rate"].replace(np.nan, None)
+                recent_row = sorted_detections.loc[sorted_detections["mjd"].idxmax()]
+
+                recent_det = {
+                    "filter": filter_name,
+                    "value": recent_row["mag"],
+                    "mag_rate": recent_row["mag_rate"],
+                    "date": Time(recent_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+                    "source": recent_row["survey"],
+                }
+                recent_dets.append(recent_det)
+
+            if len(non_detections) > 0:
+                # Recent non-detection info
+                nondet_row = grp_df.loc[non_detections["mjd"].idxmax()]
+                recent_nondet = {
+                    "filter": filter_name,
+                    "value": nondet_row["limit"],
+                    "date": Time(nondet_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
+                    "source": nondet_row["survey"],
+                }
+                recent_nondets.append(recent_nondet)
+        status = {"status": "successfully appended dynamic values!"}
     except Exception as e:
         status = {
             "status": "encountered unexpected error",

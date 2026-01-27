@@ -9,6 +9,7 @@ import pandas as pd
 import requests
 import datetime
 import deepdiff
+import traceback
 import zipfile
 import signal
 import json
@@ -51,7 +52,7 @@ class TNSPipeline(TarxivModule):
         tns_meta, _ = self.tns.get_object(obj_name)
         # Return empty dicts
         if tns_meta is None:
-            return {}, {}
+            return {}, {}, {}
         ra_deg, dec_deg = tns_meta["ra_deg"]["value"], tns_meta["dec_deg"]["value"]
         # Now get meta and lightcurves from the surveys
         atlas_meta, atlas_lc = self.atlas.get_object(obj_name, ra_deg, dec_deg)
@@ -86,7 +87,8 @@ class TNSPipeline(TarxivModule):
         # Add peak magnitudes to meta
         status, obj_meta = append_dynamic_values(obj_meta, lc_df)
         # Drop night column from lc, was only necessary for mag_rates
-        lc_df.drop("night", axis=1, inplace=True)
+        if len(lc_df) != 0:
+            lc_df.drop("night", axis=1, inplace=True)
         status.update({"obj_name": obj_name})
         self.logger.info(status, extra=status)
         obj_meta = clean_meta(obj_meta)
@@ -175,12 +177,18 @@ class TNSPipeline(TarxivModule):
         status = {"status": "processing bulk object list", "n_objs": len(tns_df)}
         self.logger.info(status, extra=status)
         for _, row in tns_df.iterrows():
-            # Get survey information
-            obj_meta, obj_lc, _ = self.get_object(row["name"])
-            # Add reporting date
-            obj_meta["reporting_date"] = [{"value": row["time_received"], "source": "tns"}]
-            # Upsert to database
-            self.upsert_object(row["name"], obj_meta, obj_lc)
+            try:
+                # Get survey information
+                obj_meta, obj_lc, _ = self.get_object(row["name"])
+                # Add reporting date
+                obj_meta["reporting_date"] = [{"value": row["time_received"], "source": "tns"}]
+                # Upsert to database
+                self.upsert_object(row["name"], obj_meta, obj_lc)
+            except:
+                stack_trace = traceback.format_exc()
+                self.logger.error({"status": "failed pipeline operation",
+                                   "obj_name": row["name"],
+                                   "exception": stack_trace})
 
     def daily_update(self):
         # Get all targets still in "active" window for update
@@ -223,19 +231,25 @@ class TNSPipeline(TarxivModule):
 
             # Each result contains message and list of objects
             for obj_name in alerts:
-                # Get survey information
-                obj_meta, obj_lc, update_meta = self.get_object(obj_name)
-                # Upsert to database
-                self.upsert_object(obj_name, obj_meta, obj_lc)
-                # Get timestamp
-                timestamp = datetime.datetime.now().isoformat()
-                update_meta["timestamp"] = timestamp
-                stream = Stream(self.hop_auth)
-                # Submit to hopskotch
-                with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
-                    s.write(update_meta)
-                    status = {"status": "submitted hopskotch alert", "obj_name": obj_name}
-                    self.logger.info(status, extra=status)
+                try:
+                    # Get survey information
+                    obj_meta, obj_lc, update_meta = self.get_object(obj_name)
+                    # Upsert to database
+                    self.upsert_object(obj_name, obj_meta, obj_lc)
+                    # Get timestamp
+                    timestamp = datetime.datetime.now().isoformat()
+                    update_meta["timestamp"] = timestamp
+                    stream = Stream(self.hop_auth)
+                    # Submit to hopskotch
+                    with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
+                        s.write(update_meta)
+                        status = {"status": "submitted hopskotch alert", "obj_name": obj_name}
+                        self.logger.info(status, extra=status)
+                except:
+                    stack_trace = traceback.format_exc()
+                    self.logger.error({"status": "failed pipeline operation",
+                                       "obj_name": obj_name,
+                                       "exception": stack_trace})
 
     def signal_handler(self, sig, frame):
         status = {"status": "received exit signal", "signal": str(sig), "frame": str(frame)}
