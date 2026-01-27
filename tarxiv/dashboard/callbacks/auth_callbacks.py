@@ -1,12 +1,14 @@
 """Authentication callbacks for the dashboard."""
+import secrets
+from urllib.parse import parse_qs
+
 from dash import Input, Output, State, ctx, html, no_update
 
-from ...auth import login_with_password, register_user
+from ...auth import build_orcid_authorize_url, complete_orcid_login
 from ..components import avatar_fallback, avatar_image
 from ..styles import (
-    AUTH_MODAL_STYLE,
     LOGIN_BUTTON_STYLE,
-    SIGNUP_BUTTON_STYLE,
+    ORCID_BUTTON_STYLE,
     PROFILE_BUTTON_STYLE,
     USER_CHIP_STYLE,
     PROFILE_DRAWER_STYLE,
@@ -19,138 +21,71 @@ def register_auth_callbacks(app, logger):
     """Wire up authentication-related callbacks."""
 
     @app.callback(
-        Output("auth-modal-open", "data", allow_duplicate=True),
         [
-            Input("auth-open-login", "n_clicks"),
-            Input("auth-close-login", "n_clicks"),
-            Input("auth-session-store", "data"),
-        ],
-        State("auth-modal-open", "data"),
-        prevent_initial_call=True,
-    )
-    def toggle_modal(open_clicks, close_clicks, session_data, modal_open):
-        triggered = ctx.triggered_id
-        if triggered == "auth-open-login":
-            return True
-        if triggered in ("auth-close-login", "auth-session-store"):
-            return False
-        return modal_open
-
-    @app.callback(
-        Output("auth-login-modal", "style"),
-        Input("auth-modal-open", "data"),
-    )
-    def set_modal_visibility(is_open):
-        base = dict(AUTH_MODAL_STYLE)
-        if is_open:
-            base["display"] = "flex"
-        else:
-            base["display"] = "none"
-        return base
-
-    @app.callback(
-        Output("auth-signup-modal-open", "data", allow_duplicate=True),
-        [
-            Input("auth-open-signup", "n_clicks"),
-            Input("auth-close-signup", "n_clicks"),
-            Input("auth-session-store", "data"),
-        ],
-        State("auth-signup-modal-open", "data"),
-        prevent_initial_call=True,
-    )
-    def toggle_signup_modal(open_clicks, close_clicks, session_data, modal_open):
-        triggered = ctx.triggered_id
-        if triggered == "auth-open-signup":
-            return True
-        if triggered in ("auth-close-signup", "auth-session-store"):
-            return False
-        return modal_open
-
-    @app.callback(
-        Output("auth-signup-modal", "style"),
-        Input("auth-signup-modal-open", "data"),
-    )
-    def set_signup_modal_visibility(is_open):
-        base = dict(AUTH_MODAL_STYLE)
-        base["display"] = "flex" if is_open else "none"
-        return base
-
-    @app.callback(
-        [
-            Output("auth-session-store", "data", allow_duplicate=True),
+            Output("auth-location", "href"),
+            Output("auth-orcid-state", "data"),
             Output("auth-message-banner", "children", allow_duplicate=True),
-            Output("auth-modal-open", "data", allow_duplicate=True),
-            Output("auth-modal-message", "children"),
         ],
-        Input("auth-submit-login", "n_clicks"),
-        [State("auth-email-input", "value"), State("auth-password-input", "value")],
+        Input("auth-orcid-login", "n_clicks"),
         prevent_initial_call=True,
     )
-    def handle_login(submit_clicks, email, password):
-        if not submit_clicks:
-            return no_update, no_update, no_update, no_update
+    def start_orcid_login(login_clicks):
+        if not login_clicks:
+            return no_update, no_update, no_update
 
-        if not email or not password:
-            warning = create_message_banner("Please enter email and password.", "warning")
-            return no_update, warning, True, warning
-
+        state = secrets.token_urlsafe(16)
         try:
-            session_payload = login_with_password(email, password)
-            user = session_payload.get("user", {})
-            success = create_message_banner(
-                f"Logged in as {user.get('username') or user.get('email')}",
-                "success",
-            )
-            return session_payload, success, False, []
-        except Exception as exc:  # broad to surface auth issues to UI
-            logger.error({"auth_error": str(exc)})
-            error_banner = create_message_banner(
-                f"Login failed: {exc}", "error"
-            )
-            return no_update, error_banner, True, error_banner
-
-    @app.callback(
-        [
-            Output("auth-session-store", "data", allow_duplicate=True),
-            Output("auth-message-banner", "children", allow_duplicate=True),
-            Output("auth-signup-modal-open", "data", allow_duplicate=True),
-            Output("auth-signup-message", "children"),
-        ],
-        Input("auth-submit-signup", "n_clicks"),
-        [
-            State("auth-signup-email", "value"),
-            State("auth-signup-password", "value"),
-            State("auth-signup-username", "value"),
-        ],
-        prevent_initial_call=True,
-    )
-    def handle_signup(submit_clicks, email, password, username):
-        if not submit_clicks:
-            return no_update, no_update, no_update, no_update
-
-        if not email or not password:
-            warning = create_message_banner("Email and password are required.", "warning")
-            return no_update, warning, True, warning
-
-        try:
-            session_payload = register_user(email, password, username)
-            user = session_payload.get("user", {})
-            success = create_message_banner(
-                f"Welcome {user.get('username') or user.get('email')}! Account created.",
-                "success",
-            )
-            return session_payload, success, False, []
+            auth_url = build_orcid_authorize_url(state)
         except Exception as exc:
-            logger.error({"signup_error": str(exc)})
-            error_banner = create_message_banner(f"Sign up failed: {exc}", "error")
-            return no_update, error_banner, True, error_banner
+            logger.error({"orcid_config_error": str(exc)})
+            error_banner = create_message_banner(f"ORCID login unavailable: {exc}", "error")
+            return no_update, no_update, error_banner
+
+        return auth_url, state, no_update
+
+    @app.callback(
+        [
+            Output("auth-session-store", "data", allow_duplicate=True),
+            Output("auth-message-banner", "children", allow_duplicate=True),
+            Output("auth-orcid-state", "data", allow_duplicate=True),
+            Output("auth-location", "search"),
+        ],
+        Input("auth-location", "search"),
+        State("auth-orcid-state", "data"),
+        prevent_initial_call=True,
+    )
+    def handle_orcid_callback(search, expected_state):
+        if not search:
+            return no_update, no_update, no_update, no_update
+
+        params = parse_qs(search.lstrip("?"))
+        code = (params.get("code") or [None])[0]
+        state = (params.get("state") or [None])[0]
+        if not code:
+            return no_update, no_update, no_update, no_update
+
+        if expected_state and state != expected_state:
+            error_banner = create_message_banner("ORCID login failed: invalid state.", "error")
+            return no_update, error_banner, None, ""
+
+        try:
+            session_payload = complete_orcid_login(code)
+            user = session_payload.get("user", {})
+            success = create_message_banner(
+                f"Logged in as {user.get('username') or user.get('email') or 'ORCID user'}",
+                "success",
+            )
+            return session_payload, success, None, ""
+        except Exception as exc:  # broad to surface auth issues to UI
+            logger.error({"orcid_error": str(exc)})
+            error_banner = create_message_banner(f"ORCID login failed: {exc}", "error")
+            return no_update, error_banner, None, ""
 
     @app.callback(
         [
             Output("auth-user-chip", "children"),
             Output("auth-user-chip", "style"),
-            Output("auth-open-login", "style"),
-            Output("auth-open-signup", "style"),
+            Output("auth-orcid-login", "style"),
             Output("auth-profile-toggle", "style"),
         ],
         Input("auth-session-store", "data"),
@@ -161,8 +96,7 @@ def register_auth_callbacks(app, logger):
             return (
                 [],
                 {**USER_CHIP_STYLE, "display": "none"},
-                LOGIN_BUTTON_STYLE,
-                SIGNUP_BUTTON_STYLE,
+                ORCID_BUTTON_STYLE,
                 {**PROFILE_BUTTON_STYLE, "display": "none"},
             )
 
@@ -195,8 +129,7 @@ def register_auth_callbacks(app, logger):
         return (
             chip_children,
             USER_CHIP_STYLE,
-            {**LOGIN_BUTTON_STYLE, "display": "none"},
-            {**SIGNUP_BUTTON_STYLE, "display": "none"},
+            {**ORCID_BUTTON_STYLE, "display": "none"},
             PROFILE_BUTTON_STYLE,
         )
 
@@ -254,7 +187,7 @@ def register_auth_callbacks(app, logger):
             return [
                 html.H3("Your profile", style={"marginTop": 0, "color": "#2c3e50"}),
                 html.P(
-                    "Sign in to see your profile, tags, and teams. This section will grow as we add permissions and roles.",
+                    "Sign in with ORCID to see your profile, tags, and teams. This section will grow as we add permissions and roles.",
                     style={"color": "#7f8c8d", "fontSize": "14px"},
                 ),
             ]

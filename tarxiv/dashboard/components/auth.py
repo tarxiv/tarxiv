@@ -1,5 +1,5 @@
 """Auth UI components for the dashboard."""
-from dash import dcc, html
+from dash import html
 from ..styles import (
     NAVBAR_STYLE,
     NAV_TITLE_STYLE,
@@ -7,12 +7,8 @@ from ..styles import (
     USER_CHIP_STYLE,
     AVATAR_STYLE,
     AVATAR_FALLBACK_STYLE,
-    LOGIN_BUTTON_STYLE,
-    SIGNUP_BUTTON_STYLE,
+    ORCID_BUTTON_STYLE,
     PROFILE_BUTTON_STYLE,
-    AUTH_MODAL_STYLE,
-    AUTH_MODAL_CONTENT_STYLE,
-    INPUT_STYLE,
     BUTTON_STYLE,
     COLORS,
     PROFILE_DRAWER_STYLE,
@@ -69,166 +65,16 @@ def create_navbar():
                         style={**PROFILE_BUTTON_STYLE, "display": "none"},
                     ),
                     html.Button(
-                        "Sign up",
-                        id="auth-open-signup",
+                        "Sign in with ORCID",
+                        id="auth-orcid-login",
                         n_clicks=0,
-                        style=SIGNUP_BUTTON_STYLE,
-                    ),
-                    html.Button(
-                        "Log in",
-                        id="auth-open-login",
-                        n_clicks=0,
-                        style=LOGIN_BUTTON_STYLE,
+                        style=ORCID_BUTTON_STYLE,
                     ),
                 ],
                 style=NAV_RIGHT_STYLE,
             ),
         ],
         style=NAVBAR_STYLE,
-    )
-
-
-def create_login_modal():
-    """Lightweight login modal (email/password for now)."""
-    return html.Div(
-        id="auth-login-modal",
-        style=AUTH_MODAL_STYLE,
-        children=html.Div(
-            [
-                html.H3("Sign in to TarXiv", style={"marginTop": 0, "marginBottom": "12px", "color": COLORS["secondary"]}),
-                html.Div(
-                    [
-                        html.Label("Email", style={"fontWeight": "600", "fontSize": "13px"}),
-                        dcc.Input(
-                            id="auth-email-input",
-                            type="email",
-                            placeholder="you@example.com",
-                            style={**INPUT_STYLE, "width": "100%", "marginTop": "6px", "marginBottom": "12px"},
-                        ),
-                    ]
-                ),
-                html.Div(
-                    [
-                        html.Label("Password", style={"fontWeight": "600", "fontSize": "13px"}),
-                        dcc.Input(
-                            id="auth-password-input",
-                            type="password",
-                            placeholder="••••••••",
-                            style={**INPUT_STYLE, "width": "100%", "marginTop": "6px", "marginBottom": "12px"},
-                        ),
-                    ]
-                ),
-                html.Div(
-                    [
-                        html.Button(
-                            "Sign in",
-                            id="auth-submit-login",
-                            n_clicks=0,
-                            style={**BUTTON_STYLE, "width": "100%"},
-                        ),
-                        html.Button(
-                            "Cancel",
-                            id="auth-close-login",
-                            n_clicks=0,
-                            style={
-                                "marginTop": "10px",
-                                "width": "100%",
-                                "backgroundColor": "white",
-                                "color": COLORS["secondary"],
-                                "border": "1px solid #e5e7eb",
-                                "borderRadius": "6px",
-                                "padding": "8px 12px",
-                                "cursor": "pointer",
-                            },
-                        ),
-                        html.Div(
-                            id="auth-modal-message",
-                            style={"marginTop": "12px"},
-                        ),
-                    ]
-                ),
-            ],
-            style=AUTH_MODAL_CONTENT_STYLE,
-        ),
-    )
-
-
-def create_signup_modal():
-    """Modal form to register a user."""
-    return html.Div(
-        id="auth-signup-modal",
-        style=AUTH_MODAL_STYLE,
-        children=html.Div(
-            [
-                html.H3(
-                    "Create a TarXiv account",
-                    style={"marginTop": 0, "marginBottom": "12px", "color": COLORS["secondary"]},
-                ),
-                html.Div(
-                    [
-                        html.Label("Email", style={"fontWeight": "600", "fontSize": "13px"}),
-                        dcc.Input(
-                            id="auth-signup-email",
-                            type="email",
-                            placeholder="you@example.com",
-                            style={**INPUT_STYLE, "width": "100%", "marginTop": "6px", "marginBottom": "12px"},
-                        ),
-                    ]
-                ),
-                html.Div(
-                    [
-                        html.Label("Password", style={"fontWeight": "600", "fontSize": "13px"}),
-                        dcc.Input(
-                            id="auth-signup-password",
-                            type="password",
-                            placeholder="••••••••",
-                            style={**INPUT_STYLE, "width": "100%", "marginTop": "6px", "marginBottom": "12px"},
-                        ),
-                    ]
-                ),
-                html.Div(
-                    [
-                        html.Label("Display name", style={"fontWeight": "600", "fontSize": "13px"}),
-                        dcc.Input(
-                            id="auth-signup-username",
-                            type="text",
-                            placeholder="e.g., astro_hunter",
-                            style={**INPUT_STYLE, "width": "100%", "marginTop": "6px", "marginBottom": "12px"},
-                        ),
-                    ]
-                ),
-                html.Div(
-                    [
-                        html.Button(
-                            "Create account",
-                            id="auth-submit-signup",
-                            n_clicks=0,
-                            style={**SIGNUP_BUTTON_STYLE, "width": "100%"},
-                        ),
-                        html.Button(
-                            "Cancel",
-                            id="auth-close-signup",
-                            n_clicks=0,
-                            style={
-                                "marginTop": "10px",
-                                "width": "100%",
-                                "backgroundColor": "white",
-                                "color": COLORS["secondary"],
-                                "border": "1px solid #e5e7eb",
-                                "borderRadius": "6px",
-                                "padding": "8px 12px",
-                                "cursor": "pointer",
-                            },
-                        ),
-                        html.Div(
-                            id="auth-signup-message",
-                            style={"marginTop": "12px"},
-                        ),
-                    ]
-                ),
-            ],
-            style=AUTH_MODAL_CONTENT_STYLE,
-        ),
     )
 
 

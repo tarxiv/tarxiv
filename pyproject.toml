@@ -34,7 +34,6 @@ dependencies = [
     "cherrypy",
     "python-logstash-async",
     "dash>=3.3.0",
-    "supabase",
 ]
 requires-python = ">=3.9,<3.13"
 

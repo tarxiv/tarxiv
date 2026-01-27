@@ -152,6 +152,12 @@ SIGNUP_BUTTON_STYLE = {
     "padding": "8px 16px",
     "backgroundColor": "#1abc9c",
 }
+ORCID_BUTTON_STYLE = {
+    **BUTTON_STYLE,
+    "padding": "8px 16px",
+    "backgroundColor": "#a6ce39",
+    "color": "#102b08",
+}
 PROFILE_BUTTON_STYLE = {
     **BUTTON_STYLE,
     "padding": "6px 12px",

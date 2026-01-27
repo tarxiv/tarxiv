@@ -2,8 +2,6 @@
 from dash import dcc, html
 from ..styles import CONTAINER_STYLE, PAGE_STYLE, COLORS
 from ..components import (
-    create_login_modal,
-    create_signup_modal,
     create_navbar,
     create_profile_drawer,
     create_unified_search,
@@ -20,12 +18,10 @@ def create_layout():
     """
     return html.Div(
         [
+            dcc.Location(id="auth-location", refresh=True),
             dcc.Store(id="auth-session-store", storage_type="session"),
-            dcc.Store(id="auth-modal-open", data=False),
-            dcc.Store(id="auth-signup-modal-open", data=False),
+            dcc.Store(id="auth-orcid-state", storage_type="session"),
             dcc.Store(id="profile-drawer-open", data=False),
-            create_login_modal(),
-            create_signup_modal(),
             create_navbar(),
             create_profile_drawer(),
             # Content container

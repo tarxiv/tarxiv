@@ -1,17 +1,13 @@
 """Auth helpers for TarXiv."""
 
-from .supabase_client import (
-    ensure_user_record,
-    get_supabase_client,
-    login_with_password,
-    register_user,
+from .orcid_client import (
+    build_orcid_authorize_url,
+    complete_orcid_login,
     serialize_profile,
 )
 
 __all__ = [
-    "ensure_user_record",
-    "get_supabase_client",
-    "login_with_password",
-    "register_user",
+    "build_orcid_authorize_url",
+    "complete_orcid_login",
     "serialize_profile",
 ]

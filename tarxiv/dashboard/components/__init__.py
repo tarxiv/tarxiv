@@ -4,8 +4,6 @@ from .cards import format_object_metadata, format_cone_search_results
 from .search import create_search_by_id, create_cone_search, create_results_section, create_unified_search
 from .auth import (
     create_navbar,
-    create_login_modal,
-    create_signup_modal,
     create_profile_drawer,
     avatar_fallback,
     avatar_image,
@@ -21,8 +19,6 @@ __all__ = [
     "create_results_section",
     "create_unified_search",
     "create_navbar",
-    "create_login_modal",
-    "create_signup_modal",
     "create_profile_drawer",
     "avatar_fallback",
     "avatar_image",
