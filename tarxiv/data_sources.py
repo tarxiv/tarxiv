@@ -86,6 +86,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
 
                 # Replace nan
                 sorted_detections["mag_rate"] = sorted_detections["mag_rate"].replace(np.nan, None)
+                # print(sorted_detections)
                 recent_row = sorted_detections.loc[sorted_detections["mjd"].idxmax()]
                 recent_det = {
                     "filter": filter_name,
