@@ -45,13 +45,6 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                     "source": peak_row["survey"],
                 }
                 peak_mags.append(peak_mag)
-                # We will add a nightly medium mag for ATLAS ONLY
-                if survey == "atlas":
-                    detections["mag_calc"] = detections.groupby('night')['mag'].transform("median")
-                else:
-                    detections.loc[:, "mag_calc"] = detections["mag"]
-
-
                 # Recent detections
                 # For mag_rate first get most recent non detection if one exists
                 if len(non_detections) > 0:
@@ -66,13 +59,9 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                     # Append to data frame if we have any
                     if len(valid_non_dets) > 0:
                         recent_non_det = valid_non_dets.loc[valid_non_dets["mjd"].idxmax()]
-                        recent_non_det = recent_non_det.rename({"mag": "temp", "limit": "mag"})
-                        recent_non_det = recent_non_det.rename({"temp": "limit"})
-                        recent_non_det['mag_calc'] = recent_non_det['mag']
+                        recent_non_det['mag'] = recent_non_det['limit']
                         recent_non_det = recent_non_det.to_frame().T
 
-                        print("NON-DET: ", survey, filter_name)
-                        print(recent_non_det)
                         with warnings.catch_warnings():
                             warnings.simplefilter(action='ignore', category=FutureWarning)
                             detections = pd.concat([detections, recent_non_det], ignore_index=True)
@@ -81,14 +70,23 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 detections_non_dup = detections.drop_duplicates(subset=["mjd"], keep="first")
                 # Now sort and get the rate
                 sorted_detections = detections_non_dup.sort_values("mjd")
-                print("DATA: ", survey, filter_name)
-                print(sorted_detections)
-                # Negative because reasons
-                sorted_detections["mag_rate"] = -(sorted_detections["mag_calc"].diff() / sorted_detections["mjd"].diff())
+                # With atlas we have to deal with median nightly diffs
+                if survey == "atlas":
+                    # First get night med mjd_diff and mag diff
+                    mjd_diff = sorted_detections.groupby('night')['mjd'].median().diff().rename('mjd_diff')
+                    mag_diffs = sorted_detections.groupby('night')['mag'].median().diff().rename('mag_diff')
+                    diffs = pd.merge(mag_diffs, mjd_diff, on='night')
+                    # Then merge to sorted and get full diffs
+                    sorted_detections = pd.merge(sorted_detections, diffs, on='night', how='left')
+                    sorted_detections["mag_rate"] = -(sorted_detections["mag_diff"] / sorted_detections["mjd_diff"])
+
+                # Otherwise just get point-wise diff
+                else:
+                    sorted_detections["mag_rate"] = -(sorted_detections["mag"].diff() / sorted_detections["mjd"].diff())
+
                 # Replace nan
                 sorted_detections["mag_rate"] = sorted_detections["mag_rate"].replace(np.nan, None)
                 recent_row = sorted_detections.loc[sorted_detections["mjd"].idxmax()]
-
                 recent_det = {
                     "filter": filter_name,
                     "value": recent_row["mag"],
