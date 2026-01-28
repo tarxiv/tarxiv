@@ -181,18 +181,23 @@ class TNSPipeline(TarxivModule):
 
         status = {"status": "processing bulk object list", "n_objs": len(tns_df)}
         self.logger.info(status, extra=status)
-        for _, row in tns_df.iterrows():
+        for _, obj in tns_df.iterrows():
+            # FRB Naming conventions are weird
+            if obj["type"] == "FRB" and obj["name"][:3] != "FRB":
+                obj_name = "FRB" + obj["name"]
+            else:
+                obj_name = obj["name"]
             try:
                 # Get survey information
-                obj_meta, obj_lc, _ = self.get_object(row["name"])
+                obj_meta, obj_lc, _ = self.get_object(obj_name)
                 # Add reporting date
-                obj_meta["reporting_date"] = [{"value": row["time_received"], "source": "tns"}]
+                obj_meta["reporting_date"] = [{"value": obj["time_received"], "source": "tns"}]
                 # Upsert to database
-                self.upsert_object(row["name"], obj_meta, obj_lc)
+                self.upsert_object(obj_name, obj_meta, obj_lc)
             except:
                 stack_trace = traceback.format_exc()
                 self.logger.error({"status": "failed pipeline operation",
-                                   "obj_name": row["name"],
+                                   "obj_name": obj_name,
                                    "exception": stack_trace})
 
     def daily_update(self):
@@ -200,23 +205,28 @@ class TNSPipeline(TarxivModule):
         daily_objects = self.db.get_all_active_objects(active_days=self.config['tns']['obj_active_days'])
         # Pull TNS info and update
         for obj_name in daily_objects:
-            # Get survey information
-            obj_meta, obj_lc, update_meta = self.get_object(obj_name)
-            # Upsert to database
-            self.upsert_object(obj_name, obj_meta, obj_lc)
-            # Get timestamp
-            timestamp = datetime.datetime.now().isoformat()
-            update_meta["timestamp"] = timestamp
-            # We don't need to send hopskotch alert for objects with no updates
-            if len(update_meta.keys()) <= 3:
-                continue
-            stream = Stream(auth=self.hop_auth)
-            # Submit to hopskotch
-            with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
-                s.write(update_meta)
-                status = {"status": "submitted hopskotch alert", "obj_name": obj_name}
-                self.logger.info(status, extra=status)
-
+            try:
+                # Get survey information
+                obj_meta, obj_lc, update_meta = self.get_object(obj_name)
+                # Upsert to database
+                self.upsert_object(obj_name, obj_meta, obj_lc)
+                # Get timestamp
+                timestamp = datetime.datetime.now().isoformat()
+                update_meta["timestamp"] = timestamp
+                # We don't need to send hopskotch alert for objects with no updates
+                if len(update_meta.keys()) <= 3:
+                    continue
+                stream = Stream(auth=self.hop_auth)
+                # Submit to hopskotch
+                with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
+                    s.write(update_meta)
+                    status = {"status": "submitted hopskotch alert", "obj_name": obj_name}
+                    self.logger.info(status, extra=status)
+            except:
+                stack_trace = traceback.format_exc()
+                self.logger.error({"status": "failed pipeline operation",
+                                   "obj_name": obj_name,
+                                   "exception": stack_trace})
     def run_pipeline(self):
         # Set signals
         signal.signal(signal.SIGINT, handler=self.signal_handler)
