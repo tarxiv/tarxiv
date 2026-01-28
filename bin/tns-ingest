@@ -39,14 +39,14 @@ elif args.bulk_missing:
                           reporting_mode=(PRINT | LOGFILE | DATABASE),
                           debug=args.debug)
     # Run the pipeline
-    txv_tns.download_bulk(include_existing=False)
+    txv_tns.update_bulk(include_existing=False)
 
 elif args.bulk_update:
     txv_tns = TNSPipeline(script_name="tns_bulk_ingest",
                           reporting_mode=(PRINT | LOGFILE | DATABASE),
                           debug=args.debug)
     # Run the pipeline
-    txv_tns.download_bulk(include_existing=True)
+    txv_tns.update_bulk(include_existing=True)
 
 elif args.daily_update:
     txv_tns = TNSPipeline(script_name="tns_daily_ingest",
