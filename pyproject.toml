@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tarxiv"
-version = "0.0.7"
+version = "0.0.8"
 description = "explosive Transient ArXiv"
 authors = [
     { name = "Heloise Fanny Stevance", email = "hfstevance@gmail.com"},
