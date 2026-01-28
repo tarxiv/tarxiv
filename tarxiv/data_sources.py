@@ -82,6 +82,8 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 detections_non_dup = detections.drop_duplicates(subset=["mjd"], keep="first")
                 # Now sort and get the rate
                 sorted_detections = detections_non_dup.sort_values("mjd")
+                print("DATA: ", survey, filter_name)
+                print(sorted_detections)
                 # Negative because reasons
                 sorted_detections["mag_rate"] = -(sorted_detections["mag_calc"].diff() / sorted_detections["mag_calc"].diff())
                 # Replace nan
