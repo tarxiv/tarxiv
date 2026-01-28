@@ -33,8 +33,8 @@ def append_dynamic_values(obj_meta, obj_lc_df):
     try:
         # Get derived mag information by filter
         for (filter_name, survey), grp_df in obj_lc_df.groupby(["filter","survey"]):
-            detections = grp_df[grp_df["detection"] == 1]
-            non_detections = grp_df[grp_df["detection"] == 0]
+            detections = grp_df[grp_df["detection"] == 1].copy()
+            non_detections = grp_df[grp_df["detection"] == 0].copy()
             if len(detections) > 0:
                 # Peak mag info
                 peak_row = detections.loc[grp_df["mag"].idxmin()]
@@ -46,7 +46,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 }
                 peak_mags.append(peak_mag)
                 # We will add a nightly medium mag for ATLAS ONLY
-                if survey == "survey":
+                if survey == "atlas":
                     detections["mag_calc"] = detections.groupby('night')['mag'].transform("median")
                 else:
                     detections.loc[:, "mag_calc"] = detections["mag"]
@@ -61,16 +61,13 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                     valid_non_dets = non_detections[
                         (non_detections["mjd"] <= earliest_det["mjd"])
                         & (non_detections["limit"] >= earliest_det["mag"])
-                    ]
+                    ].copy()
                     # We will add a nightly medium mag for ATLAS ONLY
                     if survey == "atlas":
                         valid_non_dets["mag_calc"] = valid_non_dets.groupby('night')['mag'].transform("median")
-                        print(survey, filter_name)
-                        print(valid_non_dets.head())
                     else:
                         valid_non_dets.loc[:, "mag_calc"] = valid_non_dets["mag"]
-                        print(survey, filter_name)
-                        print(valid_non_dets.head())
+
                     # Append to data frame if we have any
                     if len(valid_non_dets) > 0:
                         recent_non_det = valid_non_dets.loc[valid_non_dets["mjd"].idxmax()]
