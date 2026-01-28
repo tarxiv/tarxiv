@@ -98,4 +98,4 @@ def clean_meta(obj_meta):
     return obj_meta
 
 def precision(x, p):
-    return float(Decimal( x*10**p ).quantize(0,ROUND_HALF_UP)/10**p)
+    return float(Decimal( x*10**p ).quantize(0,ROUND_HALF_UP)/10**p) if x is not None else None
