@@ -2,10 +2,17 @@
 
 from dash import html, Output, Input, State, ALL, ctx, no_update
 import dash_mantine_components as dmc
+from ..schemas import (
+    MetadataResponseModel,
+    LightcurveResponseModel,
+    ConeSearchResponseModel,
+)
 from ..components import (
     format_object_metadata,
     format_cone_search_results,
 )
+import requests
+from pydantic import ValidationError
 
 
 def register_search_callbacks(app, txv_db, logger):
@@ -69,8 +76,49 @@ def register_search_callbacks(app, txv_db, logger):
             status_msg = f"Searching for object: {object_id}"
             logger.info({"search_type": "id", "object_id": object_id})
 
+            response_meta = requests.post(
+                url=f"http://tarxiv-api:9001/get_object_meta/{object_id}",  # TODO: Fix URL
+                timeout=10,
+                headers={
+                    "accept": "application/json",
+                    "Content-Type": "application/json",
+                    "Authorization": "TOKEN",
+                },
+            )
+            meta = None
+            logger.info(
+                {"info": f"Metadata response status: {response_meta.status_code}"}
+            )
+            # logger.info({"info": f"Metadata response text: {response_meta.text}"})
+            if response_meta.status_code == 200:
+                try:
+                    data = MetadataResponseModel.model_validate_json(response_meta.text)
+                    # meta = MetadataResponseModel.model_validate(response_meta.json())
+                except ValidationError as e:
+                    logger.error(
+                        {
+                            "error": f"Failed to parse metadata for object {object_id}: {str(e)}"
+                        }
+                    )
+                    error_banner = create_message_banner(
+                        f"Failed to parse metadata for object: {object_id}", "error"
+                    )
+                    return no_update, "", error_banner, no_update
+            else:
+                logger.error(
+                    {
+                        "error": f"Metadata request failed for object {object_id}: "
+                        f"Status {response_meta.status_code}"
+                    }
+                )
+                error_banner = create_message_banner(
+                    f"Metadata request failed for object: {object_id}", "error"
+                )
+                return no_update, "", error_banner, no_update
+
+            meta = data.model_dump()
             # Get metadata
-            meta = txv_db.get(object_id, "objects")
+            # meta = txv_db.get(object_id, "objects")
             if meta is None:
                 error_banner = create_message_banner(
                     f"No object found with ID: {object_id}", "error"
@@ -180,7 +228,8 @@ def create_message_banner(message, message_type="info"):
     colors = color_map.get(message_type, color_map["info"])
 
     return dmc.Alert(
-        message,
+        # message,
+        title=message.capitalize(),
         style={
             "padding": "12px 20px",
             "marginBottom": "15px",
@@ -207,17 +256,85 @@ def get_lightcurve_data(txv_db, object_id, logger):
         Lightcurve data or None
     """
     try:
-        lc_data = txv_db.get(object_id, "lightcurves")
-        logger.debug(
-            {
-                "debug": f"Fetched lightcurve data for object: {object_id}: "
-                f"{len(lc_data) if lc_data else lc_data}"
-            }
+        # lc_data = txv_db.get(object_id, "lightcurves")
+        response_lc = requests.post(
+            url=f"http://tarxiv-api:9001/get_object_lc/{object_id}",  # TODO: Fix URL
+            timeout=10,
+            headers={
+                "accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": "TOKEN",
+            },
         )
-        return lc_data
+        # response_lc.text will contain a list of LightcurveResponseSingle
+        data = None
+        logger.info({"info": f"Lightcurve response status: {response_lc.status_code}"})
+        if response_lc.status_code == 200:
+            try:
+                data = LightcurveResponseModel.validate_json(response_lc.text)
+
+                logger.info(
+                    {
+                        "success": f"Parsed lightcurve for object {object_id}: {len(data)} points"
+                    }
+                )
+
+            except ValidationError as e:
+                logger.error(
+                    {
+                        "error": f"Failed to parse lightcurve for object {object_id}: {str(e)}"
+                    }
+                )
+                return None
+        else:
+            logger.error(
+                {
+                    "error": f"Lightcurve request failed for object {object_id}: "
+                    f"Status {response_lc.status_code}"
+                }
+            )
+            return None
+
+        return LightcurveResponseModel.dump_python(data)
     except Exception as e:
         logger.error({"error": f"Failed to fetch lightcurve: {str(e)}"})
         return None
+
+
+# def parse_response(type: BaseModel, response: requests.Response, logger) -> BaseModel | None:
+#     """Parse a response into a Pydantic model.
+
+#     Args:
+#         type: Pydantic model class
+#         response: HTTP response
+#         logger: Logger instance
+
+#     Returns
+#     -------
+#         Parsed model instance or None
+#     """
+#     try:
+#         if response.status_code == 200:
+#             try:
+#                 data = type.model_validate_json(response.text)
+#                 return data
+#             except ValidationError as e:
+#                 logger.error(
+#                     {
+#                         "error": f"Failed to parse response: {str(e)}"
+#                     }
+#                 )
+#                 return None
+#         else:
+#             logger.error(
+#                 {
+#                     "error": f"Request failed: Status {response.status_code}"
+#                 }
+#             )
+#             return None
+#     except Exception as e:
+#         logger.error({"error": f"Failed to parse response: {str(e)}"})
+#         return None
 
 
 def get_cone_search_results(txv_db, ra, dec, radius, logger) -> list:
@@ -235,13 +352,45 @@ def get_cone_search_results(txv_db, ra, dec, radius, logger) -> list:
         List of search results
     """
     try:
-        results = txv_db.cone_search(ra, dec, radius)
-        logger.debug(
-            {
-                "debug": f"Cone search results for RA={ra}, Dec={dec}, "
-                f"radius={radius} arcsec: {len(results)} objects found"
-            }
+        # results = txv_db.cone_search(ra, dec, radius)
+        response_cone = requests.post(
+            url="http://tarxiv-api:9001/cone_search",
+            timeout=10,
+            headers={
+                "accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": "TOKEN",
+            },
+            json={"ra": ra, "dec": dec, "radius": radius},
         )
+
+        results = []
+        logger.info(
+            {"info": f"Cone search response status: {response_cone.status_code}"}
+        )
+
+        if response_cone.status_code == 200:
+            try:
+                data = ConeSearchResponseModel.validate_json(response_cone.text)
+                results = ConeSearchResponseModel.dump_python(data)
+
+                logger.debug(
+                    {
+                        "debug": f"Cone search results for RA={ra}, Dec={dec}, "
+                        f"radius={radius} arcsec: {len(results)} objects found"
+                    }
+                )
+            except ValidationError as e:
+                logger.error(
+                    {"error": f"Failed to parse cone search results: {str(e)}"}
+                )
+        else:
+            logger.error(
+                {
+                    "error": f"Cone search request failed: Status {response_cone.status_code}"
+                }
+            )
+
         return results
     except Exception as e:
         logger.error({"error": f"Cone search failed: {str(e)}"})
