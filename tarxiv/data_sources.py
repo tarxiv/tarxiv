@@ -1,5 +1,5 @@
 """Pull and process lightcurves"""
-from .utils import TarxivModule, SurveyMetaMissingError, SurveyLightCurveMissingError
+from .utils import TarxivModule, SurveyMetaMissingError, SurveyLightCurveMissingError, precision
 
 from pyasassn.client import SkyPatrolClient
 from astropy.time import Time
@@ -58,8 +58,8 @@ def append_dynamic_values(obj_meta, obj_lc_df):
 
                     # Append to data frame if we have any
                     if len(valid_non_dets) > 0:
+                        valid_non_dets['mag'] = valid_non_dets['limit']
                         recent_non_det = valid_non_dets.loc[valid_non_dets["mjd"].idxmax()]
-                        recent_non_det['mag'] = recent_non_det['limit']
                         recent_non_det = recent_non_det.to_frame().T
 
                         with warnings.catch_warnings():
@@ -90,7 +90,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 recent_det = {
                     "filter": filter_name,
                     "value": recent_row["mag"],
-                    "mag_rate": recent_row["mag_rate"],
+                    "mag_rate": precision(recent_row["mag_rate"], 6),
                     "date": Time(recent_row["mjd"], format="mjd", scale="utc").isot.replace("T", " "),
                     "source": recent_row["survey"],
                 }
