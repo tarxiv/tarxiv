@@ -63,10 +63,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                         & (non_detections["limit"] >= earliest_det["mag"])
                     ].copy()
                     # We will add a nightly medium mag for ATLAS ONLY
-                    if survey == "atlas":
-                        valid_non_dets["mag_calc"] = valid_non_dets.groupby('night')['mag'].transform("median")
-                    else:
-                        valid_non_dets.loc[:, "mag_calc"] = valid_non_dets["mag"]
+                    valid_non_dets.loc[:, "mag_calc"] = valid_non_dets["mag"]
 
                     # Append to data frame if we have any
                     if len(valid_non_dets) > 0:
@@ -85,7 +82,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 print("DATA: ", survey, filter_name)
                 print(sorted_detections)
                 # Negative because reasons
-                sorted_detections["mag_rate"] = -(sorted_detections["mag_calc"].diff() / sorted_detections["mag_calc"].diff())
+                sorted_detections["mag_rate"] = -(sorted_detections["mag_calc"].diff() / sorted_detections["mjd"].diff())
                 # Replace nan
                 sorted_detections["mag_rate"] = sorted_detections["mag_rate"].replace(np.nan, None)
                 recent_row = sorted_detections.loc[sorted_detections["mjd"].idxmax()]
