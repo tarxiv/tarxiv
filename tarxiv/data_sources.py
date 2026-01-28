@@ -577,70 +577,59 @@ class TNS(Survey):
         meta, lc_df = None, pd.DataFrame()
         # Initial status
         status = {"obj_name": obj_name}
-        try:
-            # Wait to avoid rate limiting
-            time.sleep(self.config["tns"]["rate_limit"])
-            # Run request to TNS server
-            get_url = self.site + "/api/get/object"
-            headers = {"User-Agent": self.marker}
-            obj_request = OrderedDict([
-                ("objid", ""),
-                ("objname", obj_name),
-                ("photometry", "0"),
-                ("spectra", "0"),
-            ])
-            get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
-            response = requests.post(get_url, headers=headers, data=get_data)
+        # Wait to avoid rate limiting
+        time.sleep(self.config["tns"]["rate_limit"])
+        # Run request to TNS server
+        get_url = self.site + "/api/get/object"
+        headers = {"User-Agent": self.marker}
+        obj_request = OrderedDict([
+            ("objid", ""),
+            ("objname", obj_name),
+            ("photometry", "0"),
+            ("spectra", "0"),
+        ])
+        get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
+        response = requests.post(get_url, headers=headers, data=get_data)
+        if response.status_code != 200:
+            raise SurveyMetaMissingError(response.content)
 
-            if response.status_code != 200:
-                status["explanation"] = response.content
-                raise SurveyMetaMissingError
-            response_json = response.json()
+        # Convert to json
+        response_json = response.json()
+        if "data" not in response_json.keys():
+            raise SurveyMetaMissingError("no 'data' in response")
 
-            # Meta
-            if "data" not in response_json.keys():
-                raise SurveyMetaMissingError
-
-            # Reduce meta to what we want
-            status["status"] = "query success"
-            result = response_json["data"]
-            meta = {
-                "identifiers": {"name": result["objname"], "source": "tns"},
-                "ra_deg": {"value": result["radeg"], "source": "tns"},
-                "dec_deg": {"value": result["decdeg"], "source": "tns"},
-                "ra_hms": {"value": result["ra"], "source": "tns"},
-                "dec_dms": {"value": result["dec"], "source": "tns"},
-                "object_type": [
-                    {"value": result["name_prefix"], "source": "tns"},
-                    {"value": result["object_type"]["name"], "source": "tns"},
-                ],
-                "discovery_date": {"value": result["discoverydate"], "source": "tns"},
-                "reporting_group": {
-                    "value": result["reporting_group"]["group_name"],
-                    "source": "tns",
-                },
-                "discovery_data_source": {
-                    "value": result["discovery_data_source"]["group_name"],
-                    "source": "tns",
-                },
-            }
-            if result["redshift"] is not None:
-                meta["redshift"] = {"value": result["redshift"], "source": "tns"}
-            if result["hostname"] is not None:
-                meta["host_name"] = {"value": result["hostname"], "source": "tns"}
-
-        except SurveyMetaMissingError:
-            status["status"] = "failed to get TNS metadata"
-
-        except Exception as e:
-            status.update({
-                "status": "encontered unexpected error",
-                "error_message": str(e),
-                "details": traceback.format_exc(),
-            })
+        # Reduce meta to what we want
+        status["status"] = "query success"
+        result = response_json["data"]
+        meta = {
+            "identifiers": {"name": result["objname"], "source": "tns"},
+            "ra_deg": {"value": result["radeg"], "source": "tns"},
+            "dec_deg": {"value": result["decdeg"], "source": "tns"},
+            "ra_hms": {"value": result["ra"], "source": "tns"},
+            "dec_dms": {"value": result["dec"], "source": "tns"},
+            "object_type": [
+                {"value": result["name_prefix"], "source": "tns"},
+                {"value": result["object_type"]["name"], "source": "tns"},
+            ],
+            "discovery_date": {"value": result["discoverydate"], "source": "tns"},
+            "reporting_group": {
+                "value": result["reporting_group"]["group_name"],
+                "source": "tns",
+            },
+            "discovery_data_source": {
+                "value": result["discovery_data_source"]["group_name"],
+                "source": "tns",
+            },
+        }
+        if result["redshift"] is not None:
+            meta["redshift"] = {"value": result["redshift"], "source": "tns"}
+        if result["hostname"] is not None:
+            meta["host_name"] = {"value": result["hostname"], "source": "tns"}
 
         self.logger.info(status, extra=status)
         return meta, lc_df
+
+
 
 
 if __name__ == "__main__":
