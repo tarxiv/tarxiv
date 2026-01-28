@@ -63,10 +63,12 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                         & (non_detections["limit"] >= earliest_det["mag"])
                     ]
                     # We will add a nightly medium mag for ATLAS ONLY
-                    if survey == "survey":
+                    if survey == "atlas":
                         valid_non_dets["mag_calc"] = valid_non_dets.groupby('night')['mag'].transform("median")
+                        print(valid_non_dets.head())
                     else:
                         valid_non_dets.loc[:, "mag_calc"] = valid_non_dets["mag"]
+                        print(valid_non_dets.head())
                     # Append to data frame if we have any
                     if len(valid_non_dets) > 0:
                         recent_non_det = valid_non_dets.loc[valid_non_dets["mjd"].idxmax()]
