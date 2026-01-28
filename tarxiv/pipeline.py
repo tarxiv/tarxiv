@@ -144,12 +144,7 @@ class TNSPipeline(TarxivModule):
         self.db.upsert(obj_name, obj_meta, collection="objects")
         self.db.upsert(obj_name, obj_lc, collection="lightcurves")
 
-    def download_bulk(self, include_existing=False):
-        """Download bulk TNS public object csv and convert to dataframe.
-
-        Used for bulk back-processing of TNS sources
-        :return: full TNS public object dataframe
-        """
+    def get_tns_bulk_df(self):
         # Run request to TNS Server
         status = {"status": "retrieving TNS public object catalog"}
         self.logger.info(status, extra=status)
@@ -167,6 +162,16 @@ class TNSPipeline(TarxivModule):
             data = myzip.read(name="tns_public_objects.csv")
         # Get list of TNS names and reporting dates
         tns_df = pd.read_csv(io.BytesIO(data), skiprows=[0])
+        return tns_df
+
+    def update_bulk(self, include_existing=False):
+        """Download bulk TNS public object csv and convert to dataframe.
+
+        Used for bulk back-processing of TNS sources
+        :return: full TNS public object dataframe
+        """
+        # First get whole dataframe
+        tns_df = self.get_tns_bulk_df()
 
         if not include_existing:
             # Only ingest TNS objects NOT already in the database
