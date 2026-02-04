@@ -18,7 +18,11 @@ def register_plotting_callbacks(app, logger):
     """
 
     @app.callback(
-        Output({"type": PLOT_TYPE, "index": "lightcurve-plot"}, "figure"),
+        Output(
+            {"type": PLOT_TYPE, "index": "lightcurve-plot"},
+            "figure",
+            allow_duplicate=True,
+        ),
         Input("lightcurve-store", "data"),
         State(THEME_STORE_ID, "data"),
         prevent_initial_call=True,
@@ -38,7 +42,11 @@ def register_plotting_callbacks(app, logger):
         return {}
 
     @app.callback(
-        Output({"type": PLOT_TYPE, "index": "sky-plot"}, "figure"),
+        Output(
+            {"type": PLOT_TYPE, "index": "sky-plot"},
+            "figure",
+            allow_duplicate=True,
+        ),
         Input("cone-search-store", "data"),
         State(THEME_STORE_ID, "data"),
         prevent_initial_call=True,

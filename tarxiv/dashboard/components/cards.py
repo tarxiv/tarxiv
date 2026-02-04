@@ -2,9 +2,146 @@
 
 import dash_mantine_components as dmc
 from dash import dcc
+from dash_iconify import DashIconify
 import json
-from ..styles import CARD_STYLE, COLORS
+from ..styles import CARD_STYLE
 from . import theme_manager as tm
+
+
+def TitleCard(title_text: str, subtitle_text: str | None = None, **kwargs):
+    """Create a styled title card.
+
+    Args:
+        title_text: Main title text
+        subtitle_text: Optional subtitle text
+        **kwargs: Additional keyword arguments for dmc.Paper
+
+    Returns
+    -------
+        dmc.Paper component styled as a title card
+    """
+    children = []
+    children.append(
+        dmc.Title(
+            title_text,
+            order=1,
+            style={"marginBottom": "0px", "fontSize": "90px"},
+        )
+    )
+    if subtitle_text:
+        children.append(
+            dmc.Text(
+                subtitle_text,
+            )
+        )
+
+    return dmc.Paper(
+        children=dmc.Stack(
+            children=children,
+            align="center",
+        ),
+        p="xl",
+        radius=28,
+        style={
+            "backgroundColor": "var(--tarxiv-color-primary)",
+            "color": "white",
+            "textAlign": "center",
+        },
+        **kwargs,
+    )
+
+
+def ExpressiveCard(children, title=None, **kwargs):
+    """Create a styled card with expressive design.
+
+    Args:
+        children: List of child components
+        title: Optional title for the card
+        **kwargs: Additional keyword arguments for dmc.Paper
+
+    Returns
+    -------
+        dmc.Paper component styled as a card
+    """
+    if not isinstance(children, list):
+        children = [children]
+
+    return dmc.Paper(
+        children=[
+            dmc.Text(
+                title,
+                fw=700,
+                fz="lg",
+                mb="md",
+            )
+            if title
+            else None,
+            dmc.Stack(
+                children=children,
+                gap="md",
+            ),
+        ],
+        p="xl",
+        radius=28,  # Specific M3 Expressive radius
+        style={
+            "backgroundColor": "var(--tarxiv-card)",
+        },
+        **kwargs,
+    )
+
+
+def create_nav_item(
+    icon: str,
+    label: str,
+    is_active: bool,
+    id: str = "",
+):
+    return dmc.UnstyledButton(
+        className="nav-item-hover",
+        px=2,
+        py="sm",
+        my="xs",
+        style={
+            "width": "100%",
+            "borderRadius": "16px",
+            "display": "flex",
+            "flexDirection": "column",
+            "alignItems": "center",
+            "gap": "4px",
+            "color": "var(--tarxiv-color-primary)" if is_active else "inherit",
+            "transition": "background-color 200ms ease",
+        },
+        children=[
+            DashIconify(icon=icon, width=28, id=id),
+            dmc.Text(label, size="xs", fw=500, ta="center", className="nav-text-wrap"),
+        ],
+    )
+
+
+def create_nav_link(
+    icon: str,
+    label: str,
+    href: str,
+    is_active: bool,
+    id: str = "",
+):
+    """Creates a vertically stacked navigation button.
+
+    Args:
+        icon: Icon name for DashIconify
+        label: Text label for the nav item
+        href: Link URL
+        is_active: Whether this nav item is active
+
+    Returns
+    -------
+        dcc.Link containing a styled dmc.UnstyledButton
+    """
+    return dcc.Link(
+        href=href,
+        style={"textDecoration": "none", "color": "inherit"},
+        children=create_nav_item(icon, label, is_active, id=id),
+    )
 
 
 def format_object_metadata(object_id, meta, logger=None):
@@ -12,7 +149,7 @@ def format_object_metadata(object_id, meta, logger=None):
 
     Args:
         object_id: Object identifier
-        meta: Metadata dictionary
+        meta: Metdata dictionary
         logger: Optional logger instance
 
     Returns
@@ -47,10 +184,7 @@ def format_object_metadata(object_id, meta, logger=None):
                     value = str(value[0])
             summary_items.append(
                 dmc.Text(
-                    [
-                        dmc.Text(f"{label}: "),
-                        str(value),
-                    ],
+                    dmc.Text(f"{label}: {value}"),
                     style={"marginBottom": "6px"},
                 )
             )
@@ -58,49 +192,30 @@ def format_object_metadata(object_id, meta, logger=None):
     return dmc.Stack(
         [
             # Lightcurve card
-            dmc.Card(
-                [
-                    dmc.Title(
-                        f"Lightcurve: {object_id}", order=3, style={"marginTop": "0"}
-                    ),
-                    dcc.Loading(
-                        dcc.Graph(
-                            id={"type": tm.PLOT_TYPE, "index": "lightcurve-plot"}
-                        ),
-                    ),
-                ],
-                style=CARD_STYLE,
+            ExpressiveCard(
+                children=dcc.Loading(
+                    dcc.Graph(id={"type": tm.PLOT_TYPE, "index": "lightcurve-plot"}),
+                ),
+                title=f"Lightcurve: {object_id}",
             ),
             # Metadata card
-            dmc.Card(
-                [
-                    dmc.Title(
-                        f"Object Metadata: {object_id}",
-                        order=3,
-                        style={"marginTop": "0"},
-                    ),
-                    dmc.Stack(summary_items),
-                ],
-                style=CARD_STYLE,
+            ExpressiveCard(
+                children=dmc.Stack(summary_items),
+                title=f"Object Metadata: {object_id}",
             ),
             # Full JSON card
-            dmc.Card(
-                [
-                    dmc.Title(
-                        "Full Metadata (JSON)", order=4, style={"marginTop": "0"}
-                    ),
-                    dmc.Code(
-                        json.dumps(meta, indent=2),
-                        style={
-                            "padding": "10px",
-                            "maxHeight": "400px",
-                            "overflow": "auto",
-                            "borderRadius": "4px",
-                        },
-                        block=True,
-                    ),
-                ],
-                style=CARD_STYLE,
+            ExpressiveCard(
+                children=dmc.Code(
+                    json.dumps(meta, indent=2),
+                    style={
+                        "padding": "10px",
+                        "maxHeight": "400px",
+                        "overflow": "auto",
+                        "borderRadius": "4px",
+                    },
+                    block=True,
+                ),
+                title="Full Metadata (JSON)",
             ),
         ]
     )

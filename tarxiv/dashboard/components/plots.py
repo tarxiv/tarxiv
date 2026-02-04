@@ -1,9 +1,7 @@
 """Plotting functions for the dashboard."""
 
-import dash_mantine_components as dmc
 import plotly.graph_objects as go
-from ..styles import FILTER_COLORS
-from .theme_manager import apply_theme
+from .theme_manager import apply_theme, get_filter_style
 
 
 def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
@@ -12,6 +10,7 @@ def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
     Args:
         lc_data: List of photometry points
         object_id: Object identifier
+        theme_template: Theme template for styling
         logger: Optional logger instance
 
     Returns
@@ -76,7 +75,7 @@ def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
     for (filter_name, survey_name), data in sorted(
         grouped_data.items(), key=lambda x: (x[0][1], x[0][0])
     ):
-        color = FILTER_COLORS.get(filter_name, "gray")
+        # color = FILTER_COLORS.get(filter_name, "gray")
         survey_label = survey_name.upper()
 
         # Plot detections
@@ -93,7 +92,10 @@ def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
                     y=data["mag"],
                     mode="markers",
                     name=f"{filter_name}-band",
-                    marker=dict(size=8, color=color),
+                    marker=dict(
+                        size=8,
+                        color=get_filter_style(filter_name),
+                    ),
                     error_y=error_y,
                     legendgroup=survey_name,
                     legendgrouptitle_text=survey_label,
@@ -109,7 +111,10 @@ def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
                     mode="markers",
                     name=f"{filter_name}-band (limit)",
                     marker=dict(
-                        size=8, color=color, symbol="triangle-down", opacity=0.5
+                        size=8,
+                        color=get_filter_style(filter_name),
+                        symbol="triangle-down",
+                        opacity=0.5,
                     ),
                     showlegend=True,
                     legendgroup=survey_name,
@@ -117,10 +122,10 @@ def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
                 )
             )
 
-    dmc.add_figure_templates()  # Enables light/dark mode support
     fig.update_layout(
         title=f"Lightcurve: {object_id}",
         xaxis_title="MJD",
+        xaxis_tickformat=".2f",
         yaxis_title="Magnitude (mag)",
         yaxis=dict(autorange="reversed"),  # Magnitude scale is inverted
         hovermode="closest",
@@ -159,7 +164,12 @@ def create_sky_plot(results, search_ra, search_dec, theme_template, logger=None)
             x=[search_ra],
             y=[search_dec],
             mode="markers",
-            marker=dict(size=15, color="red", symbol="x"),
+            # marker=dict(size=15, color="red", symbol="x"),
+            marker=dict(
+                size=15,
+                color=get_filter_style("search_position"),
+                symbol="x",
+            ),
             name="Search Position",
         )
     )
@@ -175,13 +185,17 @@ def create_sky_plot(results, search_ra, search_dec, theme_template, logger=None)
                 x=ras,
                 y=decs,
                 mode="markers",
-                marker=dict(size=10, color="blue"),
+                # marker=dict(size=10, color="blue"),
+                marker=dict(
+                    size=10,
+                    color=get_filter_style("object"),
+                    symbol="circle",
+                ),
                 text=names,
                 name="Objects",
             )
         )
 
-    dmc.add_figure_templates()  # Enables light/dark mode support
     fig.update_layout(
         title="Sky Position Plot",
         xaxis_title="RA (degrees)",

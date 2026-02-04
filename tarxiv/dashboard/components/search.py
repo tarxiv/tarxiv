@@ -2,7 +2,7 @@
 
 from dash import html
 import dash_mantine_components as dmc
-from ..styles import SECTION_STYLE, BUTTON_STYLE, INPUT_STYLE, COLORS
+from ..components import ExpressiveCard
 
 
 def create_unified_search():
@@ -12,8 +12,9 @@ def create_unified_search():
     -------
         html.Div containing tabbed search UI
     """
-    return dmc.Container(
-        [
+    # return dmc.Container(
+    return ExpressiveCard(
+        children=[
             dmc.Title(
                 "Search TarXiv Database",
                 order=2,
@@ -45,7 +46,6 @@ def create_unified_search():
                                             "marginBottom": "15px",
                                         },
                                     ),
-                                    # html.Div(
                                     dmc.Group(
                                         [
                                             dmc.TextInput(
@@ -124,7 +124,7 @@ def create_unified_search():
                 ],
             ),
         ],
-        style=SECTION_STYLE,
+        # style=SECTION_STYLE,
     )
 
 

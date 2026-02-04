@@ -9,6 +9,8 @@ from .callbacks import (
     register_style_callbacks,
     register_plotting_callbacks,
 )
+from .components import register_tarxiv_templates
+from .components.theme_manager import generate_css
 
 
 class TarxivDashboard(TarxivModule):
@@ -22,6 +24,11 @@ class TarxivDashboard(TarxivModule):
             debug=debug,
         )
 
+        # Generate CSS for themes
+        status = {"status": "generating theme CSS"}
+        self.logger.info(status, extra=status)
+        generate_css()
+
         # Get couchbase connection
         self.txv_db = TarxivDB("tns", "api", script_name, reporting_mode, debug)
 
@@ -30,12 +37,16 @@ class TarxivDashboard(TarxivModule):
         self.logger.info(status, extra=status)
         self.app = dash.Dash(__name__, suppress_callback_exceptions=True)
         self.setup_layout()
+        self.setup_themes()
         self.setup_callbacks()
 
     def setup_layout(self):
         """Set up the dashboard layout."""
-        # self.app.layout = dmc.MantineProvider([create_layout()])
         self.app.layout = create_layout()
+
+    def setup_themes(self):
+        """Set up the dashboard themes."""
+        register_tarxiv_templates()
 
     def setup_callbacks(self):
         """Set up the dashboard callbacks."""
