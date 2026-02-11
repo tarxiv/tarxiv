@@ -10,6 +10,8 @@ authors = [
     { name = "Heloise Fanny Stevance", email = "hfstevance@gmail.com"},
     { name = "Kyle Hart", email = "kylehart@hawaii.edu"},
     { name = "Julien Peloton", email =  "peloton@ijclab.in2p3.fr"},
+    { name = "Jack Leland", email = "jack.leland@dtc.ox.ac.uk"},
+    { name = "James Briant", email = "james.briant@dtc.ox.ac.uk"}
 ]
 readme = "README.md"
 license = { text = "BSD-3" }
