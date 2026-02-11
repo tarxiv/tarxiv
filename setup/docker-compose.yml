@@ -1,4 +1,42 @@
 services:
+  nginx-proxy:
+    image: nginxproxy/nginx-proxy:1.6
+    profiles:
+      - proxy
+    container_name: tarxiv-nginx-proxy
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - nginx_certs:/etc/nginx/certs:rw
+      - nginx_vhost:/etc/nginx/vhost.d
+      - ./nginx/default.conf:/etc/nginx/vhost.d/default:ro,Z
+      - nginx_html:/usr/share/nginx/html
+    networks:
+      - tarxiv_net
+    restart: unless-stopped
+
+  nginx-letsencrypt:
+    image: nginxproxy/acme-companion:2.4
+    profiles:
+      - proxy
+    container_name: tarxiv-nginx-letsencrypt
+    environment:
+      DEFAULT_EMAIL: ${TARXIV_LETSENCRYPT_EMAIL}
+      NGINX_PROXY_CONTAINER: tarxiv-nginx-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - nginx_certs:/etc/nginx/certs:rw
+      - nginx_vhost:/etc/nginx/vhost.d
+      - nginx_html:/usr/share/nginx/html
+      - nginx_acme:/etc/acme.sh
+    networks:
+      - tarxiv_net
+    depends_on:
+      - nginx-proxy
+    restart: unless-stopped
+
   # Setup elasticsearch database with defined user roles and passwords
   setup_elasticsearch:
     profiles:
@@ -125,7 +163,7 @@ services:
       - ../scripts:/app/scripts:Z
       - ${TARXIV_HOST_LOG_DIR:-.data/logs}:/data/tarxiv/logs:rw,z
     ports:
-      - ${TARXIV_PORT}:${TARXIV_PORT}
+      - ${TARXIV_PORT:-9001}:${TARXIV_PORT:-9001}
     environment:
       TARXIV_CONFIG_DIR: /app/aux
       TARXIV_COUCHBASE_HOST: couchbase
@@ -136,6 +174,12 @@ services:
       TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
       TARXIV_IMAGE_SOURCE: ${TARXIV_IMAGE_SOURCE:-local}
       TARXIV_IMAGE_TAG: ${TARXIV_IMAGE_TAG:-latest}
+      TARXIV_ORCID_BASE_URL: ${TARXIV_ORCID_BASE_URL:-https://orcid.org}
+      TARXIV_ORCID_REDIRECT_URI: ${TARXIV_ORCID_REDIRECT_URI:-}
+      VIRTUAL_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.tarxiv.com}
+      VIRTUAL_PORT: ${TARXIV_PORT:-9001}
+      LETSENCRYPT_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.tarxiv.com}
+      LETSENCRYPT_EMAIL: ${TARXIV_LETSENCRYPT_EMAIL:-}
     networks:
       - tarxiv_net
     restart: unless-stopped
@@ -144,7 +188,7 @@ services:
     profiles:
       - tarxiv
     image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:${TARXIV_IMAGE_TAG:-latest}
-    command: uv run /app/bin/run_dashboard.py --host 0.0.0.0 --port ${TARXIV_DASHBOARD_PORT} --debug
+    command: uv run /app/bin/run_dashboard.py --host 0.0.0.0 --port ${TARXIV_DASHBOARD_PORT:-8050} --debug
     container_name: tarxiv-dashboard
     volumes:
       - ../bin:/app/bin:Z
@@ -154,7 +198,7 @@ services:
       - ../scripts:/app/scripts:Z
       - ${TARXIV_HOST_LOG_DIR:-.data/logs}:/data/tarxiv/logs:rw,z
     ports:
-      - 8050:8050
+      - ${TARXIV_DASHBOARD_PORT:-8050}:${TARXIV_DASHBOARD_PORT:-8050}
     environment:
       TARXIV_CONFIG_DIR: /app/aux
       TARXIV_COUCHBASE_HOST: couchbase
@@ -165,6 +209,10 @@ services:
       TARXIV_ELASTIC_PASSWORD: ${TARXIV_ELASTIC_PASSWORD}
       TARXIV_IMAGE_TAG: ${TARXIV_IMAGE_TAG:-latest}
       TARXIV_IMAGE_SOURCE: ${TARXIV_IMAGE_SOURCE:-local}
+      VIRTUAL_HOST: ${TARXIV_DASHBOARD_VIRTUAL_HOST:-tarxiv.com}
+      VIRTUAL_PORT: ${TARXIV_DASHBOARD_PORT:-8050}
+      LETSENCRYPT_HOST: ${TARXIV_DASHBOARD_VIRTUAL_HOST:-tarxiv.com}
+      LETSENCRYPT_EMAIL: ${TARXIV_LETSENCRYPT_EMAIL:-}
     networks:
       - tarxiv_net
     restart: unless-stopped
@@ -175,3 +223,7 @@ networks:
 
 volumes:
   elasticsearch:
+  nginx_certs:
+  nginx_vhost:
+  nginx_html:
+  nginx_acme:
