@@ -4,10 +4,7 @@ from dash import html, dcc
 import dash
 import dash_mantine_components as dmc
 from ..components import (
-    # create_unified_search,
-    # create_results_section,
     get_theme_components,
-    # title_card,
     footer_card,
 )
 
@@ -69,28 +66,13 @@ def create_layout() -> dmc.MantineProvider:
                                     refresh=False,  # don't refresh the page on URL change
                                 ),  # Essential for tracking the current page
                                 # dcc.Store(id="lightcurve-store"),
-                                dcc.Store(id="cone-search-store"),
+                                # dcc.Store(id="cone-search-store"),
                                 html.Div(
                                     id="page-content",  # Container for page content
                                     style={
                                         "flex": "1"
                                     },  # Allow this div to grow to push footer down
                                     children=[
-                                        # title_card(
-                                        #     title_text="TarXiv Database Explorer",
-                                        #     subtitle_text="Explore astronomical transients and their lightcurves",
-                                        # ),
-                                        # Error/Message banner
-                                        #
-                                        # dmc.Box(
-                                        #     id="message-banner",
-                                        #     children=[],
-                                        #     style={"marginBottom": "20px"},
-                                        # ),
-                                        # Unified search with tabs
-                                        # create_unified_search(),
-                                        # Results section
-                                        # create_results_section(),
                                         dash.page_container,
                                     ],
                                 ),

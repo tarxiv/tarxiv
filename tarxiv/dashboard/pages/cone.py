@@ -1,6 +1,16 @@
 import dash
+from dash import html, Input, Output, State, no_update, callback, dcc
 import dash_mantine_components as dmc
-from ..components import title_card, expressive_card, create_results_section
+from ..components import (
+    title_card,
+    expressive_card,
+    format_cone_search_results,
+    create_message_banner,
+)
+from ..schemas import ConeSearchResponseModel
+import requests
+from pydantic import ValidationError
+from flask import current_app
 
 dash.register_page(
     __name__,
@@ -12,8 +22,11 @@ dash.register_page(
 
 
 def layout(**kwargs):
+    logger = current_app.config["TXV_LOGGER"]
+
     return dmc.Stack(
         children=[
+            dcc.Store(id="cone-search-store"),
             title_card(
                 title_text="TarXiv Database Explorer",
                 subtitle_text="Explore astronomical transients and their lightcurves",
@@ -80,6 +93,144 @@ def layout(**kwargs):
                 children=[],
                 style={"marginBottom": "20px"},
             ),
-            create_results_section(),
+            dmc.Stack(
+                [
+                    dmc.Text(
+                        id="search-status",
+                        style={
+                            "padding": "10px",
+                            "fontStyle": "italic",
+                            "fontSize": "14px",
+                        },
+                        # children=status,
+                    ),
+                    dmc.Stack(
+                        id="results-container",
+                        # children=[res],
+                    ),
+                ],
+            ),
         ],
     )
+
+
+@callback(
+    [
+        Output("results-container", "children", allow_duplicate=True),
+        Output("search-status", "children", allow_duplicate=True),
+        Output("message-banner", "children", allow_duplicate=True),
+        Output("cone-search-store", "data"),
+    ],
+    [Input("cone-search-button", "n_clicks")],
+    [
+        State("ra-input", "value"),
+        State("dec-input", "value"),
+        State("radius-input", "value"),
+    ],
+    prevent_initial_call=True,
+)
+def handle_cone_search(n_clicks, ra, dec, radius):
+    """Handle cone search button clicks."""
+    if not n_clicks:
+        return no_update, no_update, no_update, no_update
+
+    logger = current_app.config["TXV_LOGGER"]
+
+    try:
+        if ra is None or dec is None:
+            warning_banner = create_message_banner(
+                "Please provide valid RA and Dec coordinates.", "warning"
+            )
+            return html.Div(), "", warning_banner, no_update
+
+        if radius is None:
+            radius = 30.0
+
+        status_msg = f"Cone search: RA={ra}, Dec={dec}, radius={radius} arcsec"
+        logger.info(
+            {
+                "search_type": "cone",
+                "ra": ra,
+                "dec": dec,
+                "radius": radius,
+            }
+        )
+
+        # Perform cone search
+        results = get_cone_search_results(ra, dec, radius, logger)
+
+        # Display results
+        result = format_cone_search_results(results, ra, dec)
+        success_banner = create_message_banner(
+            f"Found {len(results)} object(s) in search region", "success"
+        )
+        logger.info({"info": f"Cone search found {len(results)} objects."})
+
+        store_data = {"results": results, "ra": ra, "dec": dec}
+
+        return result, status_msg, success_banner, store_data
+
+    except Exception as e:
+        error_msg = f"Error: {str(e)}"
+        logger.error({"error": error_msg})
+        error_banner = create_message_banner(error_msg, "error")
+        return html.Div(), "Error occurred", error_banner, no_update
+
+
+def get_cone_search_results(ra, dec, radius, logger) -> list:
+    """Perform a cone search.
+
+    Args:
+        txv_db: TarxivDB instance
+        ra: Right Ascension
+        dec: Declination
+        radius: Search radius in arcseconds
+        logger: Logger instance
+
+    Returns
+    -------
+        List of search results
+    """
+    try:
+        response_cone = requests.post(
+            url="http://tarxiv-api:9001/cone_search",
+            timeout=10,
+            headers={
+                "accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": "TOKEN",
+            },
+            json={"ra": ra, "dec": dec, "radius": radius},
+        )
+
+        results = []
+        logger.info(
+            {"info": f"Cone search response status: {response_cone.status_code}"}
+        )
+
+        if response_cone.status_code == 200:
+            try:
+                data = ConeSearchResponseModel.validate_json(response_cone.text)
+                results = ConeSearchResponseModel.dump_python(data)
+
+                logger.debug(
+                    {
+                        "debug": f"Cone search results for RA={ra}, Dec={dec}, "
+                        f"radius={radius} arcsec: {len(results)} objects found"
+                    }
+                )
+            except ValidationError as e:
+                logger.error(
+                    {"error": f"Failed to parse cone search results: {str(e)}"}
+                )
+        else:
+            logger.error(
+                {
+                    "error": f"Cone search request failed: Status {response_cone.status_code}"
+                }
+            )
+
+        return results
+    except Exception as e:
+        logger.error({"error": f"Cone search failed: {str(e)}"})
+        return []

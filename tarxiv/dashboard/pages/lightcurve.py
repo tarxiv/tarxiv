@@ -6,9 +6,15 @@ import dash_mantine_components as dmc
 from ..components import (
     title_card,
     expressive_card,
-    create_results_section,
     format_object_metadata,
+    create_message_banner,
 )
+from ..schemas import (
+    MetadataResponseModel,
+    LightcurveResponseModel,
+)
+import requests
+from pydantic import ValidationError
 
 dash.register_page(
     __name__,
@@ -22,20 +28,12 @@ dash.register_page(
 
 def layout(id=None, **kwargs):
     # perform search if id is provided in URL, otherwise show empty search page
+    logger = current_app.config["TXV_LOGGER"]
     if id:
-        txv_db = current_app.config["TXV_DB"]
-        logger = current_app.config["TXV_LOGGER"]
-        try:
-            res, status, banner, store = perform_search(id, txv_db, logger)
-        except Exception as e:
-            res, status, banner, store = (
-                html.Div(),
-                "Error",
-                create_message_banner(str(e), "error"),
-                no_update,
-            )
+        res, status, banner, store = get_meta_data(id, logger)
     else:
         res, status, banner, store = html.Div(), "", html.Div(), no_update
+
     return dmc.Stack(
         children=[
             dcc.Store(id="lightcurve-store", data=store),
@@ -78,7 +76,6 @@ def layout(id=None, **kwargs):
                 children=[banner],
                 style={"marginBottom": "20px"},
             ),
-            # create_results_section(),
             dmc.Stack(
                 [
                     dmc.Text(
@@ -98,63 +95,6 @@ def layout(id=None, **kwargs):
             ),
         ],
     )
-
-
-# @callback(
-#     [
-#         Output("results-container", "children", allow_duplicate=True),
-#         Output("search-status", "children", allow_duplicate=True),
-#         Output("message-banner", "children", allow_duplicate=True),
-#         Output("lightcurve-store", "data"),
-#         Output("object-id-input", "value"),
-#         Output("url", "pathname"),  # refresh URL
-#     ],
-#     [
-#         Input("search-id-button", "n_clicks", allow_optional=True),
-#         Input("url", "pathname"),  # Listen to the URL for deep linking
-#     ],
-#     [State("object-id-input", "value")],
-#     prevent_initial_call=True,
-# )
-# def handle_combined_search(n_clicks, pathname, state_id):
-#     # if pathname is not None and not pathname.startswith("/lightcurve"):
-#     #     return [no_update] * 6
-
-#     txv_db = current_app.config["TXV_DB"]
-#     logger = current_app.config["TXV_LOGGER"]
-
-#     triggered_id = ctx.triggered_id
-
-#     # 1. Determine the ID
-#     if triggered_id == "search-id-button":
-#         target_id = state_id
-#     elif pathname and pathname.startswith("/lightcurve/"):
-#         target_id = pathname.split("/")[-1]
-#     else:
-#         return [no_update] * 6
-
-#     if not target_id:
-#         return [no_update] * 6
-
-#     # 2. Run your search logic
-#     try:
-#         res, status, banner, store = perform_search(target_id, txv_db, logger)
-
-#         # 3. Define the new URL path
-#         new_path = f"/lightcurve/{target_id}"
-
-#         # Return all values, including the new URL path
-#         return res, status, banner, store, target_id, new_path
-
-#     except Exception as e:
-#         return (
-#             html.Div(),
-#             "Error",
-#             create_message_banner(str(e), "error"),
-#             no_update,
-#             target_id,
-#             no_update,
-#         )
 
 
 # Remove the url input listener and rely solely on the button.
@@ -178,7 +118,6 @@ def layout(id=None, **kwargs):
     prevent_initial_call=True,
 )
 def handle_combined_search(n_clicks, state_id):
-    txv_db = current_app.config["TXV_DB"]
     logger = current_app.config["TXV_LOGGER"]
 
     triggered_id = ctx.triggered_id
@@ -196,7 +135,7 @@ def handle_combined_search(n_clicks, state_id):
 
     # 2. Run your search logic
     try:
-        res, status, banner, store = perform_search(target_id, txv_db, logger)
+        res, status, banner, store = get_meta_data(target_id, logger)
 
         # 3. Define the new URL path
         new_path = f"/lightcurve/{target_id}"
@@ -215,73 +154,74 @@ def handle_combined_search(n_clicks, state_id):
         )
 
 
-def create_message_banner(message, message_type="info"):
-    """Create a styled message banner.
+def get_meta_data(object_id, logger):
+    """The core logic shared by both Button and URL triggers."""
+    status_msg = f"Searching for object: {object_id}"
+    logger.info({"search_type": "id", "object_id": object_id})
 
-    Args:
-        message: Message text
-        message_type: "success", "error", "warning", or "info"
-
-    Returns
-    -------
-        html.Div with styled message
-    """
-    color_map = {
-        "success": {"bg": "#d4edda", "border": "#c3e6cb", "text": "#155724"},
-        "error": {"bg": "#f8d7da", "border": "#f5c6cb", "text": "#721c24"},
-        "warning": {"bg": "#fff3cd", "border": "#ffeaa7", "text": "#856404"},
-        "info": {"bg": "#d1ecf1", "border": "#bee5eb", "text": "#0c5460"},
-    }
-
-    colors = color_map.get(message_type, color_map["info"])
-
-    return dmc.Alert(
-        message,
-        style={
-            "padding": "12px 20px",
-            "marginBottom": "15px",
-            "border": f"1px solid {colors['border']}",
-            "borderRadius": "4px",
-            "backgroundColor": colors["bg"],
-            "color": colors["text"],
-            "fontSize": "14px",
-            "fontWeight": "500",
+    response_meta = requests.post(
+        url=f"http://tarxiv-api:9001/get_object_meta/{object_id}",  # TODO: Fix URL
+        timeout=10,
+        headers={
+            "accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": "TOKEN",
         },
     )
-
-
-def perform_search(object_id, txv_db, logger):
-    """The core logic shared by both Button and URL triggers."""
-    if not object_id:
-        return (
-            no_update,
-            "",
-            create_message_banner("No ID provided.", "warning"),
-            no_update,
+    meta = None
+    logger.info({"info": f"Metadata response status: {response_meta.status_code}"})
+    # logger.info({"info": f"Metadata response text: {response_meta.text}"})
+    if response_meta.status_code == 200:
+        try:
+            data = MetadataResponseModel.model_validate_json(response_meta.text)
+        except ValidationError as e:
+            logger.error(
+                {"error": f"Failed to parse metadata for object {object_id}: {str(e)}"}
+            )
+            error_banner = create_message_banner(
+                f"Failed to parse metadata for object: {object_id}", "error"
+            )
+            return no_update, "", error_banner, no_update
+    else:
+        logger.error(
+            {
+                "error": f"Metadata request failed for object {object_id}: "
+                f"Status {response_meta.status_code}"
+            }
         )
+        error_banner = create_message_banner(
+            f"Metadata request failed for object: {object_id}", "error"
+        )
+        return no_update, "", error_banner, no_update
 
-    meta = txv_db.get(object_id, "objects")
+    meta = data.model_dump()
+    # Get metadata
     if meta is None:
-        return (
-            no_update,
-            f"Searching: {object_id}",
-            create_message_banner(f"Not found: {object_id}", "error"),
-            no_update,
+        error_banner = create_message_banner(
+            f"No object found with ID: {object_id}", "error"
         )
+        logger.warning({"warning": f"Object ID not found: {object_id}"})
+        return no_update, status_msg, error_banner, no_update
 
-    lc_data = get_lightcurve_data(txv_db, object_id, logger)
+    # Get lightcurve data
+    lc_data = get_lightcurve_data(object_id, logger)
+
+    # Display metadata
     result = format_object_metadata(object_id, meta, logger)
+    success_banner = create_message_banner(
+        f"Successfully loaded object: {object_id}", "success"
+    )
+    logger.info({"info": f"Object {object_id} loaded successfully."})
+
     store_data = {"data": lc_data, "id": object_id}
-    banner = create_message_banner(f"Loaded: {object_id}", "success")
 
-    return result, f"Object: {object_id}", banner, store_data
+    return result, status_msg, success_banner, store_data
 
 
-def get_lightcurve_data(txv_db, object_id, logger):
+def get_lightcurve_data(object_id, logger):
     """Fetch lightcurve data for an object.
 
     Args:
-        txv_db: TarxivDB instance
         object_id: Object identifier
         logger: Logger instance
 
@@ -290,14 +230,45 @@ def get_lightcurve_data(txv_db, object_id, logger):
         Lightcurve data or None
     """
     try:
-        lc_data = txv_db.get(object_id, "lightcurves")
-        logger.debug(
-            {
-                "debug": f"Fetched lightcurve data for object: {object_id}: "
-                f"{len(lc_data) if lc_data else lc_data}"
-            }
+        response_lc = requests.post(
+            url=f"http://tarxiv-api:9001/get_object_lc/{object_id}",  # TODO: Fix URL
+            timeout=10,
+            headers={
+                "accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": "TOKEN",
+            },
         )
-        return lc_data
+        # response_lc.text will contain a list of LightcurveResponseSingle
+        data = None
+        logger.info({"info": f"Lightcurve response status: {response_lc.status_code}"})
+        if response_lc.status_code == 200:
+            try:
+                data = LightcurveResponseModel.validate_json(response_lc.text)
+
+                logger.info(
+                    {
+                        "success": f"Parsed lightcurve for object {object_id}: {len(data)} points"
+                    }
+                )
+
+            except ValidationError as e:
+                logger.error(
+                    {
+                        "error": f"Failed to parse lightcurve for object {object_id}: {str(e)}"
+                    }
+                )
+                return None
+        else:
+            logger.error(
+                {
+                    "error": f"Lightcurve request failed for object {object_id}: "
+                    f"Status {response_lc.status_code}"
+                }
+            )
+            return None
+
+        return LightcurveResponseModel.dump_python(data)
     except Exception as e:
         logger.error({"error": f"Failed to fetch lightcurve: {str(e)}"})
         return None

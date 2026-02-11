@@ -5,7 +5,6 @@ from ..database import TarxivDB
 from ..utils import TarxivModule
 from .layouts import create_layout
 from .callbacks import (
-    register_search_callbacks,
     register_style_callbacks,
     register_plotting_callbacks,
 )
@@ -62,7 +61,6 @@ class TarxivDashboard(TarxivModule):
 
     def setup_callbacks(self):
         """Set up the dashboard callbacks."""
-        register_search_callbacks(self.app, self.txv_db, self.logger)
         register_style_callbacks(self.app, self.logger)
         register_plotting_callbacks(self.app, self.logger)
 

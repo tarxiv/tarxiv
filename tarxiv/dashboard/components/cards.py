@@ -180,6 +180,42 @@ def create_nav_link(
     )
 
 
+def create_message_banner(message, message_type="info"):
+    """Create a styled message banner.
+
+    Args:
+        message: Message text
+        message_type: "success", "error", "warning", or "info"
+
+    Returns
+    -------
+        html.Div with styled message
+    """
+    color_map = {
+        "success": {"bg": "#d4edda", "border": "#c3e6cb", "text": "#155724"},
+        "error": {"bg": "#f8d7da", "border": "#f5c6cb", "text": "#721c24"},
+        "warning": {"bg": "#fff3cd", "border": "#ffeaa7", "text": "#856404"},
+        "info": {"bg": "#d1ecf1", "border": "#bee5eb", "text": "#0c5460"},
+    }
+
+    colors = color_map.get(message_type, color_map["info"])
+
+    return dmc.Alert(
+        # message,
+        title=message.capitalize(),
+        style={
+            "padding": "12px 20px",
+            "marginBottom": "15px",
+            "border": f"1px solid {colors['border']}",
+            "borderRadius": "4px",
+            "backgroundColor": colors["bg"],
+            "color": colors["text"],
+            "fontSize": "14px",
+            "fontWeight": "500",
+        },
+    )
+
+
 def format_object_metadata(object_id, meta, logger=None):
     """Format object metadata for display.
 

@@ -9,6 +9,7 @@ from .cards import (
     footer_card,
     create_nav_item,
     create_nav_link,
+    create_message_banner,
 )
 from .theme_manager import (
     get_theme_components,
@@ -17,13 +18,6 @@ from .theme_manager import (
     register_tarxiv_templates,
     PLOT_TYPE,
     THEME_STORE_ID,
-)
-
-from .search import (
-    # create_search_by_id,
-    # create_cone_search,
-    create_results_section,
-    # create_unified_search,
 )
 
 __all__ = [
@@ -36,10 +30,7 @@ __all__ = [
     "footer_card",
     "create_nav_item",
     "create_nav_link",
-    # "create_search_by_id",
-    # "create_cone_search",
-    "create_results_section",
-    # "create_unified_search",
+    "create_message_banner",
     "get_theme_components",
     "apply_theme",
     "get_filter_style",
