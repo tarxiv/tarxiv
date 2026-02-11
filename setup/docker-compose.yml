@@ -11,6 +11,7 @@ services:
       - /var/run/docker.sock:/tmp/docker.sock:ro
       - nginx_certs:/etc/nginx/certs:rw
       - nginx_vhost:/etc/nginx/vhost.d
+      - ./nginx/default.conf:/etc/nginx/vhost.d/default:ro,Z
       - nginx_html:/usr/share/nginx/html
     networks:
       - tarxiv_net
@@ -162,7 +163,7 @@ services:
       - ../scripts:/app/scripts:Z
       - ${TARXIV_HOST_LOG_DIR:-.data/logs}:/data/tarxiv/logs:rw,z
     ports:
-      - ${TARXIV_PORT}:${TARXIV_PORT}
+      - ${TARXIV_PORT:-9001}:${TARXIV_PORT:-9001}
     environment:
       TARXIV_CONFIG_DIR: /app/aux
       TARXIV_COUCHBASE_HOST: couchbase
@@ -176,7 +177,7 @@ services:
       TARXIV_ORCID_BASE_URL: ${TARXIV_ORCID_BASE_URL:-https://orcid.org}
       TARXIV_ORCID_REDIRECT_URI: ${TARXIV_ORCID_REDIRECT_URI:-}
       VIRTUAL_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.tarxiv.com}
-      VIRTUAL_PORT: ${TARXIV_PORT}
+      VIRTUAL_PORT: ${TARXIV_PORT:-9001}
       LETSENCRYPT_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.tarxiv.com}
       LETSENCRYPT_EMAIL: ${TARXIV_LETSENCRYPT_EMAIL:-}
     networks:
@@ -187,7 +188,7 @@ services:
     profiles:
       - tarxiv
     image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:${TARXIV_IMAGE_TAG:-latest}
-    command: uv run /app/bin/run_dashboard.py --host 0.0.0.0 --port ${TARXIV_DASHBOARD_PORT} --debug
+    command: uv run /app/bin/run_dashboard.py --host 0.0.0.0 --port ${TARXIV_DASHBOARD_PORT:-8050} --debug
     container_name: tarxiv-dashboard
     volumes:
       - ../bin:/app/bin:Z
@@ -197,7 +198,7 @@ services:
       - ../scripts:/app/scripts:Z
       - ${TARXIV_HOST_LOG_DIR:-.data/logs}:/data/tarxiv/logs:rw,z
     ports:
-      - 8050:8050
+      - ${TARXIV_DASHBOARD_PORT:-8050}:${TARXIV_DASHBOARD_PORT:-8050}
     environment:
       TARXIV_CONFIG_DIR: /app/aux
       TARXIV_COUCHBASE_HOST: couchbase
