@@ -12,6 +12,7 @@ PRINT = 1
 LOGFILE = 2
 DATABASE = 4
 
+
 class TarxivModule:
     """Base class for all TarXiv modules to ensure unified logging and configuration."""
 
@@ -25,8 +26,7 @@ class TarxivModule:
         self.module = module
         # Read in config
         self.config_dir = os.environ.get(
-            "TARXIV_CONFIG_DIR",
-            os.path.join(os.path.dirname(__file__), "../aux")
+            "TARXIV_CONFIG_DIR", os.path.join(os.path.dirname(__file__), "../aux")
         )
         self.config_file = os.path.join(self.config_dir, "config.yml")
         with open(self.config_file) as stream:
@@ -62,11 +62,16 @@ class TarxivModule:
         # Config logstash
         # Submit to logstash
         if DATABASE & reporting_mode:
-            handler = AsynchronousLogstashHandler(host=self.config['logstash_host'],
-                                                  port=self.config['logstash_port'],
-                                                  # certfile=self.config['logstash_cert'],
-                                                  database_path=None)
-            formatter = LogstashFormatter({"module": self.module, "script": script_name})
+            handler = AsynchronousLogstashHandler(
+                host=self.config["logstash_host"],
+                port=self.config["logstash_port"],
+                # certfile=self.config['logstash_cert'],
+                database_path=None,
+            )
+            formatter = LogstashFormatter({
+                "module": self.module,
+                "script": script_name,
+            })
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
 
@@ -97,5 +102,10 @@ def clean_meta(obj_meta):
     # obj_meta = {k: v[0] for k, v in obj_meta.items() if len(v) == 1}
     return obj_meta
 
+
 def precision(x, p):
-    return float(Decimal( x*10**p ).quantize(0,ROUND_HALF_UP)/10**p) if x is not None else None
+    return (
+        float(Decimal(x * 10**p).quantize(0, ROUND_HALF_UP) / 10**p)
+        if x is not None
+        else None
+    )

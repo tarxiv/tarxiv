@@ -242,13 +242,11 @@ class TNSPipeline(TarxivModule):
                 self.upsert_object(obj_name, obj_meta, obj_lc)
             except:
                 stack_trace = traceback.format_exc()
-                self.logger.error(
-                    {
-                        "status": "failed pipeline operation",
-                        "obj_name": obj_name,
-                        "exception": stack_trace,
-                    }
-                )
+                self.logger.error({
+                    "status": "failed pipeline operation",
+                    "obj_name": obj_name,
+                    "exception": stack_trace,
+                })
 
     def daily_update(self):
         # Get all targets still in "active" window for update
@@ -279,13 +277,11 @@ class TNSPipeline(TarxivModule):
                     self.logger.info(status, extra=status)
             except:
                 stack_trace = traceback.format_exc()
-                self.logger.error(
-                    {
-                        "status": "failed pipeline operation",
-                        "obj_name": obj_name,
-                        "exception": stack_trace,
-                    }
-                )
+                self.logger.error({
+                    "status": "failed pipeline operation",
+                    "obj_name": obj_name,
+                    "exception": stack_trace,
+                })
 
     def run_pipeline(self):
         # Set signals
@@ -325,13 +321,11 @@ class TNSPipeline(TarxivModule):
                         self.logger.info(status, extra=status)
                 except:
                     stack_trace = traceback.format_exc()
-                    self.logger.error(
-                        {
-                            "status": "failed pipeline operation",
-                            "obj_name": obj_name,
-                            "exception": stack_trace,
-                        }
-                    )
+                    self.logger.error({
+                        "status": "failed pipeline operation",
+                        "obj_name": obj_name,
+                        "exception": stack_trace,
+                    })
 
     def signal_handler(self, sig, frame):
         status = {

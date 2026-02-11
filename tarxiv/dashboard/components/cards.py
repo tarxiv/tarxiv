@@ -261,36 +261,34 @@ def format_object_metadata(object_id, meta, logger=None):
                 )
             )
 
-    return dmc.Stack(
-        [
-            # Lightcurve card
-            expressive_card(
-                children=dcc.Loading(
-                    dcc.Graph(id={"type": tm.PLOT_TYPE, "index": "lightcurve-plot"}),
-                ),
-                title=f"Lightcurve: {object_id}",
+    return dmc.Stack([
+        # Lightcurve card
+        expressive_card(
+            children=dcc.Loading(
+                dcc.Graph(id={"type": tm.PLOT_TYPE, "index": "lightcurve-plot"}),
             ),
-            # Metadata card
-            expressive_card(
-                children=dmc.Stack(summary_items),
-                title=f"Object Metadata: {object_id}",
+            title=f"Lightcurve: {object_id}",
+        ),
+        # Metadata card
+        expressive_card(
+            children=dmc.Stack(summary_items),
+            title=f"Object Metadata: {object_id}",
+        ),
+        # Full JSON card
+        expressive_card(
+            children=dmc.Code(
+                json.dumps(meta, indent=2),
+                style={
+                    "padding": "10px",
+                    "maxHeight": "400px",
+                    "overflow": "auto",
+                    "borderRadius": "4px",
+                },
+                block=True,
             ),
-            # Full JSON card
-            expressive_card(
-                children=dmc.Code(
-                    json.dumps(meta, indent=2),
-                    style={
-                        "padding": "10px",
-                        "maxHeight": "400px",
-                        "overflow": "auto",
-                        "borderRadius": "4px",
-                    },
-                    block=True,
-                ),
-                title="Full Metadata (JSON)",
-            ),
-        ]
-    )
+            title="Full Metadata (JSON)",
+        ),
+    ])
 
 
 def format_cone_search_results(
@@ -363,42 +361,40 @@ def format_cone_search_results(
             )
         )
 
-    return dmc.Stack(
-        [
-            # Summary card
-            dmc.Card(
-                [
-                    dmc.Title(
-                        f"Found {len(results)} object(s)",
-                        order=3,
-                        style={"marginTop": "0"},
+    return dmc.Stack([
+        # Summary card
+        dmc.Card(
+            [
+                dmc.Title(
+                    f"Found {len(results)} object(s)",
+                    order=3,
+                    style={"marginTop": "0"},
+                ),
+                dmc.Text(
+                    f"Search coordinates: RA={search_ra:.6f}°, Dec={search_dec:.6f}°",
+                    style={"fontSize": "14px"},
+                ),
+            ],
+            style=CARD_STYLE,
+        ),
+        # Sky plot card
+        dmc.Card(
+            [
+                dmc.Title("Sky Position", order=4, style={"marginTop": "0"}),
+                dcc.Loading(
+                    dcc.Graph(
+                        id={"type": tm.PLOT_TYPE, "index": "sky-plot"},
                     ),
-                    dmc.Text(
-                        f"Search coordinates: RA={search_ra:.6f}°, Dec={search_dec:.6f}°",
-                        style={"fontSize": "14px"},
-                    ),
-                ],
-                style=CARD_STYLE,
-            ),
-            # Sky plot card
-            dmc.Card(
-                [
-                    dmc.Title("Sky Position", order=4, style={"marginTop": "0"}),
-                    dcc.Loading(
-                        dcc.Graph(
-                            id={"type": tm.PLOT_TYPE, "index": "sky-plot"},
-                        ),
-                    ),
-                ],
-                style=CARD_STYLE,
-            ),
-            # Expandable object cards
-            dmc.Card(
-                [
-                    dmc.Title("Objects Found", order=4, style={"marginTop": "0"}),
-                    dmc.Stack(object_cards),
-                ],
-                style=CARD_STYLE,
-            ),
-        ]
-    )
+                ),
+            ],
+            style=CARD_STYLE,
+        ),
+        # Expandable object cards
+        dmc.Card(
+            [
+                dmc.Title("Objects Found", order=4, style={"marginTop": "0"}),
+                dmc.Stack(object_cards),
+            ],
+            style=CARD_STYLE,
+        ),
+    ])

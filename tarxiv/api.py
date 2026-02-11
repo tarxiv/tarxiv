@@ -50,14 +50,12 @@ class API(TarxivModule):
         # Mount the WSGI callable object (app) on the root directory
         cherrypy.tree.graft(app_logged, "/")
         # Set the configuration of the web server
-        cherrypy.config.update(
-            {
-                "engine.autoreload.on": True,
-                "log.screen": True,
-                "server.socket_port": self.config["api_port"],
-                "server.socket_host": "0.0.0.0",
-            }
-        )
+        cherrypy.config.update({
+            "engine.autoreload.on": True,
+            "log.screen": True,
+            "server.socket_port": self.config["api_port"],
+            "server.socket_host": "0.0.0.0",
+        })
         # Start the CherryPy WSGI web server
         cherrypy.engine.start()
         cherrypy.engine.block()

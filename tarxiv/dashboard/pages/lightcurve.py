@@ -44,31 +44,27 @@ def layout(id=None, **kwargs):
             expressive_card(
                 title="Lightcurve Search",
                 children=[
-                    dmc.Stack(
-                        [
-                            dmc.Text(
-                                "Enter a TNS object name to view its metadata and lightcurve",
+                    dmc.Stack([
+                        dmc.Text(
+                            "Enter a TNS object name to view its metadata and lightcurve",
+                        ),
+                        dmc.Group([
+                            dmc.TextInput(
+                                id="object-id-input",
+                                placeholder="Enter object ID (e.g., 2024abc)",
+                                value=id,  # Pre-populate with URL parameter
+                                style={
+                                    "width": "400px",
+                                    "marginRight": "10px",
+                                },
                             ),
-                            dmc.Group(
-                                [
-                                    dmc.TextInput(
-                                        id="object-id-input",
-                                        placeholder="Enter object ID (e.g., 2024abc)",
-                                        value=id,  # Pre-populate with URL parameter
-                                        style={
-                                            "width": "400px",
-                                            "marginRight": "10px",
-                                        },
-                                    ),
-                                    dmc.Button(
-                                        "Search",
-                                        id="search-id-button",
-                                        n_clicks=0,
-                                    ),
-                                ]
+                            dmc.Button(
+                                "Search",
+                                id="search-id-button",
+                                n_clicks=0,
                             ),
-                        ]
-                    ),
+                        ]),
+                    ]),
                 ],
             ),
             dmc.Box(
@@ -175,20 +171,18 @@ def get_meta_data(object_id, logger):
         try:
             data = MetadataResponseModel.model_validate_json(response_meta.text)
         except ValidationError as e:
-            logger.error(
-                {"error": f"Failed to parse metadata for object {object_id}: {str(e)}"}
-            )
+            logger.error({
+                "error": f"Failed to parse metadata for object {object_id}: {str(e)}"
+            })
             error_banner = create_message_banner(
                 f"Failed to parse metadata for object: {object_id}", "error"
             )
             return no_update, "", error_banner, no_update
     else:
-        logger.error(
-            {
-                "error": f"Metadata request failed for object {object_id}: "
-                f"Status {response_meta.status_code}"
-            }
-        )
+        logger.error({
+            "error": f"Metadata request failed for object {object_id}: "
+            f"Status {response_meta.status_code}"
+        })
         error_banner = create_message_banner(
             f"Metadata request failed for object: {object_id}", "error"
         )
@@ -246,26 +240,20 @@ def get_lightcurve_data(object_id, logger):
             try:
                 data = LightcurveResponseModel.validate_json(response_lc.text)
 
-                logger.info(
-                    {
-                        "success": f"Parsed lightcurve for object {object_id}: {len(data)} points"
-                    }
-                )
+                logger.info({
+                    "success": f"Parsed lightcurve for object {object_id}: {len(data)} points"
+                })
 
             except ValidationError as e:
-                logger.error(
-                    {
-                        "error": f"Failed to parse lightcurve for object {object_id}: {str(e)}"
-                    }
-                )
+                logger.error({
+                    "error": f"Failed to parse lightcurve for object {object_id}: {str(e)}"
+                })
                 return None
         else:
-            logger.error(
-                {
-                    "error": f"Lightcurve request failed for object {object_id}: "
-                    f"Status {response_lc.status_code}"
-                }
-            )
+            logger.error({
+                "error": f"Lightcurve request failed for object {object_id}: "
+                f"Status {response_lc.status_code}"
+            })
             return None
 
         return LightcurveResponseModel.dump_python(data)

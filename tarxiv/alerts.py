@@ -17,14 +17,17 @@ import imaplib
 import email
 import re
 
+
 class Gmail(TarxivModule):
     """Module for interfacing with gmail and parsing TNS alerts."""
 
     def __init__(self, script_name, reporting_mode, debug=False):
-        super().__init__(script_name=script_name,
-                         module="gmail",
-                         reporting_mode=reporting_mode,
-                         debug=debug)
+        super().__init__(
+            script_name=script_name,
+            module="gmail",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
 
         # Logging
         status = {"status": "connecting to google mail api"}
@@ -167,7 +170,8 @@ class Gmail(TarxivModule):
             self.logger.info(status, extra=status)
             time.sleep(self.config["gmail"]["polling_interval"])
             results = (
-                service.users()
+                service
+                .users()
                 .messages()
                 .list(userId="me", labelIds=["INBOX"], q="is:unread")
                 .execute()
@@ -182,7 +186,8 @@ class Gmail(TarxivModule):
                     # Read full message
                     time.sleep(self.config["gmail"]["polling_interval"])
                     msg = (
-                        service.users()
+                        service
+                        .users()
                         .messages()
                         .get(userId="me", id=message["id"])
                         .execute()
@@ -193,7 +198,8 @@ class Gmail(TarxivModule):
                     self.logger.warn(status, extra=status)
                     time.sleep(self.config["gmail"]["polling_interval"] * 3)
                     msg = (
-                        service.users()
+                        service
+                        .users()
                         .messages()
                         .get(userId="me", id=message["id"])
                         .execute()
@@ -214,11 +220,14 @@ class Gmail(TarxivModule):
                 self.q.put(alerts)
 
     def _signal_handler(self, sig, frame):
-        status = {"status": "received exit signal", "signal": str(sig), "frame": str(frame)}
+        status = {
+            "status": "received exit signal",
+            "signal": str(sig),
+            "frame": str(frame),
+        }
         self.logger.info(status, extra=status)
         self.stop_monitoring()
         os._exit(1)
-
 
 
 class IMAP(TarxivModule):
@@ -230,7 +239,7 @@ class IMAP(TarxivModule):
             script_name=script_name,
             module="imap",
             reporting_mode=reporting_mode,
-            debug=debug
+            debug=debug,
         )
 
         # Logging
@@ -256,8 +265,8 @@ class IMAP(TarxivModule):
         # Create stop flag for monitoring
         self.stop_event = threading.Event()
         # Signals
-        #signal.signal(signal.SIGINT, self._signal_handler)
-        #signal.signal(signal.SIGTERM, self._signal_handler)
+        # signal.signal(signal.SIGINT, self._signal_handler)
+        # signal.signal(signal.SIGTERM, self._signal_handler)
 
     def poll(self, timeout=1):
         """Once we have began monitoring notices, poll the queue for new messages and alerts
@@ -293,9 +302,9 @@ class IMAP(TarxivModule):
                         break
                     elif "text/plain" in content_type:
                         payload = part.get_payload(decode=True)
-                        charset = part.get_content_charset() or 'utf-8'
+                        charset = part.get_content_charset() or "utf-8"
                         if payload:
-                            body = payload.decode(charset, errors='replace')
+                            body = payload.decode(charset, errors="replace")
                             break  # Prefer text/plain
 
             else:
@@ -307,7 +316,7 @@ class IMAP(TarxivModule):
                 alerts.extend([a.text for a in soup.find_all("a", href=True) if a.text])
                 # if no a tags, search for transient names in the text
                 if not alerts:
-                    alerts.extend(re.findall(r'\b(20\d{2}[a-z]{2,3})\b', body))
+                    alerts.extend(re.findall(r"\b(20\d{2}[a-z]{2,3})\b", body))
 
         return alerts
 
@@ -382,7 +391,11 @@ class IMAP(TarxivModule):
                     # Fetch by UID without setting \Seen
                     typ, msg_data = self.conn.uid("FETCH", uid, "(BODY.PEEK[])")
                     if typ != "OK":
-                        self.logger.debug({"status": "error fetching message", "id": uid, "error": str(msg_data)})
+                        self.logger.debug({
+                            "status": "error fetching message",
+                            "id": uid,
+                            "error": str(msg_data),
+                        })
                         continue
 
                     raw_email = msg_data[0][1]
@@ -399,20 +412,32 @@ class IMAP(TarxivModule):
                 time.sleep(self.config["imap"]["polling_interval"])
 
             except (imaplib.IMAP4.abort, imaplib.IMAP4.error) as e:
-                self.logger.warning({"status": "connection error, reconnecting", "error": str(e)})
+                self.logger.warning({
+                    "status": "connection error, reconnecting",
+                    "error": str(e),
+                })
                 try:
                     self.conn = imaplib.IMAP4_SSL(self.config["imap"]["server"])
                     self.conn.login(self.imap_user, self.imap_pass)
                 except Exception as recon_e:
-                    self.logger.error({"status": "reconnection failed", "error": str(recon_e)})
+                    self.logger.error({
+                        "status": "reconnection failed",
+                        "error": str(recon_e),
+                    })
                     self.stop_event.set()  # Stop if we can't reconnect
             except Exception as e:
-                self.logger.error({"status": "unexpected error in monitoring thread", "error": str(e)})
+                self.logger.error({
+                    "status": "unexpected error in monitoring thread",
+                    "error": str(e),
+                })
                 time.sleep(self.config["imap"]["polling_interval"] * 2)
 
-
     def _signal_handler(self, sig, frame):
-        status = {"status": "received exit signal", "signal": str(sig), "frame": str(frame)}
+        status = {
+            "status": "received exit signal",
+            "signal": str(sig),
+            "frame": str(frame),
+        }
         self.logger.info(status, extra=status)
         self.stop_monitoring()
         os._exit(1)

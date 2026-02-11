@@ -34,58 +34,54 @@ def layout(**kwargs):
             expressive_card(
                 title="Cone Search",
                 children=[
-                    dmc.Stack(
-                        [
-                            dmc.Text(
-                                "Search for objects within a specified radius of sky coordinates",
-                                # style={
-                                #     "fontSize": "14px",
-                                #     "marginTop": "15px",
-                                #     "marginBottom": "15px",
-                                # },
+                    dmc.Stack([
+                        dmc.Text(
+                            "Search for objects within a specified radius of sky coordinates",
+                            # style={
+                            #     "fontSize": "14px",
+                            #     "marginTop": "15px",
+                            #     "marginBottom": "15px",
+                            # },
+                        ),
+                        dmc.Group([
+                            dmc.NumberInput(
+                                id="ra-input",
+                                placeholder="0-360",
+                                min=0,
+                                max=360,
+                                label="RA (degrees):",
+                                style={
+                                    "width": "150px",
+                                },
                             ),
-                            dmc.Group(
-                                [
-                                    dmc.NumberInput(
-                                        id="ra-input",
-                                        placeholder="0-360",
-                                        min=0,
-                                        max=360,
-                                        label="RA (degrees):",
-                                        style={
-                                            "width": "150px",
-                                        },
-                                    ),
-                                    dmc.NumberInput(
-                                        id="dec-input",
-                                        placeholder="-90 to 90",
-                                        min=-90,
-                                        max=90,
-                                        label="Dec (degrees):",
-                                        style={
-                                            "width": "150px",
-                                        },
-                                    ),
-                                    dmc.NumberInput(
-                                        id="radius-input",
-                                        placeholder=">0",
-                                        # value=30,
-                                        min=0,
-                                        label="Radius (arcsec):",
-                                        style={
-                                            "width": "150px",
-                                        },
-                                    ),
-                                    dmc.Button(
-                                        "Search",
-                                        id="cone-search-button",
-                                        n_clicks=0,
-                                        style={"marginTop": "21px"},
-                                    ),
-                                ]
+                            dmc.NumberInput(
+                                id="dec-input",
+                                placeholder="-90 to 90",
+                                min=-90,
+                                max=90,
+                                label="Dec (degrees):",
+                                style={
+                                    "width": "150px",
+                                },
                             ),
-                        ]
-                    ),
+                            dmc.NumberInput(
+                                id="radius-input",
+                                placeholder=">0",
+                                # value=30,
+                                min=0,
+                                label="Radius (arcsec):",
+                                style={
+                                    "width": "150px",
+                                },
+                            ),
+                            dmc.Button(
+                                "Search",
+                                id="cone-search-button",
+                                n_clicks=0,
+                                style={"marginTop": "21px"},
+                            ),
+                        ]),
+                    ]),
                 ],
             ),
             dmc.Box(
@@ -147,14 +143,12 @@ def handle_cone_search(n_clicks, ra, dec, radius):
             radius = 30.0
 
         status_msg = f"Cone search: RA={ra}, Dec={dec}, radius={radius} arcsec"
-        logger.info(
-            {
-                "search_type": "cone",
-                "ra": ra,
-                "dec": dec,
-                "radius": radius,
-            }
-        )
+        logger.info({
+            "search_type": "cone",
+            "ra": ra,
+            "dec": dec,
+            "radius": radius,
+        })
 
         # Perform cone search
         results = get_cone_search_results(ra, dec, radius, logger)
@@ -204,31 +198,27 @@ def get_cone_search_results(ra, dec, radius, logger) -> list:
         )
 
         results = []
-        logger.info(
-            {"info": f"Cone search response status: {response_cone.status_code}"}
-        )
+        logger.info({
+            "info": f"Cone search response status: {response_cone.status_code}"
+        })
 
         if response_cone.status_code == 200:
             try:
                 data = ConeSearchResponseModel.validate_json(response_cone.text)
                 results = ConeSearchResponseModel.dump_python(data)
 
-                logger.debug(
-                    {
-                        "debug": f"Cone search results for RA={ra}, Dec={dec}, "
-                        f"radius={radius} arcsec: {len(results)} objects found"
-                    }
-                )
+                logger.debug({
+                    "debug": f"Cone search results for RA={ra}, Dec={dec}, "
+                    f"radius={radius} arcsec: {len(results)} objects found"
+                })
             except ValidationError as e:
-                logger.error(
-                    {"error": f"Failed to parse cone search results: {str(e)}"}
-                )
+                logger.error({
+                    "error": f"Failed to parse cone search results: {str(e)}"
+                })
         else:
-            logger.error(
-                {
-                    "error": f"Cone search request failed: Status {response_cone.status_code}"
-                }
-            )
+            logger.error({
+                "error": f"Cone search request failed: Status {response_cone.status_code}"
+            })
 
         return results
     except Exception as e:
