@@ -24,7 +24,7 @@ def register_style_callbacks(app, logger):
 
             // 2. Set the attribute on the HTML tag (This flips Mantine's CSS variables)
             document.documentElement.setAttribute('data-mantine-color-scheme', themeValue);
-            
+
             // 3. Dash needs an output, so we return 'no_update' to the dummy ID
             return window.dash_clientside.no_update;
         }

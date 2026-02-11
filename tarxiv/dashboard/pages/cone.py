@@ -22,7 +22,7 @@ dash.register_page(
 
 
 def layout(**kwargs):
-    logger = current_app.config["TXV_LOGGER"]
+    # logger = current_app.config["TXV_LOGGER"]
 
     return dmc.Stack(
         children=[
