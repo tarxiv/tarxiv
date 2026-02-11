@@ -1,14 +1,14 @@
 """Card components for displaying object data."""
 
 import dash_mantine_components as dmc
-from dash import dcc
+from dash import dcc, html
 from dash_iconify import DashIconify
 import json
 from ..styles import CARD_STYLE
 from . import theme_manager as tm
 
 
-def TitleCard(title_text: str, subtitle_text: str | None = None, **kwargs):
+def title_card(title_text: str, subtitle_text: str | None = None, **kwargs):
     """Create a styled title card.
 
     Args:
@@ -51,7 +51,36 @@ def TitleCard(title_text: str, subtitle_text: str | None = None, **kwargs):
     )
 
 
-def ExpressiveCard(children, title=None, **kwargs):
+def footer_card():
+    """Create a styled footer card with 3 logos.
+
+    Returns
+    -------
+        dmc.Paper component styled as a footer card
+    """
+    return dmc.Paper(
+        children=dmc.Flex(
+            children=[  # get images from assets folder
+                html.Img(src="/assets/oxford.png", width="200px"),
+                # html.Img(src="/assets/hawaii.png", width="150px"),
+                html.Img(src="/assets/LOGO_CNRS_BLEU.png", width="150px"),
+            ],
+            gap=100,
+            justify="center",
+            align="center",
+            direction="row",
+        ),
+        p="xl",
+        style={
+            "backgroundColor": "var(--tarxiv-footer-bg)",
+            "color": "var(--tarxiv-color-primary)",
+            "textAlign": "center",
+        },
+        mt="md",
+    )
+
+
+def expressive_card(children, title=None, title_order: int = 2, **kwargs):
     """Create a styled card with expressive design.
 
     Args:
@@ -68,10 +97,11 @@ def ExpressiveCard(children, title=None, **kwargs):
 
     return dmc.Paper(
         children=[
-            dmc.Text(
+            dmc.Title(
                 title,
-                fw=700,
-                fz="lg",
+                order=title_order,
+                # fw=700,
+                # fz="lg",
                 mb="md",
             )
             if title
@@ -84,7 +114,7 @@ def ExpressiveCard(children, title=None, **kwargs):
         p="xl",
         radius=28,  # Specific M3 Expressive radius
         style={
-            "backgroundColor": "var(--tarxiv-card)",
+            "backgroundColor": "var(--tarxiv-card-1)",
         },
         **kwargs,
     )
@@ -99,7 +129,7 @@ def create_nav_item(
     return dmc.UnstyledButton(
         className="nav-item-hover",
         px=2,
-        py="sm",
+        py="md",
         my="xs",
         style={
             "width": "100%",
@@ -112,8 +142,14 @@ def create_nav_item(
             "transition": "background-color 200ms ease",
         },
         children=[
-            DashIconify(icon=icon, width=28, id=id),
-            dmc.Text(label, size="xs", fw=500, ta="center", className="nav-text-wrap"),
+            # DashIconify(icon=icon, width=28, id=id),
+            DashIconify(icon=icon, width=35, id=id),
+            dmc.Text(
+                label,
+                size="xs",
+                ta="center",
+                className="nav-text-wrap",
+            ),
         ],
     )
 
@@ -192,19 +228,19 @@ def format_object_metadata(object_id, meta, logger=None):
     return dmc.Stack(
         [
             # Lightcurve card
-            ExpressiveCard(
+            expressive_card(
                 children=dcc.Loading(
                     dcc.Graph(id={"type": tm.PLOT_TYPE, "index": "lightcurve-plot"}),
                 ),
                 title=f"Lightcurve: {object_id}",
             ),
             # Metadata card
-            ExpressiveCard(
+            expressive_card(
                 children=dmc.Stack(summary_items),
                 title=f"Object Metadata: {object_id}",
             ),
             # Full JSON card
-            ExpressiveCard(
+            expressive_card(
                 children=dmc.Code(
                     json.dumps(meta, indent=2),
                     style={

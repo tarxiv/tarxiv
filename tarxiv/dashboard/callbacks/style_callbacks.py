@@ -1,4 +1,13 @@
-from dash import Output, Input, State, Patch, ALL, clientside_callback, ctx
+from dash import (
+    Output,
+    Input,
+    State,
+    Patch,
+    ALL,
+    clientside_callback,
+    ctx,
+    page_registry,
+)
 import plotly.io as pio
 from ..components import PLOT_TYPE, THEME_STORE_ID, create_nav_link
 
@@ -67,31 +76,18 @@ def register_style_callbacks(app, logger):
     )
     def refresh_navigation(pathname):
         # # Sort pages by the 'order' key you added in dash.register_page
-        # nav_pages = sorted(
-        #     [p for p in dash.page_registry.values() if "order" in p],
-        #     key=lambda x: x["order"]
-        # )
+        nav_pages = sorted(
+            [p for p in page_registry.values() if "order" in p],
+            key=lambda x: x["order"],
+        )
 
-        # return [
-        #     create_nav_link(
-        #         icon=page.get("icon", "mdi:help-circle"),
-        #         label=page["name"],
-        #         href=page["relative_path"],
-        #         is_active=(pathname == page["relative_path"])
-        #     ) for page in nav_pages
-        # ]
-
-        nav_items = [
-            {"icon": "mdi:home", "text": "Home", "href": "/"},
-            {"icon": "mdi:magnify", "text": "Search", "href": "/search"},
-            {"icon": "mdi:chart-line", "text": "Lightcurves", "href": "/lightcurves"},
-        ]
         return [
             create_nav_link(
-                icon=item["icon"],
-                label=item["text"],
-                href=item["href"],
-                is_active=(pathname == item["href"]),  # THE KEY LOGIC
+                icon=page.get("icon", "mdi:help-circle"),
+                # label=page["name"],
+                label=page["title"],
+                href=page["relative_path"],
+                is_active=(pathname == page["relative_path"]),
             )
-            for item in nav_items
+            for page in nav_pages
         ]

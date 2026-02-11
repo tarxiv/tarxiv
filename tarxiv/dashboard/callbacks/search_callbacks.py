@@ -24,30 +24,30 @@ def register_search_callbacks(app, txv_db, logger):
         logger: Logger instance
     """
 
-    # Callback to handle object link clicks from cone search results
-    @app.callback(
-        [
-            Output("object-id-input", "value", allow_duplicate=True),
-            Output("search-tabs", "value", allow_duplicate=True),
-            Output("search-id-button", "n_clicks", allow_duplicate=True),
-        ],
-        [Input({"type": "object-link", "index": ALL}, "n_clicks")],
-        [State({"type": "object-id-store", "index": ALL}, "data")],
-        prevent_initial_call=True,
-    )
-    def handle_object_link_click(n_clicks_list, object_ids):
-        """Handle clicks on object links in cone search results."""
-        if not ctx.triggered or not any(n_clicks_list):
-            return no_update, no_update, no_update
+    # # Callback to handle object link clicks from cone search results
+    # @app.callback(
+    #     [
+    #         Output("object-id-input", "value", allow_duplicate=True),
+    #         Output("search-tabs", "value", allow_duplicate=True),
+    #         Output("search-id-button", "n_clicks", allow_duplicate=True),
+    #     ],
+    #     [Input({"type": "object-link", "index": ALL}, "n_clicks")],
+    #     [State({"type": "object-id-store", "index": ALL}, "data")],
+    #     prevent_initial_call=True,
+    # )
+    # def handle_object_link_click(n_clicks_list, object_ids):
+    #     """Handle clicks on object links in cone search results."""
+    #     if not ctx.triggered or not any(n_clicks_list):
+    #         return no_update, no_update, no_update
 
-        # Find which link was clicked
-        triggered_idx = ctx.triggered_id["index"] if ctx.triggered_id else None
-        if triggered_idx is not None and triggered_idx < len(object_ids):
-            object_id = object_ids[triggered_idx]
-            # Return: populate search box, switch to ID tab, increment button clicks to trigger search
-            return object_id, "id-search", 1
+    #     # Find which link was clicked
+    #     triggered_idx = ctx.triggered_id["index"] if ctx.triggered_id else None
+    #     if triggered_idx is not None and triggered_idx < len(object_ids):
+    #         object_id = object_ids[triggered_idx]
+    #         # Return: populate search box, switch to ID tab, increment button clicks to trigger search
+    #         return object_id, "id-search", 1
 
-        return no_update, no_update, no_update
+    #     return no_update, no_update, no_update
 
     @app.callback(
         [

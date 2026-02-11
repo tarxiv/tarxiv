@@ -35,7 +35,19 @@ class TarxivDashboard(TarxivModule):
         # Build Dash application
         status = {"status": "setting up dash application"}
         self.logger.info(status, extra=status)
-        self.app = dash.Dash(__name__, suppress_callback_exceptions=True)
+        self.app = dash.Dash(
+            # __name__,
+            __package__,  # Use package name enables relative imports for pages, see https://community.plotly.com/t/dash-pages-access-content-outside-pages-folder-from-inside-pages-folder/67633/5
+            use_pages=True,
+            # use_async=False,  # TODO: async is a thing in dash!
+            suppress_callback_exceptions=True,
+        )
+
+        # Attach the class instances to the underlying Flask server.
+        # This enables access to the database and logger from within Dash callbacks via current_app.config.
+        self.app.server.config["TXV_DB"] = self.txv_db
+        self.app.server.config["TXV_LOGGER"] = self.logger
+
         self.setup_layout()
         self.setup_themes()
         self.setup_callbacks()

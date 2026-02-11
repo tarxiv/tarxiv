@@ -51,9 +51,11 @@ def generate_css():
     --mantine-color-body: {COLORS["bg_light"]};
     --mantine-color-text: {COLORS["bg_dark"]};
     --tarxiv-color-primary: {COLORS["primary"]};
-    --tarxiv-card: {COLORS["card_light"]};
+    --tarxiv-card-1: {COLORS["card_light"]};
+    --tarxiv-footer-bg: {COLORS["card_dark"]};
     --tarxiv-surface-1: {COLORS["vlight_gray"]};
     --tarxiv-surface-2: {COLORS["surface_light"]};
+
 }}
 
 """
@@ -62,7 +64,7 @@ def generate_css():
     #     --mantine-color-bg: {COLORS["bg_light"]};
     #     --mantine-color-body: {COLORS["bg_light"]};
     #     --mantine-color-text: {COLORS["bg_dark"]};
-    #     --tarxiv-card: {COLORS["card_light"]};
+    #     --tarxiv-card-1: {COLORS["card_light"]};
     # }}
 
     # """
@@ -73,7 +75,8 @@ def generate_css():
     --mantine-color-body: {COLORS["bg_dark"]};
     --mantine-color-text: {COLORS["bg_light"]};
     --tarxiv-color-primary: {COLORS["primary"]};
-    --tarxiv-card: {COLORS["card_dark"]};
+    --tarxiv-card-1: {COLORS["card_dark"]};
+    --tarxiv-footer-bg: {COLORS["bg_dark"]};
     --tarxiv-surface-1: {COLORS["surface_dark"]};
     --tarxiv-surface-2: {COLORS["surface_dark"]};
 }}

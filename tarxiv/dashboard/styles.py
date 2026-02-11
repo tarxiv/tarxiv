@@ -9,46 +9,6 @@ CARD_STYLE = {
     "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
 }
 
-SECTION_STYLE = {
-    "border": "1px solid #ddd",
-    "borderRadius": "8px",
-    "padding": "25px",
-    "marginBottom": "20px",
-    "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
-}
-
-BUTTON_STYLE = {
-    "border": "none",
-    "borderRadius": "4px",
-    "padding": "10px 20px",
-    "fontSize": "14px",
-    "cursor": "pointer",
-    "fontWeight": "500",
-}
-
-INPUT_STYLE = {
-    "border": "1px solid #ddd",
-    "borderRadius": "4px",
-    "padding": "8px 12px",
-    "fontSize": "14px",
-}
-
-HEADER_STYLE = {
-    "textAlign": "center",
-    "padding": "30px 20px",
-    "marginBottom": "30px",
-}
-
-CONTAINER_STYLE = {
-    "margin": "0 auto",
-    "padding": "10px",
-}
-
-PAGE_STYLE = {
-    "minHeight": "100vh",
-    "fontFamily": "Arial, sans-serif",
-    "backgroundColor": "var(--mantine-color-bg)",
-}
 
 # Colors
 # COLORS = {
