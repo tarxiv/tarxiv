@@ -156,6 +156,8 @@ services:
     ports:
       - 8050:8050
     environment:
+      TARXIV_HOST: ${TARXIV_HOST}
+      TARXIV_PORT: ${TARXIV_PORT}
       TARXIV_CONFIG_DIR: /app/aux
       TARXIV_COUCHBASE_HOST: couchbase
       TARXIV_COUCHBASE_API_USERNAME: ${TARXIV_COUCHBASE_API_USERNAME}

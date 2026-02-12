@@ -40,6 +40,10 @@ class TarxivDashboard(TarxivModule):
             use_pages=True,
             # use_async=False,  # TODO: async is a thing in dash!
             suppress_callback_exceptions=True,
+            external_scripts=[
+                "https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js",
+                # "//aladin.u-strasbg.fr/AladinLite/api/v3/3.2.0/aladin.js",
+            ],
         )
 
         # Attach the class instances to the underlying Flask server.

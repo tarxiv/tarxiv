@@ -2767,7 +2767,7 @@ wheels = [
 
 [[package]]
 name = "tarxiv"
-version = "0.0.7"
+version = "0.0.9"
 source = { editable = "." }
 dependencies = [
     { name = "astropy" },
@@ -2793,6 +2793,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
     { name = "skypatrol" },
+    { name = "visdcc" },
 ]
 
 [package.optional-dependencies]
@@ -2834,6 +2835,7 @@ requires-dist = [
     { name = "requests" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "skypatrol" },
+    { name = "visdcc" },
 ]
 provides-extras = ["dev"]
 
@@ -3028,6 +3030,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/15/22/9ee70a2574a4f4599c47dd506532914ce044817c7752a79b6a51286319bc/urllib3-2.5.0.tar.gz", hash = "sha256:3fc47733c7e419d4bc3f6b3dc2b4f890bb743906a30d56ba4a5bfa4bbff92760", size = 393185, upload-time = "2025-06-18T14:07:41.644Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/c2/fe1e52489ae3122415c51f387e221dd0773709bad6c6cdaa599e8a2c5185/urllib3-2.5.0-py3-none-any.whl", hash = "sha256:e6b01673c0fa6a13e374b50871808eb3bf7046c4b125b216f6bf1cc604cff0dc", size = 129795, upload-time = "2025-06-18T14:07:40.39Z" },
+]
+
+[[package]]
+name = "visdcc"
+version = "0.0.63"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dash" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2d/71/2f9ecfafb138e4dd776c6ee95020d3125262dc46a58525a83a7b9337a591/visdcc-0.0.63.tar.gz", hash = "sha256:3c11b24f3a63060b90fa40b260aa7296329ae46f7239cff20daa1b4f753f3400", size = 1770894, upload-time = "2025-03-20T08:54:06.055Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/05/af/cf2d4d57c55a14480ea83f1f609183b5ad877b322b1fbb8d8afc32a14355/visdcc-0.0.63-py3-none-any.whl", hash = "sha256:f4ac6f53ba1269a80c190f54395755af73a3cd537159d845f3be00d4501f4037", size = 1783369, upload-time = "2025-03-20T08:54:03.957Z" },
 ]
 
 [[package]]

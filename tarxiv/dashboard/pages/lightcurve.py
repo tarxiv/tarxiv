@@ -15,6 +15,7 @@ from ..schemas import (
 )
 import requests
 from pydantic import ValidationError
+import os
 
 dash.register_page(
     __name__,
@@ -30,13 +31,20 @@ def layout(id=None, **kwargs):
     # perform search if id is provided in URL, otherwise show empty search page
     logger = current_app.config["TXV_LOGGER"]
     if id:
-        res, status, banner, store = get_meta_data(id, logger)
+        results, status, banner, lc_store, meta_store = perform_search(id, logger)
     else:
-        res, status, banner, store = html.Div(), "", html.Div(), no_update
+        results, status, banner, lc_store, meta_store = (
+            html.Div(),
+            "",
+            html.Div(),
+            no_update,
+            no_update,
+        )
 
     return dmc.Stack(
         children=[
-            dcc.Store(id="lightcurve-store", data=store),
+            dcc.Store(id="lightcurve-store", data=lc_store),
+            dcc.Store(id="lightcurve-meta-store", data=meta_store),
             title_card(
                 title_text="TarXiv Database Explorer",
                 subtitle_text="Explore astronomical transients and their lightcurves",
@@ -44,27 +52,31 @@ def layout(id=None, **kwargs):
             expressive_card(
                 title="Lightcurve Search",
                 children=[
-                    dmc.Stack([
-                        dmc.Text(
-                            "Enter a TNS object name to view its metadata and lightcurve",
-                        ),
-                        dmc.Group([
-                            dmc.TextInput(
-                                id="object-id-input",
-                                placeholder="Enter object ID (e.g., 2024abc)",
-                                value=id,  # Pre-populate with URL parameter
-                                style={
-                                    "width": "400px",
-                                    "marginRight": "10px",
-                                },
+                    dmc.Stack(
+                        [
+                            dmc.Text(
+                                "Enter a TNS object name to view its metadata and lightcurve",
                             ),
-                            dmc.Button(
-                                "Search",
-                                id="search-id-button",
-                                n_clicks=0,
+                            dmc.Group(
+                                [
+                                    dmc.TextInput(
+                                        id="object-id-input",
+                                        placeholder="Enter object ID (e.g., 2024abc)",
+                                        value=id,  # Pre-populate with URL parameter
+                                        style={
+                                            "width": "400px",
+                                            "marginRight": "10px",
+                                        },
+                                    ),
+                                    dmc.Button(
+                                        "Search",
+                                        id="search-id-button",
+                                        n_clicks=0,
+                                    ),
+                                ]
                             ),
-                        ]),
-                    ]),
+                        ]
+                    ),
                 ],
             ),
             dmc.Box(
@@ -85,7 +97,7 @@ def layout(id=None, **kwargs):
                     ),
                     dmc.Stack(
                         id="results-container",
-                        children=[res],
+                        children=[results],
                     ),
                 ],
             ),
@@ -102,6 +114,7 @@ def layout(id=None, **kwargs):
         Output("search-status", "children", allow_duplicate=True),
         Output("message-banner", "children", allow_duplicate=True),
         Output("lightcurve-store", "data"),
+        Output("lightcurve-meta-store", "data"),
         Output("object-id-input", "value"),
         Output("url", "pathname"),  # refresh URL
     ],
@@ -124,20 +137,22 @@ def handle_combined_search(n_clicks, state_id):
     # elif pathname and pathname.startswith("/lightcurve/"):
     #     target_id = pathname.split("/")[-1]
     else:
-        return [no_update] * 6
+        return [no_update] * 7
 
     if not target_id:
-        return [no_update] * 6
+        return [no_update] * 7
 
     # 2. Run your search logic
     try:
-        res, status, banner, store = get_meta_data(target_id, logger)
+        results, status, banner, lc_store, meta_store = perform_search(
+            target_id, logger
+        )
 
         # 3. Define the new URL path
         new_path = f"/lightcurve/{target_id}"
 
         # Return all values, including the new URL path
-        return res, status, banner, store, target_id, new_path
+        return results, status, banner, lc_store, meta_store, target_id, new_path
 
     except Exception as e:
         return (
@@ -145,59 +160,143 @@ def handle_combined_search(n_clicks, state_id):
             "Error",
             create_message_banner(str(e), "error"),
             no_update,
+            no_update,
             target_id,
             no_update,
         )
 
 
-def get_meta_data(object_id, logger):
+@callback(
+    Output("aladin-lite-runjs", "run"),
+    # Triggered by the search-store or metadata container being updated
+    Input("lightcurve-meta-store", "data"),
+    prevent_initial_call=True,
+)
+def update_aladin_viewer(store_data):
+    """Triggers the Aladin JS ONLY when new data arrives."""
+    if not store_data:
+        return no_update
+
+    # Extract RA/Dec from your stored metadata
+    # (Assuming your store_data has these keys)
+    print(f"Received store data for Aladin: {store_data}")
+    ra = store_data.get("ra_deg", 0)[0].get("value", 0)
+    dec = store_data.get("dec_deg", 0)[0].get("value", 0)
+    print(f"Extracted RA: {ra}, Dec: {dec} for Aladin viewer.")
+
+    return generate_aladin_js(ra, dec)
+
+
+def generate_aladin_js(ra, dec):
+    """v3 compliant Aladin initialization."""
+    print(f"Generating Aladin JS for RA: {ra}, Dec: {dec}")
+    return f"""
+// Clear the div first to prevent the 'Multiple Instance' loop
+document.getElementById('aladin-lite-div').innerHTML = '';
+
+// v3 requires the .then() wrapper
+A.init.then(() => {{
+    var aladin = A.aladin('#aladin-lite-div', {{
+        survey: 'P/PanSTARRS/DR1/color-z-zg-g', // v3 uses different survey ID format
+        fov: 0.025,
+        target: '{ra} {dec}',
+        reticleColor: '#ff89ff',
+        reticleSize: 32,
+    }});
+    
+    // Add your catalogs here...
+}});
+"""
+
+
+def fetch_api_data(endpoint, object_id, logger):
+    """Helper to perform API requests."""
+    domain = os.getenv("TARXIV_HOST")
+    port = os.getenv("TARXIV_PORT")
+    try:
+        response = requests.post(
+            url=f"http://{domain}:{port}/{endpoint}/{object_id}",
+            timeout=10,
+            headers={
+                "accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": "TOKEN",
+            },
+        )
+        logger.info({"info": f"{endpoint} response status: {response.status_code}"})
+        return response
+    except Exception as e:
+        logger.error({"error": f"Failed to fetch {endpoint}: {str(e)}"})
+        return None
+
+
+def get_metadata_data(object_id, logger):
+    """Fetch metadata for an object."""
+    response = fetch_api_data("get_object_meta", object_id, logger)
+    if response and response.status_code == 200:
+        try:
+            data = MetadataResponseModel.model_validate_json(response.text)
+            return data.model_dump()
+        except ValidationError as e:
+            logger.error(
+                {"error": f"Failed to parse metadata for object {object_id}: {str(e)}"}
+            )
+    else:
+        if response:
+            logger.error(
+                {
+                    "error": f"Metadata request failed for object {object_id}: "
+                    f"Status {response.status_code}"
+                }
+            )
+    return None
+
+
+def get_lightcurve_data(object_id, logger):
+    """Fetch lightcurve data for an object."""
+    response = fetch_api_data("get_object_lc", object_id, logger)
+    if response and response.status_code == 200:
+        try:
+            data = LightcurveResponseModel.validate_json(response.text)
+            logger.info(
+                {
+                    "success": f"Parsed lightcurve for object {object_id}: {len(data)} points"
+                }
+            )
+            return LightcurveResponseModel.dump_python(data)
+        except ValidationError as e:
+            logger.error(
+                {
+                    "error": f"Failed to parse lightcurve for object {object_id}: {str(e)}"
+                }
+            )
+    else:
+        if response:
+            logger.error(
+                {
+                    "error": f"Lightcurve request failed for object {object_id}: "
+                    f"Status {response.status_code}"
+                }
+            )
+    return None
+
+
+def perform_search(object_id, logger):
     """The core logic shared by both Button and URL triggers."""
     status_msg = f"Searching for object: {object_id}"
     logger.info({"search_type": "id", "object_id": object_id})
 
-    response_meta = requests.post(
-        url=f"http://tarxiv-api:9001/get_object_meta/{object_id}",  # TODO: Fix URL
-        timeout=10,
-        headers={
-            "accept": "application/json",
-            "Content-Type": "application/json",
-            "Authorization": "TOKEN",
-        },
-    )
-    meta = None
-    logger.info({"info": f"Metadata response status: {response_meta.status_code}"})
-    # logger.info({"info": f"Metadata response text: {response_meta.text}"})
-    if response_meta.status_code == 200:
-        try:
-            data = MetadataResponseModel.model_validate_json(response_meta.text)
-        except ValidationError as e:
-            logger.error({
-                "error": f"Failed to parse metadata for object {object_id}: {str(e)}"
-            })
-            error_banner = create_message_banner(
-                f"Failed to parse metadata for object: {object_id}", "error"
-            )
-            return no_update, "", error_banner, no_update
-    else:
-        logger.error({
-            "error": f"Metadata request failed for object {object_id}: "
-            f"Status {response_meta.status_code}"
-        })
-        error_banner = create_message_banner(
-            f"Metadata request failed for object: {object_id}", "error"
-        )
-        return no_update, "", error_banner, no_update
+    # Fetch Metadata
+    meta = get_metadata_data(object_id, logger)
 
-    meta = data.model_dump()
-    # Get metadata
     if meta is None:
         error_banner = create_message_banner(
             f"No object found with ID: {object_id}", "error"
         )
         logger.warning({"warning": f"Object ID not found: {object_id}"})
-        return no_update, status_msg, error_banner, no_update
+        return no_update, status_msg, error_banner, no_update, no_update
 
-    # Get lightcurve data
+    # Fetch Lightcurve
     lc_data = get_lightcurve_data(object_id, logger)
 
     # Display metadata
@@ -207,56 +306,7 @@ def get_meta_data(object_id, logger):
     )
     logger.info({"info": f"Object {object_id} loaded successfully."})
 
-    store_data = {"data": lc_data, "id": object_id}
+    lc_store = {"data": lc_data, "id": object_id}
+    meta_store = meta
 
-    return result, status_msg, success_banner, store_data
-
-
-def get_lightcurve_data(object_id, logger):
-    """Fetch lightcurve data for an object.
-
-    Args:
-        object_id: Object identifier
-        logger: Logger instance
-
-    Returns
-    -------
-        Lightcurve data or None
-    """
-    try:
-        response_lc = requests.post(
-            url=f"http://tarxiv-api:9001/get_object_lc/{object_id}",  # TODO: Fix URL
-            timeout=10,
-            headers={
-                "accept": "application/json",
-                "Content-Type": "application/json",
-                "Authorization": "TOKEN",
-            },
-        )
-        # response_lc.text will contain a list of LightcurveResponseSingle
-        data = None
-        logger.info({"info": f"Lightcurve response status: {response_lc.status_code}"})
-        if response_lc.status_code == 200:
-            try:
-                data = LightcurveResponseModel.validate_json(response_lc.text)
-
-                logger.info({
-                    "success": f"Parsed lightcurve for object {object_id}: {len(data)} points"
-                })
-
-            except ValidationError as e:
-                logger.error({
-                    "error": f"Failed to parse lightcurve for object {object_id}: {str(e)}"
-                })
-                return None
-        else:
-            logger.error({
-                "error": f"Lightcurve request failed for object {object_id}: "
-                f"Status {response_lc.status_code}"
-            })
-            return None
-
-        return LightcurveResponseModel.dump_python(data)
-    except Exception as e:
-        logger.error({"error": f"Failed to fetch lightcurve: {str(e)}"})
-        return None
+    return result, status_msg, success_banner, lc_store, meta_store
