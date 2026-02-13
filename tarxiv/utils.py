@@ -1,6 +1,7 @@
 # Misc. utility functions
 from logstash_async.handler import AsynchronousLogstashHandler
 from logstash_async.handler import LogstashFormatter
+from decimal import Decimal, ROUND_HALF_UP
 import logging
 import yaml
 import sys
@@ -95,3 +96,6 @@ def clean_meta(obj_meta):
     obj_meta = {k: v for k, v in obj_meta.items() if v != []}
     # obj_meta = {k: v[0] for k, v in obj_meta.items() if len(v) == 1}
     return obj_meta
+
+def precision(x, p):
+    return float(Decimal( x*10**p ).quantize(0,ROUND_HALF_UP)/10**p) if x is not None else None
