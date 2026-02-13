@@ -36,6 +36,7 @@ dependencies = [
     "dash>=3.2.0",
     "dash-mantine-components",
     "dash-iconify",
+    "dash-extensions",
     "visdcc",
     "pydantic",
 ]

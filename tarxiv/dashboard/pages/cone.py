@@ -1,6 +1,7 @@
 import dash
 from dash import html, Input, Output, State, no_update, callback, dcc
 import dash_mantine_components as dmc
+from dash_extensions import Keyboard
 from ..components import (
     title_card,
     expressive_card,
@@ -39,43 +40,47 @@ def layout(**kwargs):
                         [
                             dmc.Text(
                                 "Search for objects within a specified radius of sky coordinates",
-                                # style={
-                                #     "fontSize": "14px",
-                                #     "marginTop": "15px",
-                                #     "marginBottom": "15px",
-                                # },
                             ),
                             dmc.Group(
                                 [
-                                    dmc.NumberInput(
-                                        id="ra-input",
-                                        placeholder="0-360",
-                                        min=0,
-                                        max=360,
-                                        label="RA (degrees):",
-                                        style={
-                                            "width": "150px",
-                                        },
-                                    ),
-                                    dmc.NumberInput(
-                                        id="dec-input",
-                                        placeholder="-90 to 90",
-                                        min=-90,
-                                        max=90,
-                                        label="Dec (degrees):",
-                                        style={
-                                            "width": "150px",
-                                        },
-                                    ),
-                                    dmc.NumberInput(
-                                        id="radius-input",
-                                        placeholder=">0",
-                                        # value=30,
-                                        min=0,
-                                        label="Radius (arcsec):",
-                                        style={
-                                            "width": "150px",
-                                        },
+                                    Keyboard(
+                                        children=dmc.Group(
+                                            [
+                                                dmc.NumberInput(
+                                                    id="ra-input",
+                                                    placeholder="0-360",
+                                                    min=0,
+                                                    max=360,
+                                                    label="RA (degrees):",
+                                                    style={
+                                                        "width": "150px",
+                                                    },
+                                                ),
+                                                dmc.NumberInput(
+                                                    id="dec-input",
+                                                    placeholder="-90 to 90",
+                                                    min=-90,
+                                                    max=90,
+                                                    label="Dec (degrees):",
+                                                    style={
+                                                        "width": "150px",
+                                                    },
+                                                ),
+                                                dmc.NumberInput(
+                                                    id="radius-input",
+                                                    placeholder=">0",
+                                                    # value=30,
+                                                    min=0,
+                                                    label="Radius (arcsec):",
+                                                    style={
+                                                        "width": "150px",
+                                                    },
+                                                ),
+                                            ]
+                                        ),
+                                        captureKeys=["Enter"],
+                                        n_keydowns=0,
+                                        id="cone-search-keyboard",
                                     ),
                                     dmc.Button(
                                         "Search",
@@ -122,7 +127,10 @@ def layout(**kwargs):
         Output("message-banner", "children", allow_duplicate=True),
         Output("cone-search-store", "data"),
     ],
-    [Input("cone-search-button", "n_clicks")],
+    [
+        Input("cone-search-button", "n_clicks"),
+        Input("cone-search-keyboard", "n_keydowns"),
+    ],
     [
         State("ra-input", "value"),
         State("dec-input", "value"),
@@ -130,11 +138,8 @@ def layout(**kwargs):
     ],
     prevent_initial_call=True,
 )
-def handle_cone_search(n_clicks, ra, dec, radius):
+def handle_cone_search(n_clicks, n_keydowns, ra, dec, radius):
     """Handle cone search button clicks."""
-    if not n_clicks:
-        return no_update, no_update, no_update, no_update
-
     logger = current_app.config["TXV_LOGGER"]
 
     try:
@@ -196,7 +201,6 @@ def get_cone_search_results(ra, dec, radius, logger) -> list:
     port = os.getenv("TARXIV_PORT")
     try:
         response_cone = requests.post(
-            # url="http://tarxiv-api:9001/cone_search",
             url=f"http://{domain}:{port}/cone_search",
             timeout=10,
             headers={

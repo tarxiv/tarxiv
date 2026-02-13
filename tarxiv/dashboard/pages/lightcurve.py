@@ -1,6 +1,7 @@
 import dash
-from dash import html, callback, ctx, no_update, dcc
+from dash import html, callback, no_update, dcc
 from dash.dependencies import Input, Output, State
+from dash_extensions import Keyboard
 from flask import current_app
 import dash_mantine_components as dmc
 from ..components import (
@@ -59,21 +60,28 @@ def layout(id=None, **kwargs):
                             ),
                             dmc.Group(
                                 [
-                                    dmc.TextInput(
-                                        id="object-id-input",
-                                        placeholder="Enter object ID (e.g., 2024abc)",
-                                        value=id,  # Pre-populate with URL parameter
-                                        style={
-                                            "width": "400px",
-                                            "marginRight": "10px",
-                                        },
+                                    Keyboard(
+                                        children=[
+                                            dmc.TextInput(
+                                                id="object-id-input",
+                                                placeholder="Enter object ID (e.g., 2024abc)",
+                                                value=id,  # Pre-populate with URL parameter
+                                                style={
+                                                    "width": "400px",
+                                                    "marginRight": "10px",
+                                                },
+                                            ),
+                                        ],
+                                        captureKeys=["Enter"],
+                                        id="search-id-keyboard",
+                                        n_keydowns=0,
                                     ),
                                     dmc.Button(
                                         "Search",
                                         id="search-id-button",
                                         n_clicks=0,
                                     ),
-                                ]
+                                ],
                             ),
                         ]
                     ),
@@ -120,39 +128,30 @@ def layout(id=None, **kwargs):
     ],
     [
         # Input("search-id-button", "n_clicks", allow_optional=True),
-        Input("search-id-button", "n_clicks"),
+        Input("search-id-button", "n_clicks"),  # Listen to button clicks
+        Input("search-id-keyboard", "n_keydowns"),  # Listen to Enter key presses
         # Input("url", "pathname"),  # Listen to the URL for deep linking
     ],
     [State("object-id-input", "value")],
     prevent_initial_call=True,
 )
-def handle_combined_search(n_clicks, state_id):
+def handle_combined_search(n_clicks, n_keydowns, event_id):
     logger = current_app.config["TXV_LOGGER"]
 
-    triggered_id = ctx.triggered_id
+    event_id = event_id  # Both triggers use the same input value
 
-    # 1. Determine the ID
-    if triggered_id == "search-id-button":
-        target_id = state_id
-    # elif pathname and pathname.startswith("/lightcurve/"):
-    #     target_id = pathname.split("/")[-1]
-    else:
+    if not event_id:
         return [no_update] * 7
 
-    if not target_id:
-        return [no_update] * 7
-
-    # 2. Run your search logic
+    # Run search logic
     try:
-        results, status, banner, lc_store, meta_store = perform_search(
-            target_id, logger
-        )
+        results, status, banner, lc_store, meta_store = perform_search(event_id, logger)
 
-        # 3. Define the new URL path
-        new_path = f"/lightcurve/{target_id}"
+        # Define the new URL path
+        new_path = f"/lightcurve/{event_id}"
 
         # Return all values, including the new URL path
-        return results, status, banner, lc_store, meta_store, target_id, new_path
+        return results, status, banner, lc_store, meta_store, event_id, new_path
 
     except Exception as e:
         return (
@@ -161,7 +160,7 @@ def handle_combined_search(n_clicks, state_id):
             create_message_banner(str(e), "error"),
             no_update,
             no_update,
-            target_id,
+            event_id,
             no_update,
         )
 
@@ -203,7 +202,7 @@ A.init.then(() => {{
         reticleColor: '#ff89ff',
         reticleSize: 32,
     }});
-    
+
     // Add your catalogs here...
 }});
 """
