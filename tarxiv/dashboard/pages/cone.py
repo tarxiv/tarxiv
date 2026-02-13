@@ -17,7 +17,8 @@ import os
 dash.register_page(
     __name__,
     path="/cone",
-    title="Cone Search",
+    title="TarXiv - Cone Search",
+    name="Cone Search",
     order=2,
     icon="lucide:cone",
 )
@@ -149,7 +150,7 @@ def handle_cone_search(n_clicks, n_keydowns, ra, dec, radius):
             )
             return html.Div(), "", warning_banner, no_update
 
-        if radius is None:
+        if radius is None:  # Why is this the default value?
             radius = 30.0
 
         status_msg = f"Cone search: RA={ra}, Dec={dec}, radius={radius} arcsec"

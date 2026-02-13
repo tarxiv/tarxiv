@@ -84,8 +84,8 @@ def register_style_callbacks(app, logger):
         return [
             create_nav_link(
                 icon=page.get("icon", "mdi:help-circle"),
-                # label=page["name"],
-                label=page["title"],
+                label=page["name"],
+                # label=page["title"],
                 href=page["relative_path"],
                 is_active=(pathname == page["relative_path"]),
             )

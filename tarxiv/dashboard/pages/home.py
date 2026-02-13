@@ -5,7 +5,8 @@ from ..components.cards import title_card
 dash.register_page(
     __name__,
     path="/",
-    title="Home",
+    title="TarXiv - Home",
+    name="Home",
     order=0,
     icon="mdi:home-outline",
 )

@@ -22,7 +22,8 @@ dash.register_page(
     __name__,
     path="/lightcurve",
     path_template="/lightcurve/<id>",
-    title="Lightcurve",
+    title="TarXiv - Lightcurve",
+    name="Lightcurve",
     order=1,
     icon="clarity:curve-chart-line",
 )
