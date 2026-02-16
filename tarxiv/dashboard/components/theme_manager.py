@@ -5,10 +5,6 @@ import os
 from ..styles import COLORS, FILTER_COLORS
 from .cards import create_nav_item
 
-# 1. Constants for Pattern Matching
-PLOT_TYPE = "themeable-plot"
-THEME_STORE_ID = "theme-store"
-
 brand_palette = [COLORS["primary"]] * 10
 THEME = {
     "primaryColor": "arxiv_red",
@@ -46,7 +42,7 @@ THEME = {
 def generate_css():
     """Generates CSS variables for light and dark themes."""
     light_css = f"""
-:root {{
+:root[data-mantine-color-scheme="light"] {{
     --mantine-color-bg: {COLORS["bg_light"]};
     --mantine-color-body: {COLORS["bg_light"]};
     --mantine-color-text: {COLORS["bg_dark"]};
@@ -55,7 +51,6 @@ def generate_css():
     --tarxiv-footer-bg: {COLORS["card_dark"]};
     --tarxiv-surface-1: {COLORS["vlight_gray"]};
     --tarxiv-surface-2: {COLORS["surface_light"]};
-
 }}
 
 """
@@ -70,7 +65,7 @@ def generate_css():
     # """
 
     dark_css = f"""
-[data-mantine-color-scheme="dark"] {{
+:root[data-mantine-color-scheme="dark"] {{
     --mantine-color-bg: {COLORS["bg_dark"]};
     --mantine-color-body: {COLORS["bg_dark"]};
     --mantine-color-text: {COLORS["bg_light"]};
@@ -122,12 +117,10 @@ def generate_css():
     return None
 
 
-def get_theme_components() -> tuple[dict, dcc.Store, html.Div]:
-    """Returns the Theme, Store and the Toggle Button for the rail."""
+def get_theme_components() -> tuple[dict, html.Div]:
+    """Returns the Theme and the Toggle Button for the rail."""
     return (
         THEME,
-        # Storage for the theme name
-        dcc.Store(id=THEME_STORE_ID, storage_type="local", data="tarxiv_light"),
         # The Toggle Button (Unstyled to match your Rail)
         html.Div(
             create_nav_item(

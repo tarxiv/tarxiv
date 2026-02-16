@@ -268,7 +268,9 @@ def format_object_metadata(object_id, meta, logger=None):
             # Lightcurve card
             expressive_card(
                 children=dcc.Loading(
-                    dcc.Graph(id={"type": tm.PLOT_TYPE, "index": "lightcurve-plot"}),
+                    dcc.Graph(
+                        id={"type": "themeable-plot", "index": "lightcurve-plot"}
+                    ),
                 ),
                 title=f"Lightcurve: {object_id}",
             ),
@@ -402,7 +404,7 @@ def format_cone_search_results(
                     dmc.Title("Sky Position", order=4, style={"marginTop": "0"}),
                     dcc.Loading(
                         dcc.Graph(
-                            id={"type": tm.PLOT_TYPE, "index": "sky-plot"},
+                            id={"type": "themeable-plot", "index": "sky-plot"},
                         ),
                     ),
                 ],

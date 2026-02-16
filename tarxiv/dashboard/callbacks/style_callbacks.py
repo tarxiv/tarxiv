@@ -7,67 +7,82 @@ from dash import (
     clientside_callback,
     ctx,
     page_registry,
+    exceptions,
 )
 import plotly.io as pio
-from ..components import PLOT_TYPE, THEME_STORE_ID, create_nav_link
+from ..components import create_nav_link
 
 
 def register_style_callbacks(app, logger):
     # Add light/dark mode toggle callback
     clientside_callback(
         """
-        (themeData) => {
-            // 1. Determine if we should be in dark or light mode
-            // This handles strings like 'tarxiv_dark' or just 'dark'
-            const isDark = themeData && themeData.includes('dark');
+        (settings) => {
+            // 1. Extract theme from dictionary, fallback to light
+            const themeStr = (settings && settings.theme) ? settings.theme : 'light';
+            const isDark = themeStr.includes('dark');
             const themeValue = isDark ? 'dark' : 'light';
 
-            // 2. Set the attribute on the HTML tag (This flips Mantine's CSS variables)
+            // 2. Set Mantine attribute
             document.documentElement.setAttribute('data-mantine-color-scheme', themeValue);
 
             // 3. Dash needs an output, so we return 'no_update' to the dummy ID
             return window.dash_clientside.no_update;
         }
         """,
-        Output(THEME_STORE_ID, "id"),  # Using the store's own ID as a dummy output
-        Input(THEME_STORE_ID, "data"),
+        Output("active-settings-store", "id"),  # Use the new store as dummy output
+        Input("active-settings-store", "data"),
     )
 
+    # --- Theme toggle (active) ---
     @app.callback(
-        Output(THEME_STORE_ID, "data"),
+        Output("active-settings-store", "data", allow_duplicate=True),
         Input("color-scheme-toggle", "n_clicks"),
-        State(THEME_STORE_ID, "data"),
+        State("active-settings-store", "data"),
         prevent_initial_call=True,
     )
-    def toggle_theme_value(n, current_theme):
-        # Just flip the string. Easy.
-        return "tarxiv_light" if "dark" in current_theme else "tarxiv_dark"
+    def update_active_theme(n_clicks, active_settings):
+        # Ensure we use the correct ID: active-settings-store
+        p = Patch()
+        current_theme = active_settings.get("theme", "tarxiv_light")
+        p["theme"] = "tarxiv_light" if "dark" in current_theme else "tarxiv_dark"
+        return p
 
     @app.callback(
-        Output({"type": PLOT_TYPE, "index": ALL}, "figure", allow_duplicate=True),
+        Output(
+            {"type": "themeable-plot", "index": ALL}, "figure", allow_duplicate=True
+        ),
         Output("theme-icon", "icon"),
-        Input(THEME_STORE_ID, "data"),
+        Input("active-settings-store", "data"),
         prevent_initial_call=True,
     )
-    def update_all_plots_theme(theme_name):
-        # Determine the icon first (it's always needed)
+    def update_all_plots_theme(settings):
+        # 1. Safety check for dictionary
+        if not settings:
+            raise exceptions.PreventUpdate
+
+        theme_name = settings.get("theme", "tarxiv_light")
+
+        # 2. Determine the icon
         light_icon = "line-md:moon-to-sunny-outline-transition"
         dark_icon = "line-md:sunny-outline-to-moon-loop-transition"
         theme_icon = dark_icon if "dark" in theme_name else light_icon
 
-        # ctx.outputs_list is a list of lists because we have two Outputs in the decorator.
-        # The first element [0] corresponds to the ALL plots output.
+        # 3. Create Patch for plots
         plot_outputs = (
             ctx.outputs_list[0] if isinstance(ctx.outputs_list[0], list) else []
         )
 
-        # 1. Create the Patch for the plots
         theme_patch = Patch()
+        # Ensure template_key matches pio.templates keys
         template_key = theme_name if "tarxiv" in theme_name else f"tarxiv_{theme_name}"
-        theme_patch["layout"]["template"] = pio.templates[template_key]
 
-        # 2. Return a TUPLE: (List of patches for plots, Single icon string)
-        # Even if plot_outputs is empty, we return ([], theme_icon)
+        try:
+            theme_patch["layout"]["template"] = pio.templates[template_key]
+        except KeyError:
+            # Fallback if template doesn't exist
+            theme_patch["layout"]["template"] = pio.templates["plotly_white"]
+
         return [theme_patch] * len(plot_outputs), theme_icon
 
     @app.callback(

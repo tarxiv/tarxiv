@@ -6,7 +6,15 @@ import dash_mantine_components as dmc
 from ..components import (
     get_theme_components,
     footer_card,
+    get_cookie_popup,
+    # COOKIE_DEFAULTS,
 )
+
+SETTING_DEFAULTS = {  # These defaults need to correspond with the PERMISSION_MAP in cookie_callbacks.py
+    "theme": "tarxiv_light",
+    "analytics_on": False,
+    "user": None,
+}
 
 
 def create_layout() -> dmc.MantineProvider:
@@ -26,12 +34,21 @@ def create_layout() -> dmc.MantineProvider:
                 "breakpoint": "sm",
                 "collapsed": {"mobile": True},
             },
-            # header={"height": 60},
-            # footer={"height": 60},
             padding="md",
             layout="alt",
             # dmc.Box(
             children=[
+                # 1. PERMISSIONS (local): Remembers what the user said 'Yes' to.
+                dcc.Store(id="cookie-consent-store", storage_type="local"),
+                # 2. PERMANENT DATA (Local): Stores actual values (e.g. theme='dark') only if permitted.
+                dcc.Store(id="local-settings-store", storage_type="local"),
+                # 3. LIVE STATE (Session): What the app currently uses to render.
+                dcc.Store(
+                    id="active-settings-store",
+                    storage_type="session",
+                    data=SETTING_DEFAULTS,
+                ),
+                get_cookie_popup(),
                 # Navigation rail
                 dmc.AppShellNavbar(
                     p="xs",
@@ -60,13 +77,11 @@ def create_layout() -> dmc.MantineProvider:
                                 "minHeight": "calc(100vh - 32px)",  # Adjust 32px based on your padding
                             },
                             children=[
-                                theme_switch_state_store,
+                                # theme_switch_state_store,
                                 dcc.Location(
                                     id="url",
                                     refresh=False,  # don't refresh the page on URL change
                                 ),  # Essential for tracking the current page
-                                # dcc.Store(id="lightcurve-store"),
-                                # dcc.Store(id="cone-search-store"),
                                 html.Div(
                                     id="page-content",  # Container for page content
                                     style={

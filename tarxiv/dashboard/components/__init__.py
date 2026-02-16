@@ -16,8 +16,10 @@ from .theme_manager import (
     apply_theme,
     get_filter_style,
     register_tarxiv_templates,
-    PLOT_TYPE,
-    THEME_STORE_ID,
+)
+from .cookies import (
+    get_cookie_popup,
+    COOKIE_DEFAULTS,
 )
 
 __all__ = [
@@ -35,6 +37,6 @@ __all__ = [
     "apply_theme",
     "get_filter_style",
     "register_tarxiv_templates",
-    "PLOT_TYPE",
-    "THEME_STORE_ID",
+    "get_cookie_popup",
+    "COOKIE_DEFAULTS",
 ]
