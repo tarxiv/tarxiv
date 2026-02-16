@@ -40,4 +40,6 @@ FILTER_COLORS = {
     "r": "red",
     "z": "purple",
     "Unknown": "gray",
+    "search_position": "#e74c3c",  # Nice bright red
+    "object": "#4C84C6",  # Nice bright blue
 }

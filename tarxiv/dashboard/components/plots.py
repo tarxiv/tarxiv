@@ -19,16 +19,18 @@ def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
     """
     if not lc_data:
         if logger:
-            logger.warning({
-                "warning": f"No lightcurve data received for object: {object_id}"
-            })
+            logger.warning(
+                {"warning": f"No lightcurve data received for object: {object_id}"}
+            )
         return None
 
     fig = go.Figure()
     if logger:
-        logger.debug({
-            "debug": f"Creating lightcurve plot for object: {object_id} with {len(lc_data)} points"
-        })
+        logger.debug(
+            {
+                "debug": f"Creating lightcurve plot for object: {object_id} with {len(lc_data)} points"
+            }
+        )
         logger.debug({"debug": f"Lightcurve data sample: {lc_data[:3]}"})
 
     # Group data by both filter/band and survey
@@ -52,9 +54,11 @@ def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
         mjd = point.get("mjd")
         if mjd is None:
             if logger:
-                logger.warning({
-                    "warning": f"Missing MJD in lightcurve point for object: {object_id}"
-                })
+                logger.warning(
+                    {
+                        "warning": f"Missing MJD in lightcurve point for object: {object_id}"
+                    }
+                )
             continue
 
         # Handle detections vs limits using detection flag
@@ -160,7 +164,6 @@ def create_sky_plot(results, search_ra, search_dec, theme_template, logger=None)
             x=[search_ra],
             y=[search_dec],
             mode="markers",
-            # marker=dict(size=15, color="red", symbol="x"),
             marker=dict(
                 size=15,
                 color=get_filter_style("search_position"),
@@ -181,7 +184,6 @@ def create_sky_plot(results, search_ra, search_dec, theme_template, logger=None)
                 x=ras,
                 y=decs,
                 mode="markers",
-                # marker=dict(size=10, color="blue"),
                 marker=dict(
                     size=10,
                     color=get_filter_style("object"),

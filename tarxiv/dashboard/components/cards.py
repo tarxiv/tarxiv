@@ -380,45 +380,6 @@ def format_cone_search_results(
             )
         )
 
-    # return dmc.Stack(
-    #     [
-    #         # Summary card
-    #         dmc.Card(
-    #             [
-    #                 dmc.Title(
-    #                     f"Found {len(results)} object(s)",
-    #                     order=3,
-    #                     style={"marginTop": "0"},
-    #                 ),
-    #                 dmc.Text(
-    #                     f"Search coordinates: RA={search_ra:.6f}°, Dec={search_dec:.6f}°",
-    #                     style={"fontSize": "14px"},
-    #                 ),
-    #             ],
-    #             style=CARD_STYLE,
-    #         ),
-    #         # Sky plot card
-    #         dmc.Card(
-    #             [
-    #                 dmc.Title("Sky Position", order=4, style={"marginTop": "0"}),
-    #                 dcc.Loading(
-    #                     dcc.Graph(
-    #                         id={"type": "themeable-plot", "index": "sky-plot"},
-    #                     ),
-    #                 ),
-    #             ],
-    #             style=CARD_STYLE,
-    #         ),
-    #         # Expandable object cards
-    #         dmc.Card(
-    #             [
-    #                 dmc.Title("Objects Found", order=4, style={"marginTop": "0"}),
-    #                 dmc.Stack(object_cards),
-    #             ],
-    #             style=CARD_STYLE,
-    #         ),
-    #     ]
-    # )
     plural = "s" if len(results) != 1 else ""
     return dmc.Stack(
         [
