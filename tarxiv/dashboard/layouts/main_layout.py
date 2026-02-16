@@ -24,7 +24,7 @@ def create_layout() -> dmc.MantineProvider:
     -------
         html.Div containing the complete dashboard layout
     """
-    theme, theme_switch_state_store, theme_switch = get_theme_components()
+    theme, theme_switch = get_theme_components()
     return dmc.MantineProvider(
         theme=theme,
         # children=html.Div(
