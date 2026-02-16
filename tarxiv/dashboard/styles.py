@@ -9,19 +9,6 @@ CARD_STYLE = {
     "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
 }
 
-
-# Colors
-# COLORS = {
-#     "primary": "#3498db",
-#     "secondary": "#2c3e50",
-#     "muted": "#7f8c8d",
-#     "success": "green",
-#     "warning": "orange",
-#     "danger": "red",
-#     "light": "#ecf0f1",
-#     "white": "white",
-#     "gray": "gray",
-# }
 COLORS = {
     "primary": "#b31b1b",  # Mahogany Red
     "bg_light": "#fefefe",  # White
