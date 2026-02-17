@@ -65,6 +65,7 @@ def footer_card():
                 html.Img(src="/assets/oxford.png", width="200px"),
                 # html.Img(src="/assets/hawaii.png", width="150px"),
                 html.Img(src="/assets/LOGO_CNRS_BLEU.png", width="150px"),
+                html.Img(src="/assets/hawaii.png", width="150px"),
             ],
             gap=100,
             justify="center",
