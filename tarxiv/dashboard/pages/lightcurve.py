@@ -2,7 +2,8 @@ import dash
 from dash import html, callback, no_update, dcc
 from dash.dependencies import Input, Output, State
 from dash_extensions import Keyboard
-from flask import current_app
+from flask import current_app, request
+from werkzeug.exceptions import Unauthorized
 import dash_mantine_components as dmc
 from ..components import (
     title_card,
@@ -17,6 +18,7 @@ from ..schemas import (
 import requests
 from pydantic import ValidationError
 import os
+from urllib.parse import unquote
 
 dash.register_page(
     __name__,
@@ -32,9 +34,26 @@ dash.register_page(
 def layout(id=None, **kwargs):
     # perform search if id is provided in URL, otherwise show empty search page
     logger = current_app.config["TXV_LOGGER"]
-    if id:
-        results, status, banner, lc_store, meta_store = perform_search(id, logger)
+
+    token = unquote(request.cookies.get("tarxiv_user_token", ""))
+
+    if id and token:
+        # User came via deep link and has a saved session
+        results, status, banner, lc_store, meta_store = perform_search(
+            id, token, logger
+        )
+    elif id and not token:
+        # Deep link but no token: Show the search bar pre-filled with ID
+        # but warn the user that a token is missing.
+        results = html.Div()
+        status = "Authentication required"
+        banner = create_message_banner(
+            "Please enter your API token to view data.", "warning"
+        )
+        lc_store = no_update
+        meta_store = no_update
     else:
+        # Default empty search page
         results, status, banner, lc_store, meta_store = (
             html.Div(),
             "",
@@ -45,8 +64,10 @@ def layout(id=None, **kwargs):
 
     return dmc.Stack(
         children=[
-            dcc.Store(id="lightcurve-store", data=lc_store),
-            dcc.Store(id="lightcurve-meta-store", data=meta_store),
+            dcc.Store(id="lightcurve-store", storage_type="session", data=lc_store),
+            dcc.Store(
+                id="lightcurve-meta-store", storage_type="session", data=meta_store
+            ),
             title_card(
                 title_text="TarXiv Database Explorer",
                 subtitle_text="Explore astronomical transients and their lightcurves",
@@ -71,6 +92,19 @@ def layout(id=None, **kwargs):
                                                     "width": "400px",
                                                     "marginRight": "10px",
                                                 },
+                                            ),
+                                            dmc.VisuallyHidden(
+                                                dmc.TextInput(
+                                                    # When API auth is implemented, remove this input from the UI
+                                                    # and remove the prepopulate_token() callback.
+                                                    id="token",
+                                                    placeholder="Enter a token",
+                                                    value=token,  # Pre-populate with URL parameter
+                                                    style={
+                                                        "width": "400px",
+                                                        "marginRight": "10px",
+                                                    },
+                                                )
                                             ),
                                         ],
                                         captureKeys=["Enter"],
@@ -133,26 +167,61 @@ def layout(id=None, **kwargs):
         Input("search-id-keyboard", "n_keydowns"),  # Listen to Enter key presses
         # Input("url", "pathname"),  # Listen to the URL for deep linking
     ],
-    [State("object-id-input", "value")],
+    [
+        State("object-id-input", "value"),
+        State("token", "value"),
+    ],
     prevent_initial_call=True,
 )
-def handle_combined_search(n_clicks, n_keydowns, event_id):
+def handle_combined_search(n_clicks, n_keydowns, event_id, token):
     logger = current_app.config["TXV_LOGGER"]
 
-    event_id = event_id  # Both triggers use the same input value
+    if not event_id and not token:
+        return [no_update] * 7  # No search term and no token, do nothing
 
-    if not event_id:
-        return [no_update] * 7
+    if not token and event_id:
+        return (
+            html.Div(),
+            "Authentication required",
+            create_message_banner(
+                "Please enter your API token to view data.", "warning"
+            ),
+            no_update,
+            no_update,
+            event_id,
+            no_update,
+        )
+
+    if token and not event_id:
+        return (
+            html.Div(),
+            "Please enter an object ID to search.",
+            create_message_banner("Object ID cannot be empty.", "warning"),
+            no_update,
+            no_update,
+            event_id,
+            no_update,
+        )
 
     # Run search logic
     try:
-        results, status, banner, lc_store, meta_store = perform_search(event_id, logger)
+        results, status, banner, lc_store, meta_store = perform_search(
+            event_id, token, logger
+        )
 
         # Define the new URL path
         new_path = f"/lightcurve/{event_id}"
 
         # Return all values, including the new URL path
-        return results, status, banner, lc_store, meta_store, event_id, new_path
+        return (
+            results,
+            status,
+            banner,
+            lc_store,
+            meta_store,
+            event_id,
+            new_path,
+        )
 
     except Exception as e:
         return (
@@ -209,31 +278,32 @@ A.init.then(() => {{
 """
 
 
-def fetch_api_data(endpoint, object_id, logger):
+def fetch_api_data(endpoint, object_id, token, logger):
     """Helper to perform API requests."""
     domain = os.getenv("TARXIV_HOST")
     port = os.getenv("TARXIV_PORT")
-    try:
-        response = requests.post(
-            url=f"http://{domain}:{port}/{endpoint}/{object_id}",
-            timeout=10,
-            headers={
-                "accept": "application/json",
-                "Content-Type": "application/json",
-                "Authorization": "TOKEN",
-            },
-        )
-        logger.info({"info": f"{endpoint} response status: {response.status_code}"})
-        return response
-    except Exception as e:
-        logger.error({"error": f"Failed to fetch {endpoint}: {str(e)}"})
-        return None
+    # try:
+    response = requests.post(
+        url=f"http://{domain}:{port}/{endpoint}/{object_id}",
+        timeout=10,
+        headers={
+            "accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": token,
+        },
+    )
+    logger.info({"info": f"{endpoint} response status: {response.status_code}"})
+    return response
+    # except Exception as e:
+    #     logger.error({"error": f"Failed to fetch {endpoint}: {str(e)}"})
+    #     return None
 
 
-def get_metadata_data(object_id, logger):
+def get_metadata_data(object_id, token, logger):
     """Fetch metadata for an object."""
-    response = fetch_api_data("get_object_meta", object_id, logger)
-    if response and response.status_code == 200:
+    response = fetch_api_data("get_object_meta", object_id, token, logger)
+
+    if response.status_code == 200:
         try:
             data = MetadataResponseModel.model_validate_json(response.text)
             return data.model_dump()
@@ -241,20 +311,28 @@ def get_metadata_data(object_id, logger):
             logger.error(
                 {"error": f"Failed to parse metadata for object {object_id}: {str(e)}"}
             )
-    else:
-        if response:
-            logger.error(
-                {
-                    "error": f"Metadata request failed for object {object_id}: "
-                    f"Status {response.status_code}"
-                }
-            )
+    # authentication error
+    elif response.status_code == 401:
+        logger.warning(
+            {
+                "warning": f"Unauthorized access when fetching metadata for object {object_id}. "
+                f"Check if the token is valid."
+            }
+        )
+        raise Unauthorized("Invalid API token. Check your token.")
+
+    logger.error(
+        {
+            "error": f"Metadata request failed for object {object_id}: "
+            f"Status {response.status_code}"
+        }
+    )
     return None
 
 
-def get_lightcurve_data(object_id, logger):
+def get_lightcurve_data(object_id, token, logger):
     """Fetch lightcurve data for an object."""
-    response = fetch_api_data("get_object_lc", object_id, logger)
+    response = fetch_api_data("get_object_lc", object_id, token, logger)
     if response and response.status_code == 200:
         try:
             data = LightcurveResponseModel.validate_json(response.text)
@@ -281,13 +359,30 @@ def get_lightcurve_data(object_id, logger):
     return None
 
 
-def perform_search(object_id, logger):
+def perform_search(object_id, token, logger):
     """The core logic shared by both Button and URL triggers."""
     status_msg = f"Searching for object: {object_id}"
     logger.info({"search_type": "id", "object_id": object_id})
 
     # Fetch Metadata
-    meta = get_metadata_data(object_id, logger)
+    try:
+        meta = get_metadata_data(object_id, token, logger)
+    except Unauthorized as e:
+        return (
+            html.Div(),
+            "Authentication required",
+            create_message_banner(str(e), "error"),
+            no_update,
+            no_update,
+        )
+    except Exception as e:
+        return (
+            html.Div(),
+            "Error",
+            create_message_banner(f"Failed to fetch metadata: {str(e)}", "error"),
+            no_update,
+            no_update,
+        )
 
     if meta is None:
         error_banner = create_message_banner(
@@ -297,7 +392,7 @@ def perform_search(object_id, logger):
         return no_update, status_msg, error_banner, no_update, no_update
 
     # Fetch Lightcurve
-    lc_data = get_lightcurve_data(object_id, logger)
+    lc_data = get_lightcurve_data(object_id, token, logger)
 
     # Display metadata
     result = format_object_metadata(object_id, meta, logger)

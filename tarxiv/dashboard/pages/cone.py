@@ -11,8 +11,10 @@ from ..components import (
 from ..schemas import ConeSearchResponseModel
 import requests
 from pydantic import ValidationError
-from flask import current_app
+from flask import current_app, request
+from werkzeug.exceptions import Unauthorized
 import os
+from urllib.parse import unquote
 
 dash.register_page(
     __name__,
@@ -26,6 +28,8 @@ dash.register_page(
 
 def layout(**kwargs):
     # logger = current_app.config["TXV_LOGGER"]
+
+    token = unquote(request.cookies.get("tarxiv_user_token", ""))
 
     return dmc.Stack(
         children=[
@@ -42,7 +46,8 @@ def layout(**kwargs):
                             dmc.Text(
                                 "Search for objects within a specified radius of sky coordinates",
                             ),
-                            dmc.Group(
+                            # dmc.Group(
+                            dmc.Stack(
                                 [
                                     Keyboard(
                                         children=dmc.Group(
@@ -76,6 +81,19 @@ def layout(**kwargs):
                                                     style={
                                                         "width": "150px",
                                                     },
+                                                ),
+                                                dmc.VisuallyHidden(
+                                                    dmc.TextInput(
+                                                        # When API auth is implemented, remove this input from the UI
+                                                        # and remove the prepopulate_token() callback.
+                                                        id="token",
+                                                        placeholder="Enter a token",
+                                                        value=token,  # Pre-populate with URL parameter
+                                                        style={
+                                                            "width": "400px",
+                                                            "marginRight": "10px",
+                                                        },
+                                                    )
                                                 ),
                                             ]
                                         ),
@@ -127,6 +145,7 @@ def layout(**kwargs):
         Output("search-status", "children", allow_duplicate=True),
         Output("message-banner", "children", allow_duplicate=True),
         Output("cone-search-store", "data"),
+        Output("active-settings-store", "data", allow_duplicate=True),
     ],
     [
         Input("cone-search-button", "n_clicks"),
@@ -136,35 +155,41 @@ def layout(**kwargs):
         State("ra-input", "value"),
         State("dec-input", "value"),
         State("radius-input", "value"),
+        State("token", "value"),
+        State("active-settings-store", "data"),
     ],
     prevent_initial_call=True,
 )
-def handle_cone_search(n_clicks, n_keydowns, ra, dec, radius):
+def handle_cone_search(n_clicks, n_keydowns, ra, dec, radius, token, settings):
     """Handle cone search button clicks."""
     logger = current_app.config["TXV_LOGGER"]
 
-    try:
-        if ra is None or dec is None:
-            warning_banner = create_message_banner(
-                "Please provide valid RA and Dec coordinates.", "warning"
-            )
-            return html.Div(), "", warning_banner, no_update
-
-        if radius is None:  # Why is this the default value?
-            radius = 30.0
-
-        status_msg = f"Cone search: RA={ra}, Dec={dec}, radius={radius} arcsec"
-        logger.info(
-            {
-                "search_type": "cone",
-                "ra": ra,
-                "dec": dec,
-                "radius": radius,
-            }
+    if not token:
+        warning_banner = create_message_banner(
+            "Please provide an API token to perform the search.", "warning"
         )
+        return html.Div(), "", warning_banner, no_update, no_update
 
+    settings.update({"tarxiv_user_token": token})  # Save token to active settings
+
+    if not ra or not dec or not radius:
+        warning_banner = create_message_banner(
+            "Please provide valid RA, Dec and radius coordinates.", "warning"
+        )
+        return html.Div(), "", warning_banner, no_update, no_update
+
+    status_msg = f"Cone search: RA={ra}, Dec={dec}, radius={radius} arcsec"
+    logger.info(
+        {
+            "search_type": "cone",
+            "ra": ra,
+            "dec": dec,
+            "radius": radius,
+        }
+    )
+    try:
         # Perform cone search
-        results = get_cone_search_results(ra, dec, radius, logger)
+        results = get_cone_search_results(ra, dec, radius, token, logger)
 
         # Display results
         result = format_cone_search_results(results, ra, dec)
@@ -175,16 +200,21 @@ def handle_cone_search(n_clicks, n_keydowns, ra, dec, radius):
 
         store_data = {"results": results, "ra": ra, "dec": dec}
 
-        return result, status_msg, success_banner, store_data
-
+        return result, status_msg, success_banner, store_data, settings
+    except Unauthorized as e:
+        logger.warning({"warning": f"Unauthorized cone search attempt: {str(e)}"})
+        error_banner = create_message_banner(
+            "Unauthorized: Invalid API token. Check your token.", "error"
+        )
+        return html.Div(), "Unauthorized", error_banner, no_update, no_update
     except Exception as e:
         error_msg = f"Error: {str(e)}"
         logger.error({"error": error_msg})
         error_banner = create_message_banner(error_msg, "error")
-        return html.Div(), "Error occurred", error_banner, no_update
+        return html.Div(), "Error occurred", error_banner, no_update, no_update
 
 
-def get_cone_search_results(ra, dec, radius, logger) -> list:
+def get_cone_search_results(ra, dec, radius, token, logger) -> list:
     """Perform a cone search.
 
     Args:
@@ -200,46 +230,45 @@ def get_cone_search_results(ra, dec, radius, logger) -> list:
     """
     domain = os.getenv("TARXIV_HOST")
     port = os.getenv("TARXIV_PORT")
-    try:
-        response_cone = requests.post(
-            url=f"http://{domain}:{port}/cone_search",
-            timeout=10,
-            headers={
-                "accept": "application/json",
-                "Content-Type": "application/json",
-                "Authorization": "TOKEN",
-            },
-            json={"ra": ra, "dec": dec, "radius": radius},
-        )
+    response_cone = requests.post(
+        url=f"http://{domain}:{port}/cone_search",
+        timeout=10,
+        headers={
+            "accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": token,
+        },
+        json={"ra": ra, "dec": dec, "radius": radius},
+    )
 
-        results = []
-        logger.info(
-            {"info": f"Cone search response status: {response_cone.status_code}"}
-        )
+    results = []
+    logger.info({"info": f"Cone search response status: {response_cone.status_code}"})
 
-        if response_cone.status_code == 200:
-            try:
-                data = ConeSearchResponseModel.validate_json(response_cone.text)
-                results = ConeSearchResponseModel.dump_python(data)
+    print(response_cone.text)  # Debug: Print raw response text
+    print(response_cone.headers)  # Debug: Print response headers
+    print(response_cone.status_code)
 
-                logger.debug(
-                    {
-                        "debug": f"Cone search results for RA={ra}, Dec={dec}, "
-                        f"radius={radius} arcsec: {len(results)} objects found"
-                    }
-                )
-            except ValidationError as e:
-                logger.error(
-                    {"error": f"Failed to parse cone search results: {str(e)}"}
-                )
-        else:
-            logger.error(
+    if response_cone.status_code == 200:
+        try:
+            data = ConeSearchResponseModel.validate_json(response_cone.text)
+            results = ConeSearchResponseModel.dump_python(data)
+
+            logger.debug(
                 {
-                    "error": f"Cone search request failed: Status {response_cone.status_code}"
+                    "debug": f"Cone search results for RA={ra}, Dec={dec}, "
+                    f"radius={radius} arcsec: {len(results)} objects found"
                 }
             )
+        except ValidationError as e:
+            logger.error({"error": f"Failed to parse cone search results: {str(e)}"})
+    if response_cone.status_code == 401:
+        logger.warning(
+            {"warning": "Unauthorized cone search attempt. Check API token validity."}
+        )
+        raise Unauthorized("Invalid API token. Check your token.")
+    else:
+        logger.error(
+            {"error": f"Cone search request failed: Status {response_cone.status_code}"}
+        )
 
-        return results
-    except Exception as e:
-        logger.error({"error": f"Cone search failed: {str(e)}"})
-        return []
+    return results

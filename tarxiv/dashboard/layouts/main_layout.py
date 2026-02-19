@@ -7,7 +7,7 @@ from ..components import (
     get_theme_components,
     footer_card,
     get_cookie_popup,
-    # COOKIE_DEFAULTS,
+    create_nav_link,
 )
 
 SETTING_DEFAULTS = {  # These defaults need to correspond with the PERMISSION_MAP in cookie_callbacks.py
@@ -25,6 +25,7 @@ def create_layout() -> dmc.MantineProvider:
         html.Div containing the complete dashboard layout
     """
     theme, theme_switch = get_theme_components()
+    user_page = dash.page_registry.get("tarxiv.dashboard.pages.user")
     return dmc.MantineProvider(
         theme=theme,
         # children=html.Div(
@@ -33,6 +34,13 @@ def create_layout() -> dmc.MantineProvider:
                 "width": 100,
                 "breakpoint": "sm",
                 "collapsed": {"mobile": True},
+            },
+            header={
+                "height": {
+                    # "base": 50,
+                    "sm": 50,
+                },
+                "collapsed": {"mobile": False},
             },
             padding="md",
             layout="alt",
@@ -48,8 +56,22 @@ def create_layout() -> dmc.MantineProvider:
                     storage_type="session",
                     data=SETTING_DEFAULTS,
                 ),
+                html.Div(
+                    id="dummy-output", style={"display": "none"}
+                ),  # Dummy output for clientside callback
                 get_cookie_popup(),
                 # Navigation rail
+                dmc.AppShellHeader(
+                    hiddenFrom="sm",
+                    children=[
+                        dmc.Burger(
+                            id="burger",
+                            opened=False,
+                            size="sm",
+                        ),
+                        dmc.Text("TarXiv Dashboard"),
+                    ],
+                ),
                 dmc.AppShellNavbar(
                     p="xs",
                     style={"backgroundColor": "var(--tarxiv-surface-1)"},
@@ -61,7 +83,24 @@ def create_layout() -> dmc.MantineProvider:
                                 # The main navigation items (populated by callback)
                                 html.Div(id="nav-rail-content"),
                                 # The "Magic" bottom pin
-                                theme_switch,
+                                html.Div(
+                                    children=[
+                                        create_nav_link(
+                                            icon=user_page.get(
+                                                "icon", "mdi:help-circle"
+                                            ),
+                                            label=user_page["name"],
+                                            # label=page["title"],
+                                            href=user_page["relative_path"],
+                                            # is_active=(pathname == user_page["relative_path"]),
+                                            is_active=False,
+                                        ),
+                                        theme_switch,
+                                    ],
+                                    style={
+                                        "marginTop": "auto"
+                                    },  # Pushes theme toggle to the very bottom
+                                ),
                             ],
                         )
                     ],
@@ -77,7 +116,6 @@ def create_layout() -> dmc.MantineProvider:
                                 "minHeight": "calc(100vh - 32px)",  # Adjust 32px based on your padding
                             },
                             children=[
-                                # theme_switch_state_store,
                                 dcc.Location(
                                     id="url",
                                     refresh=False,  # don't refresh the page on URL change

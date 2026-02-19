@@ -3,7 +3,7 @@ from dash import Output, Input, State, no_update, ALL
 PERMISSION_MAP = {
     "UI": ["theme"],
     "analytics": ["analytics_on"],
-    "remember": ["user"],
+    "remember": ["user", "tarxiv_user_token"],
 }
 
 

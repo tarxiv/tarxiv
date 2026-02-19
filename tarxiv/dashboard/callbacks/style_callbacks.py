@@ -7,7 +7,6 @@ from dash import (
     clientside_callback,
     ctx,
     page_registry,
-    exceptions,
 )
 import plotly.io as pio
 from ..components import create_nav_link
@@ -30,8 +29,11 @@ def register_style_callbacks(app, logger):
             return window.dash_clientside.no_update;
         }
         """,
-        Output("active-settings-store", "id"),  # Use the new store as dummy output
+        Output(
+            "dummy-output", "style", allow_duplicate=True
+        ),  # Use the new store as dummy output
         Input("active-settings-store", "data"),
+        prevent_initial_call=True,
     )
 
     # --- Theme toggle (active) ---
@@ -44,31 +46,29 @@ def register_style_callbacks(app, logger):
     def update_active_theme(n_clicks, active_settings):
         # Ensure we use the correct ID: active-settings-store
         p = Patch()
-        current_theme = active_settings.get("theme", "tarxiv_light")
+        current_theme = active_settings.get("theme")
         p["theme"] = "tarxiv_light" if "dark" in current_theme else "tarxiv_dark"
         return p
 
     @app.callback(
-        Output(
-            {"type": "themeable-plot", "index": ALL}, "figure", allow_duplicate=True
-        ),
-        Output("theme-icon", "icon"),
+        [
+            Output(
+                {"type": "themeable-plot", "index": ALL}, "figure", allow_duplicate=True
+            ),
+            Output("theme-icon", "icon"),
+        ],
         Input("active-settings-store", "data"),
         prevent_initial_call=True,
     )
     def update_all_plots_theme(settings):
-        # 1. Safety check for dictionary
-        if not settings:
-            raise exceptions.PreventUpdate
-
         theme_name = settings.get("theme", "tarxiv_light")
 
-        # 2. Determine the icon
+        # Determine the icon
         light_icon = "line-md:moon-to-sunny-outline-transition"
         dark_icon = "line-md:sunny-outline-to-moon-loop-transition"
         theme_icon = dark_icon if "dark" in theme_name else light_icon
 
-        # 3. Create Patch for plots
+        # Create Patch for plots
         plot_outputs = (
             ctx.outputs_list[0] if isinstance(ctx.outputs_list[0], list) else []
         )
@@ -91,10 +91,9 @@ def register_style_callbacks(app, logger):
     )
     def refresh_navigation(pathname):
         # # Sort pages by the 'order' key you added in dash.register_page
-        nav_pages = sorted(
-            [p for p in page_registry.values() if "order" in p],
-            key=lambda x: x["order"],
-        )
+        pages = page_registry.values()
+        nav_pages = [p for p in pages if p.get("order") is not None]
+        nav_pages = sorted(nav_pages, key=lambda x: x["order"])
 
         return [
             create_nav_link(

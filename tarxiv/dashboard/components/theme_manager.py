@@ -29,6 +29,11 @@ THEME = {
                 "size": "md",
             }
         },
+        "PasswordInput": {
+            "defaultProps": {
+                "size": "md",
+            }
+        },
         "Button": {
             "defaultProps": {
                 # "fw": 600,

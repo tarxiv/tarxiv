@@ -182,12 +182,21 @@ def create_nav_link(
     )
 
 
-def create_message_banner(message, message_type="info"):
+def create_message_banner(
+    message,
+    message_type="info",
+    id="",
+    hide=False,
+    duration=None,
+):
     """Create a styled message banner.
 
     Args:
         message: Message text
         message_type: "success", "error", "warning", or "info"
+        id: Optional component ID
+        hide: Whether to hide the banner (default: False)
+        duration: Duration in milliseconds to auto-hide the banner (optional)
 
     Returns
     -------
@@ -207,7 +216,6 @@ def create_message_banner(message, message_type="info"):
         title=message.capitalize(),
         style={
             "padding": "12px 20px",
-            "marginBottom": "15px",
             "border": f"1px solid {colors['border']}",
             "borderRadius": "4px",
             "backgroundColor": colors["bg"],
@@ -215,6 +223,9 @@ def create_message_banner(message, message_type="info"):
             "fontSize": "14px",
             "fontWeight": "500",
         },
+        id=id,
+        hide=hide,
+        duration=duration,
     )
 
 
