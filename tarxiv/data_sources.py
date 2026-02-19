@@ -90,15 +90,13 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 if survey == "atlas":
                     # First get night med mjd_diff and mag diff
                     mjd_diff = (
-                        sorted_detections
-                        .groupby("night")["mjd"]
+                        sorted_detections.groupby("night")["mjd"]
                         .median()
                         .diff()
                         .rename("mjd_diff")
                     )
                     mag_diffs = (
-                        sorted_detections
-                        .groupby("night")["mag"]
+                        sorted_detections.groupby("night")["mag"]
                         .median()
                         .diff()
                         .rename("mag_diff")
@@ -327,11 +325,13 @@ class ASAS_SN(Survey):  # noqa: N801
         except SurveyLightCurveMissingError:
             status["status"] += "|no light curve"
         except Exception as e:
-            status.update({
-                "status": "encontered unexpected error",
-                "error_message": str(e),
-                "details": traceback.format_exc(),
-            })
+            status.update(
+                {
+                    "status": "encontered unexpected error",
+                    "error_message": str(e),
+                    "details": traceback.format_exc(),
+                }
+            )
 
         self.logger.info(status, extra=status)
         return meta, lc_df
@@ -483,11 +483,13 @@ class ZTF(Survey):
             status["status"] += "|no light curve"
 
         except Exception as e:
-            status.update({
-                "status": "encontered unexpected error",
-                "error_message": str(e),
-                "details": traceback.format_exc(),
-            })
+            status.update(
+                {
+                    "status": "encontered unexpected error",
+                    "error_message": str(e),
+                    "details": traceback.format_exc(),
+                }
+            )
 
         self.logger.info(status, extra=status)
         return meta, lc_df
@@ -645,11 +647,13 @@ class ATLAS(Survey):
             status["status"] += "|no light curve"
 
         except Exception as e:
-            status.update({
-                "status": "encountered unexpected error",
-                "error_message": str(e),
-                "details": traceback.format_exc(),
-            })
+            status.update(
+                {
+                    "status": "encountered unexpected error",
+                    "error_message": str(e),
+                    "details": traceback.format_exc(),
+                }
+            )
 
         self.logger.info(status, extra=status)
         return meta, lc_df
@@ -693,12 +697,14 @@ class TNS(Survey):
         # Run request to TNS server
         get_url = self.site + "/api/get/object"
         headers = {"User-Agent": self.marker}
-        obj_request = OrderedDict([
-            ("objid", ""),
-            ("objname", obj_name),
-            ("photometry", "0"),
-            ("spectra", "0"),
-        ])
+        obj_request = OrderedDict(
+            [
+                ("objid", ""),
+                ("objname", obj_name),
+                ("photometry", "0"),
+                ("spectra", "0"),
+            ]
+        )
         get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
         response = requests.post(get_url, headers=headers, data=get_data)
         if response.status_code != 200:

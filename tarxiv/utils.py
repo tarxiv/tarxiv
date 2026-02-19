@@ -102,10 +102,5 @@ def clean_meta(obj_meta):
     # obj_meta = {k: v[0] for k, v in obj_meta.items() if len(v) == 1}
     return obj_meta
 
-
 def precision(x, p):
-    return (
-        float(Decimal(x * 10**p).quantize(0, ROUND_HALF_UP) / 10**p)
-        if x is not None
-        else None
-    )
+    return float(Decimal( x*10**p ).quantize(0,ROUND_HALF_UP)/10**p) if x is not None else None
