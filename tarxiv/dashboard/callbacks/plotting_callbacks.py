@@ -23,7 +23,7 @@ def register_plotting_callbacks(app, logger):
         ),
         Input("lightcurve-store", "data"),
         State("active-settings-store", "data"),
-        prevent_initial_call=True,
+        prevent_initial_call="initial_duplicate",
     )
     def update_lightcurve_plot_callback(data, settings):
         """Update the lightcurve plot when data changes."""

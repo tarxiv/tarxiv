@@ -50,16 +50,16 @@ def layout(id=None, **kwargs):
         banner = create_message_banner(
             "Please enter your API token to view data.", "warning"
         )
-        lc_store = no_update
-        meta_store = no_update
+        lc_store = None
+        meta_store = None
     else:
         # Default empty search page
         results, status, banner, lc_store, meta_store = (
             html.Div(),
             "",
             html.Div(),
-            no_update,
-            no_update,
+            None,
+            None,
         )
 
     return dmc.Stack(
@@ -148,98 +148,28 @@ def layout(id=None, **kwargs):
     )
 
 
-# Remove the url input listener and rely solely on the button.
-# Implement the URL-based search in the layout function by pre-populating the input.
-# This simplifies the callback and avoids potential issues with multiple triggers.
+# Callback to handle search navigation
 @callback(
+    Output("url", "pathname", allow_duplicate=True),
     [
-        Output("results-container", "children", allow_duplicate=True),
-        Output("search-status", "children", allow_duplicate=True),
-        Output("message-banner", "children", allow_duplicate=True),
-        Output("lightcurve-store", "data"),
-        Output("lightcurve-meta-store", "data"),
-        Output("object-id-input", "value"),
-        Output("url", "pathname"),  # refresh URL
+        Input("search-id-button", "n_clicks"),
+        Input("search-id-keyboard", "n_keydowns"),
     ],
-    [
-        # Input("search-id-button", "n_clicks", allow_optional=True),
-        Input("search-id-button", "n_clicks"),  # Listen to button clicks
-        Input("search-id-keyboard", "n_keydowns"),  # Listen to Enter key presses
-        # Input("url", "pathname"),  # Listen to the URL for deep linking
-    ],
-    [
-        State("object-id-input", "value"),
-        State("token", "value"),
-    ],
+    [State("object-id-input", "value")],
     prevent_initial_call=True,
 )
-def handle_combined_search(n_clicks, n_keydowns, event_id, token):
-    logger = current_app.config["TXV_LOGGER"]
+def search_navigation(n_clicks, n_keydowns, object_id):
+    if not object_id:
+        return no_update
 
-    if not event_id and not token:
-        return [no_update] * 7  # No search term and no token, do nothing
-
-    if not token and event_id:
-        return (
-            html.Div(),
-            "Authentication required",
-            create_message_banner(
-                "Please enter your API token to view data.", "warning"
-            ),
-            no_update,
-            no_update,
-            event_id,
-            no_update,
-        )
-
-    if token and not event_id:
-        return (
-            html.Div(),
-            "Please enter an object ID to search.",
-            create_message_banner("Object ID cannot be empty.", "warning"),
-            no_update,
-            no_update,
-            event_id,
-            no_update,
-        )
-
-    # Run search logic
-    try:
-        results, status, banner, lc_store, meta_store = perform_search(
-            event_id, token, logger
-        )
-
-        # Define the new URL path
-        new_path = f"/lightcurve/{event_id}"
-
-        # Return all values, including the new URL path
-        return (
-            results,
-            status,
-            banner,
-            lc_store,
-            meta_store,
-            event_id,
-            new_path,
-        )
-
-    except Exception as e:
-        return (
-            html.Div(),
-            "Error",
-            create_message_banner(str(e), "error"),
-            no_update,
-            no_update,
-            event_id,
-            no_update,
-        )
+    # Redirect to the object-specific URL which will trigger a layout reload
+    return f"/lightcurve/{object_id}"
 
 
 @callback(
     Output("aladin-lite-runjs", "run"),
     # Triggered by the search-store or metadata container being updated
     Input("lightcurve-meta-store", "data"),
-    prevent_initial_call=True,
 )
 def update_aladin_viewer(store_data):
     """Triggers the Aladin JS ONLY when new data arrives."""
@@ -372,16 +302,16 @@ def perform_search(object_id, token, logger):
             html.Div(),
             "Authentication required",
             create_message_banner(str(e), "error"),
-            no_update,
-            no_update,
+            None,
+            None,
         )
     except Exception as e:
         return (
             html.Div(),
             "Error",
             create_message_banner(f"Failed to fetch metadata: {str(e)}", "error"),
-            no_update,
-            no_update,
+            None,
+            None,
         )
 
     if meta is None:
@@ -389,7 +319,7 @@ def perform_search(object_id, token, logger):
             f"No object found with ID: {object_id}", "error"
         )
         logger.warning({"warning": f"Object ID not found: {object_id}"})
-        return no_update, status_msg, error_banner, no_update, no_update
+        return html.Div(), status_msg, error_banner, None, None
 
     # Fetch Lightcurve
     lc_data = get_lightcurve_data(object_id, token, logger)

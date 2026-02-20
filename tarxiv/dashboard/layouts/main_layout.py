@@ -118,7 +118,7 @@ def create_layout() -> dmc.MantineProvider:
                             children=[
                                 dcc.Location(
                                     id="url",
-                                    refresh=False,  # don't refresh the page on URL change
+                                    refresh=True,  # Refresh page on URL change
                                 ),  # Essential for tracking the current page
                                 html.Div(
                                     id="page-content",  # Container for page content
