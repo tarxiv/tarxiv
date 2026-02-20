@@ -1,17 +1,240 @@
 """Card components for displaying object data."""
-from dash import html
+
+import dash_mantine_components as dmc
+from dash import dcc, html
+from dash_iconify import DashIconify
+
+import visdcc
 import json
-from ..styles import CARD_STYLE, COLORS
-from .plots import create_lightcurve_plot, create_sky_plot
+from ..styles import CARD_STYLE
 
 
-def format_object_metadata(object_id, meta, lc_data, logger=None):
+def title_card(title_text: str, subtitle_text: str | None = None, **kwargs):
+    """Create a styled title card.
+
+    Args:
+        title_text: Main title text
+        subtitle_text: Optional subtitle text
+        **kwargs: Additional keyword arguments for dmc.Paper
+
+    Returns
+    -------
+        dmc.Paper component styled as a title card
+    """
+    children = []
+    children.append(
+        dmc.Title(
+            title_text,
+            order=1,
+            style={"marginBottom": "0px", "fontSize": "90px"},
+        )
+    )
+    if subtitle_text:
+        children.append(
+            dmc.Text(
+                subtitle_text,
+            )
+        )
+
+    return dmc.Paper(
+        children=dmc.Stack(
+            children=children,
+            align="center",
+        ),
+        p="xl",
+        radius=28,
+        style={
+            "backgroundColor": "var(--tarxiv-color-primary)",
+            "color": "white",
+            "textAlign": "center",
+        },
+        **kwargs,
+    )
+
+
+def footer_card():
+    """Create a styled footer card with 3 logos.
+
+    Returns
+    -------
+        dmc.Paper component styled as a footer card
+    """
+    return dmc.Paper(
+        children=dmc.Flex(
+            children=[  # get images from assets folder
+                html.Img(src="/assets/oxford.png", width="200px"),
+                # html.Img(src="/assets/hawaii.png", width="150px"),
+                html.Img(src="/assets/LOGO_CNRS_BLEU.png", width="150px"),
+                html.Img(src="/assets/hawaii.png", width="150px"),
+            ],
+            gap=100,
+            justify="center",
+            align="center",
+            direction="row",
+        ),
+        p="xl",
+        style={
+            "backgroundColor": "var(--tarxiv-footer-bg)",
+            "color": "var(--tarxiv-color-primary)",
+            "textAlign": "center",
+        },
+        mt="md",
+    )
+
+
+def expressive_card(children, title=None, title_order: int = 2, **kwargs):
+    """Create a styled card with expressive design.
+
+    Args:
+        children: List of child components
+        title: Optional title for the card
+        **kwargs: Additional keyword arguments for dmc.Paper
+
+    Returns
+    -------
+        dmc.Paper component styled as a card
+    """
+    if not isinstance(children, list):
+        children = [children]
+
+    return dmc.Paper(
+        children=[
+            dmc.Title(
+                title,
+                order=title_order,
+                # fw=700,
+                # fz="lg",
+                mb="md",
+            )
+            if title
+            else None,
+            dmc.Stack(
+                children=children,
+                gap="md",
+            ),
+        ],
+        p="xl",
+        radius=28,  # Specific M3 Expressive radius
+        style={
+            "backgroundColor": "var(--tarxiv-card-1)",
+        },
+        **kwargs,
+    )
+
+
+def create_nav_item(
+    icon: str,
+    label: str,
+    is_active: bool,
+    id: str = "",
+):
+    return dmc.UnstyledButton(
+        className="nav-item-hover",
+        px=2,
+        py="md",
+        my="xs",
+        style={
+            "width": "100%",
+            "borderRadius": "16px",
+            "display": "flex",
+            "flexDirection": "column",
+            "alignItems": "center",
+            "gap": "4px",
+            "color": "var(--tarxiv-color-primary)" if is_active else "inherit",
+            "transition": "background-color 200ms ease",
+        },
+        children=[
+            # DashIconify(icon=icon, width=28, id=id),
+            DashIconify(icon=icon, width=35, id=id),
+            dmc.Text(
+                label,
+                size="xs",
+                ta="center",
+                className="nav-text-wrap",
+            ),
+        ],
+    )
+
+
+def create_nav_link(
+    icon: str,
+    label: str,
+    href: str,
+    is_active: bool,
+    id: str = "",
+):
+    """Creates a vertically stacked navigation button.
+
+    Args:
+        icon: Icon name for DashIconify
+        label: Text label for the nav item
+        href: Link URL
+        is_active: Whether this nav item is active
+
+    Returns
+    -------
+        dcc.Link containing a styled dmc.UnstyledButton
+    """
+    return dcc.Link(
+        href=href,
+        style={"textDecoration": "none", "color": "inherit"},
+        children=create_nav_item(icon, label, is_active, id=id),
+    )
+
+
+def create_message_banner(
+    message,
+    message_type="info",
+    id="",
+    hide=False,
+    duration=None,
+):
+    """Create a styled message banner.
+
+    Args:
+        message: Message text
+        message_type: "success", "error", "warning", or "info"
+        id: Optional component ID
+        hide: Whether to hide the banner (default: False)
+        duration: Duration in milliseconds to auto-hide the banner (optional)
+
+    Returns
+    -------
+        html.Div with styled message
+    """
+    color_map = {
+        "success": {"bg": "#d4edda", "border": "#c3e6cb", "text": "#155724"},
+        "error": {"bg": "#f8d7da", "border": "#f5c6cb", "text": "#721c24"},
+        "warning": {"bg": "#fff3cd", "border": "#ffeaa7", "text": "#856404"},
+        "info": {"bg": "#d1ecf1", "border": "#bee5eb", "text": "#0c5460"},
+    }
+
+    colors = color_map.get(message_type, color_map["info"])
+
+    return dmc.Alert(
+        # message,
+        title=message.capitalize(),
+        style={
+            "padding": "12px 20px",
+            "border": f"1px solid {colors['border']}",
+            "borderRadius": "4px",
+            "backgroundColor": colors["bg"],
+            "color": colors["text"],
+            "fontSize": "14px",
+            "fontWeight": "500",
+        },
+        id=id,
+        hide=hide,
+        duration=duration,
+    )
+
+
+def format_object_metadata(object_id, meta, logger=None):
     """Format object metadata for display.
 
     Args:
         object_id: Object identifier
-        meta: Metadata dictionary
-        lc_data: Lightcurve data
+        meta: Metdata dictionary
         logger: Optional logger instance
 
     Returns
@@ -44,59 +267,64 @@ def format_object_metadata(object_id, meta, lc_data, logger=None):
                     value = value[0]["value"]
                 else:
                     value = str(value[0])
-            summary_items.append(html.P([html.B(f"{label}: "), str(value)]))
+            summary_items.append(
+                dmc.Text(
+                    dmc.Text(f"{label}: {value}"),
+                    style={"marginBottom": "6px"},
+                )
+            )
 
-    # Create lightcurve plot
-    lc_plot = create_lightcurve_plot(lc_data, object_id, logger) if lc_data else None
-
-    if logger:
-        logger.debug({"debug": f"{lc_plot}"})
-
-    return html.Div(
+    return dmc.Stack(
         [
             # Lightcurve card
-            html.Div(
-                [
-                    html.H3(f"Lightcurve: {object_id}", style={"marginTop": "0"}),
-                    lc_plot if lc_plot is not None else html.P(
-                        "No lightcurve data available",
-                        style={"color": "gray", "fontStyle": "italic"}
+            expressive_card(
+                children=dcc.Loading(
+                    dcc.Graph(
+                        id={"type": "themeable-plot", "index": "lightcurve-plot"}
                     ),
-                ],
-                style=CARD_STYLE
-            ) if lc_plot or lc_data else html.Div(),
-
-            # Metadata card
-            html.Div(
-                [
-                    html.H3(f"Object Metadata: {object_id}", style={"marginTop": "0"}),
-                    html.Div(summary_items, style={"padding": "10px"}),
-                ],
-                style=CARD_STYLE
+                ),
+                title=f"Lightcurve: {object_id}",
             ),
-
+            # Metadata card
+            expressive_card(
+                children=dmc.Stack(summary_items),
+                title=f"Object Metadata: {object_id}",
+            ),
             # Full JSON card
-            html.Div(
-                [
-                    html.H4("Full Metadata (JSON)", style={"marginTop": "0"}),
-                    html.Pre(
-                        json.dumps(meta, indent=2),
-                        style={
-                            "backgroundColor": "#f5f5f5",
-                            "padding": "10px",
-                            "maxHeight": "400px",
-                            "overflow": "auto",
-                            "borderRadius": "4px"
-                        },
+            expressive_card(
+                children=dmc.Code(
+                    json.dumps(meta, indent=2),
+                    style={
+                        "padding": "10px",
+                        "maxHeight": "400px",
+                        "overflow": "auto",
+                        "borderRadius": "4px",
+                    },
+                    block=True,
+                ),
+                title="Full Metadata (JSON)",
+            ),
+            expressive_card(
+                children=[
+                    dcc.Loading(
+                        visdcc.Run_js(
+                            id="aladin-lite-runjs",
+                        )
+                    ),
+                    html.Div(
+                        id="aladin-lite-div",
+                        style={"width": "100%", "height": "500px"},
                     ),
                 ],
-                style=CARD_STYLE
+                title="Sky Plot (Aladin Lite)",
             ),
         ]
     )
 
 
-def format_cone_search_results(results, search_ra, search_dec, txv_db=None, logger=None):
+def format_cone_search_results(
+    results, search_ra, search_dec, txv_db=None, logger=None
+):
     """Format cone search results with expandable object cards.
 
     Args:
@@ -110,9 +338,6 @@ def format_cone_search_results(results, search_ra, search_dec, txv_db=None, logg
     -------
         html.Div containing formatted results
     """
-    # Create sky plot
-    sky_plot = create_sky_plot(results, search_ra, search_dec)
-
     # Create expandable object cards
     object_cards = []
     for idx, obj in enumerate(results):
@@ -127,77 +352,68 @@ def format_cone_search_results(results, search_ra, search_dec, txv_db=None, logg
             "padding": "15px",
         }
 
-        from dash import dcc
         object_cards.append(
-            html.Div(
+            dmc.Card(
                 [
-                    html.Div(
+                    dmc.Group(
                         [
-                            html.A(
+                            dmc.Anchor(
                                 f"{obj_name}",
+                                href="#",
                                 id={"type": "object-link", "index": idx},
-                                n_clicks=0,
+                                underline="always",
                                 style={
                                     "fontWeight": "bold",
                                     "fontSize": "16px",
                                     "marginRight": "20px",
-                                    "color": COLORS["primary"],
-                                    "textDecoration": "underline",
-                                    "cursor": "pointer"
-                                }
+                                    "cursor": "pointer",
+                                },
                             ),
-                            dcc.Store(id={"type": "object-id-store", "index": idx}, data=obj_name),
-                            html.Span(
-                                f"RA: {obj['ra']:.6f}°",
-                                style={"marginRight": "15px", "color": COLORS["muted"]}
+                            dcc.Store(
+                                id={"type": "object-id-store", "index": idx},
+                                data=obj_name,
                             ),
-                            html.Span(
-                                f"Dec: {obj['dec']:.6f}°",
-                                style={"marginRight": "15px", "color": COLORS["muted"]}
+                            dmc.Text(
+                                f"RA: {obj['ra']:.6f}°", style={"marginRight": "15px"}
                             ),
-                            html.Span(
+                            dmc.Text(
+                                f"Dec: {obj['dec']:.6f}°", style={"marginRight": "15px"}
+                            ),
+                            dmc.Text(
                                 f"Distance: {distance_arcsec:.2f}″",
-                                style={"color": COLORS["primary"], "fontStyle": "italic"}
+                                style={"fontStyle": "italic"},
                             ),
                         ],
-                        style={"padding": "15px"}
+                        style={"padding": "15px"},
                     ),
                 ],
                 style=summary_style,
-                id={"type": "object-card", "index": idx}
+                id={"type": "object-card", "index": idx},
             )
         )
 
-    return html.Div(
+    plural = "s" if len(results) != 1 else ""
+    return dmc.Stack(
         [
-            # Summary card
-            html.Div(
-                [
-                    html.H3(f"Found {len(results)} object(s)", style={"marginTop": "0", "color": COLORS["secondary"]}),
-                    html.P(
+            expressive_card(
+                title=f"Found {len(results)} object{plural}",
+                children=[
+                    dmc.Text(
                         f"Search coordinates: RA={search_ra:.6f}°, Dec={search_dec:.6f}°",
-                        style={"color": COLORS["muted"], "fontSize": "14px"}
+                    ),
+                    dcc.Loading(
+                        dcc.Graph(
+                            id={"type": "themeable-plot", "index": "sky-plot"},
+                        ),
                     ),
                 ],
-                style=CARD_STYLE
             ),
-
-            # Sky plot card
-            html.Div(
-                [
-                    html.H4("Sky Position", style={"marginTop": "0"}),
-                    sky_plot,
-                ],
-                style=CARD_STYLE
-            ),
-
-            # Expandable object cards
-            html.Div(
-                [
-                    html.H4("Objects Found", style={"marginTop": "0"}),
-                    html.Div(object_cards),
-                ],
-                style=CARD_STYLE
+            expressive_card(
+                title="Objects Found",
+                title_order=3,
+                children=dmc.Stack(
+                    object_cards,
+                ),
             ),
         ]
     )

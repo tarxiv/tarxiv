@@ -12,10 +12,12 @@ class TarxivDB(TarxivModule):
     """Interface for TarXiv couchbase data."""
 
     def __init__(self, catalog, user, script_name, reporting_mode, debug=False):
-        super().__init__(script_name=script_name,
-                         module="couchbase",
-                         reporting_mode=reporting_mode,
-                         debug=debug)
+        super().__init__(
+            script_name=script_name,
+            module="couchbase",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
         # Set schema file
         self.schema_file = os.path.join(self.config_dir, "schema.json")
 
@@ -40,7 +42,6 @@ class TarxivDB(TarxivModule):
         status = {"status": "connection success"}
         self.logger.info(status, extra=status)
 
-
         # Set scope, each catalog will have its own scope
         self.scope = catalog
 
@@ -64,15 +65,17 @@ class TarxivDB(TarxivModule):
         return self.cluster.query(query_str)
 
     def get_all_active_objects(self, active_days):
-        query = f"SELECT                                " \
-                f"  meta().id as obj_name               " \
-                f"FROM tarxiv.{self.scope}.objects      " \
-                f"WHERE                                 " \
-                f"  ANY `disc_date` IN `discovery_date`                                                 " \
-                f"   SATISFIES DATE_DIFF_STR(NOW_UTC(), `disc_date`.`value`, 'day') < {active_days} END " \
-                f" OR                                                                                   " \
-                f"  ANY `rep_date` IN `reporting_date`                                                  " \
-                f"   SATISFIES DATE_DIFF_STR(NOW_UTC(), `rep_date`.`value`, 'day') < {active_days} END  "
+        query = (
+            f"SELECT                                "
+            f"  meta().id as obj_name               "
+            f"FROM tarxiv.{self.scope}.objects      "
+            f"WHERE                                 "
+            f"  ANY `disc_date` IN `discovery_date`                                                 "
+            f"   SATISFIES DATE_DIFF_STR(NOW_UTC(), `disc_date`.`value`, 'day') < {active_days} END "
+            f" OR                                                                                   "
+            f"  ANY `rep_date` IN `reporting_date`                                                  "
+            f"   SATISFIES DATE_DIFF_STR(NOW_UTC(), `rep_date`.`value`, 'day') < {active_days} END  "
+        )
 
         result = self.cluster.query(query)
         return [r["obj_name"] for r in result]
@@ -124,7 +127,6 @@ class TarxivDB(TarxivModule):
             self.logger.warn(status, extra=status)
             result = None
 
-
         return result
 
     def cone_search(self, ra_deg, dec_deg, radius_arcsec):
@@ -162,7 +164,12 @@ class TarxivDB(TarxivModule):
             ORDER BY distance_deg
         """
 
-        status = {"status": "cone_search", "ra": ra_deg, "dec": dec_deg, "radius_arcsec": radius_arcsec}
+        status = {
+            "status": "cone_search",
+            "ra": ra_deg,
+            "dec": dec_deg,
+            "radius_arcsec": radius_arcsec,
+        }
         self.logger.info(status, extra=status)
 
         result = self.cluster.query(query)
