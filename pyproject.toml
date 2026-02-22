@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tarxiv"
-version = "0.0.8"
+version = "0.0.9"
 description = "explosive Transient ArXiv"
 authors = [
     { name = "Heloise Fanny Stevance", email = "hfstevance@gmail.com"},
@@ -32,10 +32,16 @@ dependencies = [
     "beautifulsoup4",
     "pytest",
     "flask",
+    "werkzeug",
     "paste",
     "cherrypy",
     "python-logstash-async",
     "dash>=3.2.0",
+    "dash-mantine-components",
+    "dash-iconify",
+    "dash-extensions",
+    "visdcc",
+    "pydantic",
 ]
 requires-python = ">=3.11,<3.14"
 
