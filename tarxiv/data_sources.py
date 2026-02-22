@@ -43,7 +43,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
             non_detections = grp_df[grp_df["detection"] == 0].copy()
             if len(detections) > 0:
                 # Peak mag info
-                peak_row = detections.loc[grp_df["mag"].idxmin()]
+                peak_row = detections.loc[detections["mag"].idxmin()]
                 peak_mag = {
                     "filter": filter_name,
                     "value": peak_row["mag"],
@@ -136,7 +136,7 @@ def append_dynamic_values(obj_meta, obj_lc_df):
 
             if len(non_detections) > 0:
                 # Recent non-detection info
-                nondet_row = grp_df.loc[non_detections["mjd"].idxmax()]
+                nondet_row = non_detections.loc[non_detections["mjd"].idxmax()]
                 recent_nondet = {
                     "filter": filter_name,
                     "value": nondet_row["limit"],
