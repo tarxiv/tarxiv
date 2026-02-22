@@ -35,7 +35,7 @@ dependencies = [
     "werkzeug",
     "paste",
     "cherrypy",
-    "python-logstash-async",
+    "python-logstash-async>=4.0.0",
     "dash>=3.2.0",
     "dash-mantine-components",
     "dash-iconify",
