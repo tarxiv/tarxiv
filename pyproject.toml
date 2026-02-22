@@ -32,7 +32,7 @@ dependencies = [
     "flask",
     "paste",
     "cherrypy",
-    "python-logstash-async",
+    "python-logstash-async>=4.0.0",
     "dash>=3.2.0",
 ]
 requires-python = ">=3.9,<3.13"
