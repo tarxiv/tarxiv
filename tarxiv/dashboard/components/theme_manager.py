@@ -1,9 +1,12 @@
+import os
+
 from dash import dcc, html
 import plotly.io as pio
 import plotly.graph_objects as go
-import os
+
 from ..styles import COLORS, FILTER_COLORS
 from .cards import create_nav_item
+
 
 brand_palette = [COLORS["primary"]] * 10
 THEME = {
@@ -113,6 +116,12 @@ def generate_css():
 
 """
     os.makedirs(
+        # TODO JL: Two things
+        # 1) Hardcoded path is not ideal - probably should be a config or 
+        #    environment variable
+        # 2) We should probably commit this file to the repo and only regenerate 
+        #    it when styles.py changes, instead of regenerating on every app 
+        #    start
         "tarxiv/dashboard/assets", exist_ok=True
     )  # TODO: Update if dashboard moves to another repo
     with open("tarxiv/dashboard/assets/theme.css", "w") as f:
