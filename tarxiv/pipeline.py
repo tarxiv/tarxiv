@@ -112,7 +112,6 @@ class TNSPipeline(TarxivModule):
         if len(lc_df) != 0:
             print(lc_df)
             lc_df.drop("night", axis=1, inplace=True)
- 
         status.update({"obj_name": obj_name})
         self.logger.info(status, extra=status)
         obj_meta = clean_meta(obj_meta)
