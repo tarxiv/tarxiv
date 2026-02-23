@@ -210,11 +210,11 @@ A.init.then(() => {{
 
 def fetch_api_data(endpoint, object_id, token, logger):
     """Helper to perform API requests."""
-    domain = os.getenv("TARXIV_HOST")
-    port = os.getenv("TARXIV_PORT")
+    # TODO: Refactor to use a shared API client module instead of hardcoding requests here
+    api_url = os.getenv("TARXIV_DASHBOARD_API_URL")
     # try:
     response = requests.post(
-        url=f"http://{domain}:{port}/{endpoint}/{object_id}",
+        url=f"{api_url}/{endpoint}/{object_id}",
         timeout=10,
         headers={
             "accept": "application/json",
@@ -306,6 +306,8 @@ def perform_search(object_id, token, logger):
             None,
         )
     except Exception as e:
+        logger.error({"error": f"Unexpected error fetching metadata for {object_id}: {str(e)}"})
+        logger.exception(e)
         return (
             html.Div(),
             "Error",

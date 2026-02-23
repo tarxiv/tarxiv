@@ -228,10 +228,9 @@ def get_cone_search_results(ra, dec, radius, token, logger) -> list:
     -------
         List of search results
     """
-    domain = os.getenv("TARXIV_HOST")
-    port = os.getenv("TARXIV_PORT")
+    api_url = os.getenv("TARXIV_DASHBOARD_API_URL")
     response_cone = requests.post(
-        url=f"http://{domain}:{port}/cone_search",
+        url=f"{api_url}/cone_search",
         timeout=10,
         headers={
             "accept": "application/json",
