@@ -3,6 +3,7 @@
 from confluent_kafka.admin import AdminClient, _TopicPartition, NewTopic
 from confluent_kafka import Consumer, KafkaException
 import argparse
+import os
 
 # PARSER
 parser = argparse.ArgumentParser("kafka-admin")
@@ -16,8 +17,9 @@ parser.add_argument("-r", "--replication", type=int, help="replication factor fo
 args = parser.parse_args()
 
 # Connect to kafka server
+kafka_host = os.environ["TARXIV_KAFKA_HOST"]
 admin_client_config = {
-    'bootstrap.servers': "localhost:9092",}
+    'bootstrap.servers': f"kafka_host:9092",}
 admin_client = AdminClient(admin_client_config)
 
 if args.list:
