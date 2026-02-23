@@ -145,7 +145,6 @@ services:
     networks:
       - tarxiv_net
 
-<<<<<<< HEAD
   tarxiv-api:
     profiles:
       - tarxiv
@@ -219,7 +218,7 @@ services:
     networks:
       - tarxiv_net
     restart: unless-stopped
-=======
+  
   kafka-broker:
     image: confluentinc/cp-kafka:8.0.0
     hostname: broker
@@ -362,7 +361,6 @@ services:
       echo -e 'Successfully created the following topics:'
       kafka-topics --bootstrap-server kafka-broker:29092 --list
       "
->>>>>>> b61c480d20a94f150954a7c3e905ffb0f3c4b8fa
 
 networks:
   tarxiv_net:
