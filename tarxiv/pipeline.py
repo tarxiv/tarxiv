@@ -110,7 +110,6 @@ class TNSPipeline(TarxivModule):
         status, obj_meta = append_dynamic_values(obj_meta, lc_df)
         # Drop night column from lc, was only necessary for mag_rates
         if len(lc_df) != 0:
-            print(lc_df)
             lc_df.drop("night", axis=1, inplace=True)
         status.update({"obj_name": obj_name})
         self.logger.info(status, extra=status)
