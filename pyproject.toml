@@ -4,12 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tarxiv"
-version = "0.0.8"
+version = "0.0.9"
 description = "explosive Transient ArXiv"
 authors = [
     { name = "Heloise Fanny Stevance", email = "hfstevance@gmail.com"},
     { name = "Kyle Hart", email = "kylehart@hawaii.edu"},
     { name = "Julien Peloton", email =  "peloton@ijclab.in2p3.fr"},
+    { name = "Jack Leland", email = "jack.leland@dtc.ox.ac.uk"},
+    { name = "James Briant", email = "james.briant@dtc.ox.ac.uk"}
 ]
 readme = "README.md"
 license = { text = "BSD-3" }
@@ -30,12 +32,18 @@ dependencies = [
     "beautifulsoup4",
     "pytest",
     "flask",
+    "werkzeug",
     "paste",
     "cherrypy",
     "python-logstash-async>=4.0.0",
     "dash>=3.2.0",
+    "dash-mantine-components",
+    "dash-iconify",
+    "dash-extensions",
+    "visdcc",
+    "pydantic",
 ]
-requires-python = ">=3.9,<3.13"
+requires-python = ">=3.11,<3.14"
 
 [project.optional-dependencies]
 dev = [
