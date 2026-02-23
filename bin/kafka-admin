@@ -1,0 +1,87 @@
+#!/usr/bin/env python
+
+from confluent_kafka.admin import AdminClient, _TopicPartition, NewTopic
+from confluent_kafka import Consumer, KafkaException
+import argparse
+
+# PARSER
+parser = argparse.ArgumentParser("kafka-admin")
+group = parser.add_mutually_exclusive_group()
+group.add_argument("-d", "--delete", type=str, help="delete kafka topic")
+group.add_argument("-c", "--create", type=str, help="create kafka topic")
+group.add_argument("-l", "--list", action="store_true", help="list kafka topics")
+group.add_argument("-e", "--explain", type=str, help="explain/describe kafka topic")
+parser.add_argument("-p", "--partitions", type=int, help="number of partitions for new topic")
+parser.add_argument("-r", "--replication", type=int, help="replication factor for new topic")
+args = parser.parse_args()
+
+# Connect to kafka server
+admin_client_config = {
+    'bootstrap.servers': "localhost:9092",}
+admin_client = AdminClient(admin_client_config)
+
+if args.list:
+    metadata = admin_client.list_topics()
+    # Iterate over the topic names (keys of the metadata.topics dictionary)
+    print("TOPICS")
+    for topic_name in metadata.topics:
+        if "spark" in topic_name or True:
+            print(f"- {topic_name}")
+
+elif args.delete:
+    print("DELETING")
+    futures = admin_client.delete_topics([args.delete])
+    for topic, future in futures.items():
+        future.result()
+
+
+elif args.create:
+    print("CREATING")
+    new = NewTopic(args.create, num_partitions=args.partitions, replication_factor=args.replication)
+    futures = admin_client.create_topics([new])
+    for topic, future in futures.items():
+        future.result()
+
+elif args.explain:
+    conf = {'bootstrap.servers': "localhost:9092",
+            'group.id': 'testing1',
+            'auto.offset.reset': 'smallest',
+            'enable.auto.commit': True,
+            'max.poll.interval.ms': 10000,
+            'session.timeout.ms': 10000,
+            'heartbeat.interval.ms': 3000,
+            'enable.partition.eof': False}
+    consumer = Consumer(conf)
+    try:
+        topic_name = args.explain
+        # Get topic metadata to find all partitions
+        metadata = admin_client.list_topics(topic_name, timeout=10)
+        if topic_name not in metadata.topics:
+            print(f"Error: Topic '{topic_name}' not found.")
+            exit()
+
+        topic_metadata = metadata.topics[topic_name]
+        partitions = list(topic_metadata.partitions.keys())
+
+        # Create TopicPartition list to query offsets
+        topic_partitions = [_TopicPartition(topic_name, p) for p in partitions]
+
+        print(f"--- Topic: {topic_name} ---")
+        print(f"{'Partition':<10} | {'Low Offset':<12} | {'High Offset':<12} | {'Message Count':<15}")
+
+        for tp in topic_partitions:
+            # Get the low (earliest) and high (latest/log end) offsets
+            try:
+                # get_watermark_offsets gets the earliest and latest offset
+                low_offset, high_offset = consumer.get_watermark_offsets(tp, timeout=5)
+                message_count = max(0, high_offset - low_offset)
+                print(f"{tp.partition:<10} | {low_offset:<12} | {high_offset:<12} | {message_count:<15}")
+            except KafkaException as e:
+                print(f"{tp.partition:<10} | Error getting offsets: {e}")
+
+    except KafkaException as e:
+        print(f"Error with AdminClient or general Kafka operation: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+    finally:
+        consumer.close()

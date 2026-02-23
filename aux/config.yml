@@ -32,7 +32,7 @@ atlas:
   associated_sources: ["atlas", "atlas_twb", "sherlock"]
 
 # Fink/ZTF info
-fink_url: "http://api.ztf.fink-portal.org/"
+fink_url: "https://api.ztf.fink-portal.org/"
 ztf:
   associated_sources: ["ztf", "fink", "mangrove"]
 

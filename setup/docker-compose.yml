@@ -145,6 +145,148 @@ services:
     networks:
       - tarxiv_net
 
+  kafka-broker:
+    image: confluentinc/cp-kafka:8.0.0
+    hostname: broker
+    container_name: broker
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    networks:
+      - tarxiv_net
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka-broker:29092,PLAINTEXT_HOST://${TARXIV_KAFKA_HOST}:9092'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: kafka-broker
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@broker:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka-broker:29092,CONTROLLER://kafka-broker:29093,PLAINTEXT_HOST://${TARXIV_KAFKA_HOST}:9092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      # Randomly generated UUID4
+      CLUSTER_ID: '8d885d52-1c7f-4f4d-8ae3-59df3e3c46cb'
+
+  kafka-schema-registry:
+    image: confluentinc/cp-schema-registry:8.0.0
+    hostname: schema-registry
+    container_name: schema-registry
+    depends_on:
+      - kafka-broker
+    ports:
+      - "8081:8081"
+    networks:
+      - tarxiv_net
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'broker:29092'
+      SCHEMA_REGISTRY_LISTENERS: 'http://${TARXIV_KAFKA_HOST}:8081'
+
+  kafka-connect:
+    image: cnfldemos/kafka-connect-datagen:0.6.4-7.6.0
+    hostname: connect
+    container_name: connect
+    depends_on:
+      - kafka-broker
+      - kafka-schema-registry
+    ports:
+      - "8083:8083"
+    networks:
+      - tarxiv_net
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: 'kafka-broker:29092'
+      CONNECT_REST_ADVERTISED_HOST_NAME: connect
+      CONNECT_GROUP_ID: compose-connect-group
+      CONNECT_CONFIG_STORAGE_TOPIC: docker-connect-configs
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_FLUSH_INTERVAL_MS: 10000
+      CONNECT_OFFSET_STORAGE_TOPIC: docker-connect-offsets
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_TOPIC: docker-connect-status
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
+
+  kafka-rest-proxy:
+    image: confluentinc/cp-kafka-rest:8.0.0
+    depends_on:
+      - kafka-broker
+      - kafka-schema-registry
+    ports:
+      - 8082:8082
+    networks:
+      - tarxiv_net
+    hostname: rest-proxy
+    container_name: rest-proxy
+    environment:
+      KAFKA_REST_HOST_NAME: rest-proxy
+      KAFKA_REST_BOOTSTRAP_SERVERS: 'kafka-broker:29092'
+      KAFKA_REST_LISTENERS: "http://${TARXIV_KAFKA_HOST}:8082"
+      KAFKA_REST_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
+
+
+  kafbat-ui:
+    container_name: kafbat-ui
+    image: ghcr.io/kafbat/kafka-ui:latest
+    ports:
+      - 8080:8080
+    networks:
+      - tarxiv_net
+    depends_on:
+      - kafka-broker
+      - kafka-schema-registry
+      - kafka-connect
+    environment:
+      KAFKA_CLUSTERS_0_NAME: tarxiv_cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-broker:29092
+      KAFKA_CLUSTERS_0_METRICS_PORT: 9101
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: connect
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://kafka-connect:8083
+      KAFKA_CLUSTERS_0_METRICS_STORE_PROMETHEUS_URL: "http://prometheus:9090"
+      KAFKA_CLUSTERS_0_METRICS_STORE_PROMETHEUS_REMOTEWRITE: 'true'
+      KAFKA_CLUSTERS_0_METRICS_STORE_KAFKA_TOPIC: "kafka_metrics"
+      DYNAMIC_CONFIG_ENABLED: 'true'
+
+  prometheus:
+    image: prom/prometheus:latest
+    hostname: prometheus
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    networks:
+      - tarxiv_net
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command: --web.enable-remote-write-receiver  --config.file=/etc/prometheus/prometheus.yml
+
+  kafka-init:
+    image: confluentinc/cp-kafka:8.0.0
+    networks:
+      - tarxiv_net
+    depends_on:
+      - kafka-broker
+    entrypoint: [ '/bin/sh', '-c' ]
+    command: |
+      "
+      # blocks until kafka is reachable
+      kafka-topics --bootstrap-server kafka-broker:29092 --list
+
+      echo -e 'Creating kafka topics'
+      kafka-topics --bootstrap-server kafka-broker:29092 --create --if-not-exists --topic spark-detections --replication-factor 1 --partitions 16
+      kafka-topics --bootstrap-server kafka-broker:29092 --create --if-not-exists --topic spark-sink --replication-factor 1 --partitions 4
+
+      echo -e 'Successfully created the following topics:'
+      kafka-topics --bootstrap-server kafka-broker:29092 --list
+      "
   tarxiv-api:
     profiles:
       - tarxiv
