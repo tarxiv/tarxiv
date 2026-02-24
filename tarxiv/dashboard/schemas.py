@@ -1,5 +1,7 @@
-from pydantic import BaseModel, TypeAdapter
-# from typing import List
+from typing import List, Optional
+
+from pydantic import BaseModel, TypeAdapter, Field
+
 # from datetime import datetime
 
 
@@ -61,7 +63,7 @@ class MetadataResponseModel(BaseModel):
     peak_mag: list[Detection]
     latest_detection: list[Detection]
     latest_nondetection: list[Detection]
-    latest_change: list[Detection]
+    latest_change: Optional[list[Detection]] = Field(default_factory=list)
 
 
 class LightcurveResponseSingle(BaseModel):
