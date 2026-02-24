@@ -211,7 +211,9 @@ A.init.then(() => {{
 def fetch_api_data(endpoint, object_id, token, logger):
     """Helper to perform API requests."""
     # TODO: Refactor to use a shared API client module instead of hardcoding requests here
-    api_url = os.getenv("TARXIV_DASHBOARD_API_URL")
+    host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
+    port = os.getenv("TARXIV_API_PORT", "9001")
+    api_url = os.getenv("TARXIV_DASHBOARD_API_URL", f"http://{host}:{port}")
     # try:
     response = requests.post(
         url=f"{api_url}/{endpoint}/{object_id}",
@@ -238,6 +240,7 @@ def get_metadata_data(object_id, token, logger):
             data = MetadataResponseModel.model_validate_json(response.text)
             return data.model_dump()
         except ValidationError as e:
+            logger.exception(e)
             logger.error(
                 {"error": f"Failed to parse metadata for object {object_id}: {str(e)}"}
             )
