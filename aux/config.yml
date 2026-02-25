@@ -40,6 +40,11 @@ ztf:
 asas-sn:
   associated_sources: ["asas-sn", "asas-sn_skypatrol"]
 
+# LSST info
+lasair_url: "https://api.lasair.lsst.ac.uk/api"
+lsst:
+  associated_sources: ["lsst", "lasair", "sherlock"]
+
 # ingesting TNS notices by IMAP
 imap:
   server: "imap.gmail.com"
