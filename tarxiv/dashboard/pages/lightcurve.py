@@ -64,9 +64,10 @@ def layout(id=None, **kwargs):
 
     return dmc.Stack(
         children=[
-            dcc.Store(id="lightcurve-store", storage_type="session", data=lc_store),
+            # NOTE JL: Switched to memory storage since we want the data to be cleared when the user leaves the page.
+            dcc.Store(id="lightcurve-store", storage_type="memory", data=lc_store),
             dcc.Store(
-                id="lightcurve-meta-store", storage_type="session", data=meta_store
+                id="lightcurve-meta-store", storage_type="memory", data=meta_store
             ),
             title_card(
                 title_text="TarXiv Database Explorer",
