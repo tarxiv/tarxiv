@@ -180,6 +180,7 @@ services:
       VIRTUAL_PORT: ${TARXIV_PORT:-9001}
       LETSENCRYPT_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.tarxiv.com}
       LETSENCRYPT_EMAIL: ${TARXIV_LETSENCRYPT_EMAIL:-}
+      TARXIV_DASHBOARD_TOKEN: ${TARXIV_DASHBOARD_TOKEN:-}
     networks:
       - tarxiv_net
     restart: unless-stopped

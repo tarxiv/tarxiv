@@ -1,9 +1,12 @@
-from .database import TarxivDB
-from .utils import TarxivModule
-from flask import Flask, Blueprint, request, make_response
-from paste.translogger import TransLogger
-import cherrypy
+import os
 import json
+
+from flask import Flask, Blueprint, request, make_response
+import cherrypy
+from paste.translogger import TransLogger
+
+from .utils import TarxivModule
+from .database import TarxivDB
 
 
 class API(TarxivModule):
@@ -33,6 +36,11 @@ class API(TarxivModule):
 
         # Now build a dictionary of valid values
         self.valid_operators = ["<", ">", "=", "<=", ">=", "IN", "LIKE"]
+
+        if token := os.getenv("TARXIV_DASHBOARD_TOKEN"):
+            self.token = token
+        else:
+            raise ValueError("TARXIV_DASHBOARD_TOKEN not set")
 
         # Build application
         status = {"status": "setting up flask application"}
@@ -65,7 +73,7 @@ class API(TarxivModule):
 
     def check_token(self, token):
         # TODO: implement actual authentication
-        return token == self.config["api_token"]
+        return token == os.getenv("TARXIV_DASHBOARD_TOKEN")
 
     def routes(self):
         # Basic index route for testing server is running
