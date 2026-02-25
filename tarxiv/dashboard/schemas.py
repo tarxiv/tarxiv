@@ -34,8 +34,8 @@ class Identifier(BaseModel):
 class PropertyValue(BaseModel):
     """A value for a given property from a given source."""
 
-    value: str | float
-    source: str
+    value: str | float | None
+    source: str | None
 
 
 class Detection(PropertyValue):
@@ -51,18 +51,18 @@ class MetadataResponseModel(BaseModel):
 
     sources: list[Source]
     identifiers: list[Identifier]
-    ra_deg: list[PropertyValue]
-    dec_deg: list[PropertyValue]
-    ra_hms: list[PropertyValue]
-    dec_dms: list[PropertyValue]
-    object_type: list[PropertyValue]
-    discovery_date: list[PropertyValue]
-    reporting_group: list[PropertyValue]
-    discovery_data_source: list[PropertyValue]
-    redshift: list[PropertyValue]
-    peak_mag: list[Detection]
-    latest_detection: list[Detection]
-    latest_nondetection: list[Detection]
+    ra_deg: list[PropertyValue] | None = None
+    dec_deg: list[PropertyValue] | None = None
+    ra_hms: list[PropertyValue] | None = None
+    dec_dms: list[PropertyValue] | None = None
+    object_type: list[PropertyValue] | None = None
+    discovery_date: list[PropertyValue] | None = None
+    reporting_group: list[PropertyValue] | None = None
+    discovery_data_source: list[PropertyValue] | None = None
+    redshift: list[PropertyValue] | None = None
+    peak_mag: list[Detection] | None = None
+    latest_detection: list[Detection] | None = None
+    latest_nondetection: list[Detection] | None = None
     latest_change: Optional[list[Detection]] = Field(default_factory=list)
 
 

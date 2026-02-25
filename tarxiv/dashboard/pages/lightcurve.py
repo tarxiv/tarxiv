@@ -237,7 +237,7 @@ def get_metadata_data(object_id, token, logger):
 
     if response.status_code == 200:
         try:
-            data = MetadataResponseModel.model_validate_json(response.text)
+            data = MetadataResponseModel.model_validate_json(response.text, strict=False)
             return data.model_dump()
         except ValidationError as e:
             logger.exception(e)
