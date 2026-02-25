@@ -10,9 +10,6 @@ logstash_port: 5046
 host: localhost
 user: wintergreen
 api_port: 9001
-
-# temporary
-api_token: "kjnf?£as9$oi8ur"
   
 # tns certifications/params
 tns:
