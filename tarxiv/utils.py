@@ -31,7 +31,8 @@ class TarxivModule:
         self.config_file = os.path.join(self.config_dir, "config.yml")
         with open(self.config_file) as stream:
             self.config = yaml.safe_load(stream)
-
+        print(f"Config loaded from {self.config_file}")
+        
         # Logger
         self.logger = logging.getLogger(self.module)
         # Set log level

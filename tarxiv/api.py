@@ -16,7 +16,8 @@ class API(TarxivModule):
             reporting_mode=reporting_mode,
             debug=debug,
         )
-
+        
+        self.logger.info({"status": "initializing API module"}, extra={"status": "initializing API module"})
         # Get couchbase connection
         self.txv_db = TarxivDB("tns", "api", script_name, reporting_mode, debug)
 
