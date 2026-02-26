@@ -61,7 +61,8 @@ class TarxivModule:
 
         # Log to file
         if LOGFILE & reporting_mode:
-            log_file = os.path.join(self.config["log_dir"], script_name + ".log")
+            log_dir = os.getenv("TARXIV_HOST_LOG_DIR", "")
+            log_file = os.path.join(log_dir, script_name + ".log")
             handler = logging.FileHandler(log_file)
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
