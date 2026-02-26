@@ -6,7 +6,7 @@ from couchbase.exceptions import TransactionCommitAmbiguous, TransactionFailed
 from pyspark.sql.types import StructType, StringType, FloatType, TimestampType
 from pyspark.sql.functions import col, from_json, expr
 from pyspark.sql import SparkSession
-from confluent_kafka import Consumer
+from confluent_kafka import Consumer, KafkaException, KafkaError
 from hop.auth import Auth
 from hop import Stream
 import datetime
@@ -102,6 +102,9 @@ class TarxivXMatchProcessing(TarxivModule):
                 except (TransactionCommitAmbiguous, TransactionFailed) as e:
                     status = {"transaction_error": str(e),
                               "transaction_info": e._exc_info['inner_cause']}
+                    self.logger.error(status, extra=status)
+                except (KafkaException, KafkaError) as e:
+                    status = {"hopskotch_error": str(e),}
                     self.logger.error(status, extra=status)
                 finally:
                     # Commit consumpiton
