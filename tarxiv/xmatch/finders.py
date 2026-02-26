@@ -259,17 +259,17 @@ class TarxivXmatchFinder(TarxivModule):
 
         # Create Kafka DF
         kafka_host = os.environ["TARXIV_KAFKA_HOST"]
-        # .option("kafka.consumer.timeout.ms", "10000") \
-        # .option("kafka.consumer.max.poll.records", "50000") \
-        kafka_df = self.spark \
-            .readStream \
-            .format("kafka") \
-            .option("kafka.bootstrap.servers", "localhost:9092") \
-            .option("kafka.consumer.timeout.ms", "10000") \
+        """
+        .option("kafka.consumer.timeout.ms", "10000") \
             .option("kafka.consumer.max.poll.records", "50000") \
             .option("kafka.consumer.max.poll.interval.ms", "3600000") \
             .option("kafka.session.timeout.ms", "1800000") \
             .option("kafka.heartbeat.interval.ms", "5000") \
+            """
+        kafka_df = self.spark \
+            .readStream \
+            .format("kafka") \
+            .option("kafka.bootstrap.servers", "localhost:9092") \
             .option("subscribe", self.config["xmatch_ingest_topic"]) \
             .load()
 
@@ -279,7 +279,7 @@ class TarxivXmatchFinder(TarxivModule):
             .add("source", StringType()) \
             .add("ra_deg", FloatType()) \
             .add("dec_deg", FloatType()) \
-            .add("timestamp", StringType())
+            .add("timestamp", TimestampType())
 
         # Get data from json
         sdf = kafka_df.selectExpr("CAST(value AS STRING)") \
@@ -289,9 +289,9 @@ class TarxivXmatchFinder(TarxivModule):
         # What is our comparison window
         window = self.config["xmatch_window_len"]
         # Reduce by days
-        #filtered_df = sdf.filter(col("timestamp") >= expr(f"current_timestamp() - INTERVAL {window} HOURS"))
+        filtered_df = sdf.filter(col("timestamp") >= expr(f"current_timestamp() - INTERVAL {window} HOURS"))
         # Partition on declination
-        sdf = sdf.repartitionByRange(180, 'dec_deg')
+        sdf = filtered_df.repartitionByRange(180, 'dec_deg')
         # Register table for crazy query
         sdf.createOrReplaceTempView("targets")
 

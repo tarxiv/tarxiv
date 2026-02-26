@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from tarxiv.xmatch import TarxivXmatchFinder, TarxivXMatchProcessing, LSSTListener, ZTFListener
-from tarxiv.utils import PRINT, LOGFILE, DATABASE
+from tarxiv.utils import PRINT, LOGFILE,
 import multiprocessing as mp
 import argparse
 
@@ -9,7 +9,7 @@ import argparse
 def xmatch_processing_worker(idx):
     txv_det_finder = TarxivXMatchProcessing(worker_id=idx,
                                            script_name="tarxiv-xmatch-processing",
-                                           reporting_mode=(PRINT | LOGFILE | DATABASE),
+                                           reporting_mode=(PRINT | LOGFILE),
                                            debug=args.debug)
     txv_det_finder.run()
 
@@ -32,7 +32,7 @@ args = parser.parse_args()
 
 if args.finder:
     txv_det_finder = TarxivXmatchFinder(script_name="tarxiv-xmatch-finder",
-                                        reporting_mode=(PRINT | LOGFILE | DATABASE),
+                                        reporting_mode=(PRINT | LOGFILE),
                                         debug=args.debug)
     txv_det_finder.run()
 
@@ -45,12 +45,12 @@ elif args.processing:
 
 elif args.lsst:
     lsst_listener = LSSTListener(script_name="tarxiv-lsst-listener",
-                                 reporting_mode=(PRINT | LOGFILE | DATABASE),
+                                 reporting_mode=(PRINT | LOGFILE),
                                  debug=args.debug)
     lsst_listener.ingest_alerts()
 
 elif args.ztf:
     ztf_listener = ZTFListener(script_name="tarxiv-ztf-listener",
-                               reporting_mode=(PRINT | LOGFILE | DATABASE),
+                               reporting_mode=(PRINT | LOGFILE),
                                debug=args.debug)
     ztf_listener.ingest_alerts()
