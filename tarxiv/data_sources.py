@@ -513,7 +513,7 @@ class ZTF(Survey):
 
             else:
                 alert = result.json()
-                status = "pulled alert"
+                status = {"status": "pulled alert"}
         except SurveyLightCurveMissingError:
             status["status"] = "no alert"
             alert = None
