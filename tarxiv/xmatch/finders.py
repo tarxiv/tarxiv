@@ -27,7 +27,7 @@ class TarxivXMatchProcessing(TarxivModule):
         # Get kafka consumer
         kafka_host = os.environ["TARXIV_KAFKA_HOST"]
         conf = {'bootstrap.servers': f"{kafka_host}:9092",
-                'group.id': 'xmatch_group',
+                'group.id': 'xmatch_group_01',
                 'auto.offset.reset': 'smallest',
                 'enable.auto.commit': False,  # Manual commit
                 'enable.auto.offset.store': True,  # Manual store/commit
