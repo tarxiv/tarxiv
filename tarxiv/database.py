@@ -67,7 +67,7 @@ class TarxivDB(TarxivModule):
         """
         # Log
         status = {"status": "running sql++ query", "query_str": query_str}
-        self.logger.info(status, extra=status)
+        self.logger.debug(status, extra=status)
         return self.cluster.query(query_str)
 
     def get_all_active_objects(self, active_days):
