@@ -36,7 +36,7 @@ if args.finder:
                                         debug=args.debug)
     txv_det_finder.run()
 
-elif args.alerts:
+elif args.processing:
     with mp.Pool(processes=args.threads) as pool:
         results = [pool.apply_async(xmatch_processing_worker, args=(idx+1,))
                    for idx in range(args.threads)]
