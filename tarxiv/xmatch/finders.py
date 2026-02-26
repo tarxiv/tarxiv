@@ -264,6 +264,7 @@ class TarxivXmatchFinder(TarxivModule):
             .format("kafka") \
             .option("kafka.bootstrap.servers", f"{kafka_host}:9092") \
             .option("kafka.consumer.timeout.ms", "10000") \
+            .option("kafka.consumer.max.poll.records", "50000") \
             .option("subscribe", self.config["xmatch_ingest_topic"]) \
             .load()
 
