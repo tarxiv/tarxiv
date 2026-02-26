@@ -145,7 +145,7 @@ class ZTFListener(TarxivModule):
                     )
                     self.producer.poll(0)
                     # Debug message
-                    status = {"status": "forwarded message", "message": detection}
+                    status = {"status": "forwarded message", "payload": detection}
                     self.logger.debug(status, extra=status)
 
             except Exception as e:
