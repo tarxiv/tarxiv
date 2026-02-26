@@ -56,16 +56,23 @@ asas-sn:
 
 # LSST info
 lasair:
-  kafka_group_id: "tarxiv"
+  # THis group need to be changed on different hosts
+  kafka_group_id: "tarxiv_xmatch_04"
   kafka_endpoint: "lasair-lsst-kafka_pub.lsst.ac.uk:9092"
   kafka_topic: "lasair_18tarxiv_nostars"
   url: "https://api.lasair.lsst.ac.uk/api"
+
 lsst:
   associated_sources:
     - "lsst"
     - "lasair"
     - "sherlock"
-
+  kafka_group_id: "kyle_tarxiv"
+  kafka_endpoint: "kafka-lsst.fink-broker.org:24499"
+  kafka_topics:
+    - "fink_sn_candidates_ztf"
+    - "fink_unknowns_ztf"
+    - "fink_new_hostless_ztf"
 # ingesting TNS notices by IMAP
 imap:
   server: "imap.gmail.com"
