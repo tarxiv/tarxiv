@@ -289,9 +289,9 @@ class TarxivXmatchFinder(TarxivModule):
         # What is our comparison window
         window = self.config["xmatch_window_len"]
         # Reduce by days
-        filtered_df = sdf.filter(col("timestamp") >= expr(f"current_timestamp() - INTERVAL {window} HOURS"))
+        #filtered_df = sdf.filter(col("timestamp") >= expr(f"current_timestamp() - INTERVAL {window} HOURS"))
         # Partition on declination
-        sdf = filtered_df.repartitionByRange(180, 'dec_deg')
+        sdf = sdf.repartitionByRange(180, 'dec_deg')
         # Register table for crazy query
         sdf.createOrReplaceTempView("targets")
 
