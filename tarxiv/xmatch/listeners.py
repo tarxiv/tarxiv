@@ -35,11 +35,9 @@ class LSSTListener(TarxivModule):
                 'queue.buffering.max.messages': 10000,
                 'queue.buffering.max.ms': 50000,
                 'batch.size': 200000,
-                'compression.type': 'lz4',
                 'delivery.timeout.ms': 30000,
                 'request.timeout.ms': 20000,
                 'linger.ms': 100,
-                'acks': 1,
                 'client.id': self.module}
         self.producer = Producer(conf)
 
@@ -124,11 +122,9 @@ class ZTFListener(TarxivModule):
                 'queue.buffering.max.messages': 10000,
                 'queue.buffering.max.ms': 50000,
                 'batch.size': 200000,
-                'compression.type': 'lz4',
                 'delivery.timeout.ms': 30000,
                 'request.timeout.ms': 20000,
                 'linger.ms': 100,
-                'acks': 1,
                 'client.id': self.module}
         self.producer = Producer(conf)
 

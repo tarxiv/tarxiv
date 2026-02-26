@@ -333,7 +333,7 @@ class TarxivXmatchFinder(TarxivModule):
             .start()
         query.awaitTermination()
 
-        """
+
         query = kafka_df \
             .writeStream \
             .outputMode("append") \
@@ -341,14 +341,6 @@ class TarxivXmatchFinder(TarxivModule):
             .option("kafka.bootstrap.servers", "localhost:9092") \
             .option("topic", "spark-sink") \
             .option("checkpointLocation", "/tmp/spark-checkpoints") \
-            .option("kafka.producer.max.block.ms", "60000") \
-            .option("kafka.producer.request.timeout.ms", "10000") \
-            .option("kafka.producer.linger.ms", "100") \
-            .option("kafka.producer.acks", "1") \
-            .option("kafka.producer.batch.size", 200000) \
-            .option("kafka.producer.compression.type", "lz4") \
             .start()
 
         query.awaitTermination()
-
-        """
