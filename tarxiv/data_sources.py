@@ -814,6 +814,18 @@ class LSST(Survey):
         self.logger.info(status, extra=status)
         return alert
 
+class DummySurvey(Survey):
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(
+            script_name=script_name,
+            module="dummy_api",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
+
+    def pull_alert(self, obj_id):
+        return {"value": "dummy_value"}
+
 if __name__ == "__main__":
     """Execute the test suite"""
     import sys
