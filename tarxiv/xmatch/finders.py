@@ -83,9 +83,10 @@ class TarxivXMatchProcessing(TarxivModule):
                 # Try
                 try:
                     # Now we need a transaction
-                    xmatch_id, meta = self.db.cluster.transactions.run(
-                        lambda ctx: self.new_xmatch_transaction(ctx, detection_1, detection_2, alert_1, alert_2)
-                    )
+                    #xmatch_id, meta = self.db.cluster.transactions.run(
+                    #    lambda ctx: self.new_xmatch_transaction(ctx, detection_1, detection_2, alert_1, alert_2)
+                    #)
+                    xmatch_id, meta = self.new_xmatch_submission(detection_1, detection_2, alert_1, alert_2)
 
                     # Submit to hopskotch
                     stream = Stream(auth=self.hop_auth)
@@ -105,6 +106,136 @@ class TarxivXMatchProcessing(TarxivModule):
                 finally:
                     # Commit consumpiton
                     self.consumer.commit(asynchronous=False)
+
+    def new_xmatch_submission(self, detection_1, detection_2, alert_1, alert_2):
+        # We need to see if either detection already has a crossmatch in our cache
+        query = (f"SELECT META().id AS xmatch_id FROM tarxiv.xmatch.hits "
+                 f"WHERE ANY id IN identifiers SATISFIES id.name IN "
+                 f"             [{detection_1['obj_id']}, {detection_2['obj_id']}] END")
+        result = self.db.query(query)
+
+        # If nothing, then we have a new detection hit
+        if not result:
+            # Get current meta id count for this year
+            year = str(datetime.datetime.now().year)
+            # Run increment transaction
+            content = self.db.get(year, collection="idx")
+            content["current_idx"] += 1
+            self.db.upsert("year", content, collection="idx")
+
+            # Full detection id will be TXV-2025-xxxxxx
+            alpha_id = int_to_alphanumeric(content["current_idx"] , self.config["xmatch_id_len"])
+            xmatch_id = f"TXV-{year}-{alpha_id}"
+
+            # Split our crossmatch into separate sub documents
+            meta = {
+                "schema": "https://github.com/astrocatalogs/schema/README.md",
+                "identifiers": [{"name": detection_1['obj_id'], "source": detection_1['source']},
+                                {"name": detection_2['obj_id'], "source": detection_2['source']}],
+                "coords": [
+                    {"ra_deg": detection_1['ra_deg'],
+                     "dec_deg": detection_1['dec_deg'],
+                     "ra_hms": detection_1['ra_hms'],
+                     "dec_dms": detection_1['dec_dms'],
+                     "source": detection_1['source']
+                     },
+                    {"ra_deg": detection_2['ra_deg'],
+                     "dec_deg": detection_2['dec_deg'],
+                     "ra_hms": detection_2['ra_hms'],
+                     "dec_dms": detection_2['dec_dms'],
+                     "source": detection_2['source']}
+                ],
+                "timestamps": [{"value": detection_1['timestamp'], "source": detection_1['source']},
+                               {"value": detection_2['timestamp'], "source": detection_2['source']}],
+                "updated_at": datetime.datetime.now().replace(microsecond=0).isoformat()
+                                            .replace("+00:00", "Z")
+                                            .replace("T", " "),
+                "sources": []
+            }
+            # Append source meta (citations
+            for source in self.config[detection_1['source']]["associated_sources"]:
+                meta["sources"].append(self.schema_sources[source])
+            for source in self.config[detection_2['source']]["associated_sources"]:
+                meta["sources"].append(self.schema_sources[source])
+
+            # Insert to database
+            self.db.upsert(xmatch_id, meta, collection="hits")
+            # Inset alert data to database
+            self.db.upsert(detection_1["obj_id"], alert_1, collection="alerts")
+            self.db.upsert(detection_2["obj_id"], alert_2, collection="alerts")
+
+            # Log
+            status = {"status": "new crossmatched detection",
+                      "xmatch_id": xmatch_id,
+                      "surveys": [detection_1["survey"], detection_2["survey"]],
+                      "identifiers": [detection_1["obj_id"], detection_2["obj_id"]]}
+            self.logger.info(status, extra=status)
+
+        # Otherwise we have an additional detection to add to an existing hit
+        else:
+            # If we have more than one result send a warning (shouldn't have a detection.id in more than one document)
+            if len(result) > 1:
+                warning = {"status": "found multiple documents with same detection.id",
+                           "offending_ids": [detection_1['obj_id'], detection_2['obj_id']]}
+                self.logger.warn(warning, extra=warning)
+            # Get first xmatch
+            xmatch_id = result[0]["xmatch_id"]
+            # Now get the document with context
+            meta = self.db.get(xmatch_id, collection="hits")
+
+            # See which id is new
+            hit_ids = [idx["name"] for idx in meta["identifiers"]]
+            diff = list({detection_1['obj_id'], detection_2['obj_id']} - set(hit_ids))
+
+            if len(diff) == 0:
+                raise TarxivPipelineError(f"duplicate cross-match:"
+                                          f"offending ids: {detection_1['obj_id']}, {detection_2['obj_id']}")
+            # Here is our new detection
+            det_id = diff[0]
+            if det_id == detection_1['obj_id']:
+                new_hit_det = detection_1
+                new_hit_alert = alert_1
+            elif det_id == detection_2['obj_id']:
+                new_hit_det = detection_2
+                new_hit_alert = alert_2
+            else:
+                # This should never happen
+                raise TarxivPipelineError(f"database found matched hit detection id, but logic failed:"
+                                          f"offending ids: {detection_1['obj_id']}, {detection_2['obj_id']}")
+
+            # Append values to documents
+            meta["identifiers"].append(
+                {"name": new_hit_det["obj_id"], "source": new_hit_det["source"]}
+            )
+            meta["coords"].append(
+                {"ra_deg": new_hit_det["ra_deg"],
+                 "dec_deg": new_hit_det["dec_deg"],
+                 "ra_hms": new_hit_det["ra_hms"],
+                 "dec_dms": new_hit_det["dec_dms"],
+                 "source": new_hit_det["source"]}
+            )
+            meta["timestamps"].append(
+                {"value": new_hit_det["timestamp"], "source": new_hit_det["source"]}
+            )
+            # Append source meta
+            for source in self.config[new_hit_det["source"]]["associated_sources"]:
+                meta["sources"].append(self.schema_sources[source])
+
+            meta["updated_at"] = (datetime.datetime.now().replace(microsecond=0).isoformat()
+                                  .replace("+00:00", "Z")
+                                  .replace("T", " "))
+            # Upsert to database
+            self.db.upsert(xmatch_id, meta, collection="hits")
+            # Upsert alert
+            self.db.upsert(new_hit_det["obj_id"], new_hit_alert, collection="alerts")
+
+            # Log
+            status = {"status": "new hit for existing detection",
+                      "new_id": new_hit_det['obj_id'],
+                      "new_source": new_hit_det["source"]}
+            self.logger.info(status, extra=status)
+
+        return xmatch_id, meta
 
     def new_xmatch_transaction(self, ctx, detection_1, detection_2, alert_1, alert_2):
         # Get our collections
