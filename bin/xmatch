@@ -5,14 +5,6 @@ import multiprocessing as mp
 import argparse
 
 
-
-def xmatch_processing_worker(idx):
-    txv_det_finder = TarxivXMatchProcessing(worker_id=idx,
-                                           script_name="tarxiv-xmatch-processing",
-                                           reporting_mode=(PRINT | LOGFILE),
-                                           debug=args.debug)
-    txv_det_finder.run()
-
 # Parse args
 parser = argparse.ArgumentParser("xmatch")
 parser.add_argument('--debug', action='store_true', default=False,
@@ -37,11 +29,11 @@ if args.finder:
     txv_det_finder.run()
 
 elif args.processing:
-    with mp.Pool(processes=args.threads) as pool:
-        results = [pool.apply_async(xmatch_processing_worker, args=(idx+1,))
-                   for idx in range(args.threads)]
-
-        success = sum([r.get() for r in results])
+    txv_det_finder = TarxivXMatchProcessing(worker_id=1,
+                                           script_name="tarxiv-xmatch-processing",
+                                           reporting_mode=(PRINT | LOGFILE),
+                                           debug=args.debug)
+    txv_det_finder.run()
 
 elif args.lsst:
     lsst_listener = LSSTListener(script_name="tarxiv-lsst-listener",
