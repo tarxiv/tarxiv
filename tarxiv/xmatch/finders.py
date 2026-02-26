@@ -327,10 +327,9 @@ class TarxivXmatchFinder(TarxivModule):
             .option("kafka.bootstrap.servers", "localhost:9092") \
             .option("topic", "spark-sink") \
             .option("checkpointLocation", "/tmp/spark-checkpoints") \
-            .option("kafka.producer.max.block.ms", "10000") \
+            .option("kafka.producer.max.block.ms", "60000") \
             .option("kafka.producer.request.timeout.ms", "10000") \
             .option("kafka.producer.linger.ms", "100") \
- \
             .option("kafka.batch.size", 1000) \
             .start()
 
