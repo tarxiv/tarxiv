@@ -114,7 +114,7 @@ class TarxivXMatchProcessing(TarxivModule):
         query = (f"SELECT META().id AS xmatch_id FROM tarxiv.xmatch.hits "
                  f"WHERE ANY id IN identifiers SATISFIES id.name IN "
                  f"             [{detection_1['obj_id']}, {detection_2['obj_id']}] END")
-        result = ctx.query(query).rows
+        result = ctx.query(query).rows()
 
         # If nothing, then we have a new detection hit
         if not result:
