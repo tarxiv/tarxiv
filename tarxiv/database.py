@@ -1,7 +1,8 @@
 # Database utilities
 from .utils import TarxivModule
+from datetime import timedelta
 from couchbase.cluster import Cluster
-from couchbase.options import ClusterOptions
+from couchbase.options import ClusterOptions, ClusterTimeoutOptions
 from couchbase.auth import PasswordAuthenticator
 from couchbase.exceptions import DocumentNotFoundException
 import json
@@ -32,12 +33,16 @@ class TarxivDB(TarxivModule):
             raise ValueError("user must be 'api' or 'pipeline'")
         # Authenticate
         authenticator = PasswordAuthenticator(username, password)
-        options = ClusterOptions(authenticator)
+        timeout_opts = ClusterTimeoutOptions(connect_timeout=timedelta(seconds=12),
+                                             kv_timeout=timedelta(seconds=10))
+        options = ClusterOptions(authenticator, timeout_options=timeout_opts)
         # Connect
         status = {"status": "connecting to couchbase"}
         self.logger.info(status, extra=status)
         connection_str = "couchbase://" + os.environ["TARXIV_COUCHBASE_HOST"]
         self.cluster = Cluster(connection_str, options)
+        self.cluster.wait_until_ready(timedelta(seconds=10))
+
         self.conn = self.cluster.bucket("tarxiv")
         status = {"status": "connection success"}
         self.logger.info(status, extra=status)

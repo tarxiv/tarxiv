@@ -2,6 +2,7 @@ from tarxiv.utils import TarxivModule, int_to_alphanumeric, deg2sex, TarxivPipel
 from tarxiv.data_sources import ATLAS, ASAS_SN, ZTF, LSST, DummySurvey
 from tarxiv.database import TarxivDB
 
+from couchbase.exceptions import TransactionCommitAmbiguous, TransactionFailed
 from pyspark.sql.types import StructType, StringType, FloatType, TimestampType
 from pyspark.sql.functions import col, from_json, expr
 from pyspark.sql import SparkSession
@@ -79,20 +80,30 @@ class TarxivXMatchProcessing(TarxivModule):
                 alert_1 = self.data_sources[detection_1["source"]].pull_alert(detection_1["obj_id"])
                 alert_2 = self.data_sources[detection_2["source"]].pull_alert(detection_2["obj_id"])
 
-                # Now we need a transaction
-                xmatch_id, meta = self.db.cluster.transactions.run(
-                    lambda ctx: self.new_xmatch_transaction(ctx, detection_1, detection_2, alert_1, alert_2)
-                )
+                # Try
+                try:
+                    # Now we need a transaction
+                    xmatch_id, meta = self.db.cluster.transactions.run(
+                        lambda ctx: self.new_xmatch_transaction(ctx, detection_1, detection_2, alert_1, alert_2)
+                    )
 
-                # Submit to hopskotch
-                stream = Stream(auth=self.hop_auth)
+                    # Submit to hopskotch
+                    stream = Stream(auth=self.hop_auth)
 
-                with stream.open("kafka://kafka.scimma.org/tarxiv.xmatch", "w") as s:
-                    s.write({"xmatch_id": xmatch_id} | meta)
-                    status = {"status": "submitted hopskotch alert", "xmatch_id": xmatch_id}
-                    self.logger.info(status, extra=status)                # Commit so we dont read multiples
-                # Commit consumpiton
-                self.consumer.commit(asynchronous=False)
+                    with stream.open("kafka://kafka.scimma.org/tarxiv.xmatch", "w") as s:
+                        s.write({"xmatch_id": xmatch_id} | meta)
+                        status = {"status": "submitted hopskotch alert", "xmatch_id": xmatch_id}
+                        self.logger.info(status, extra=status)                # Commit so we dont read multiples
+
+                except TarxivPipelineError as e:
+                    status = {"pipeline_error": str(e)}
+                    self.logger.error(status, extra=status)
+                except (TransactionCommitAmbiguous, TransactionFailed) as e:
+                    status = {"transaction_error": str(e)}
+                    self.logger.error(status, extra=status)
+                finally:
+                    # Commit consumpiton
+                    self.consumer.commit(asynchronous=False)
 
     def new_xmatch_transaction(self, ctx, detection_1, detection_2, alert_1, alert_2):
         # Get our collections
@@ -174,58 +185,58 @@ class TarxivXMatchProcessing(TarxivModule):
             # Now get the document with context
             doc = ctx.get(hits_collection, xmatch_id)
             meta = doc.content_as[dict]
-            # Now we need to figure out which "side" of our new detection is not in the existing hit
-            new_hit_det = {}
-            new_hit_alert = {}
-            for ids in meta['identifiers']:
-                # If det hit id = 1, then the new hit is id = 2
-                if ids['name'] == detection_2['obj_id']:
-                    new_hit_det = detection_1
-                    new_hit_alert = alert_1
-                    break
-                # Vis-a versa
-                if ids['name'] == detection_1['obj_id']:
-                    new_hit_det = detection_2
-                    new_hit_alert = alert_2
-                    break
-            # Logically, shouldn't get this, but if non of the detection id's matched either "side" then warn
-            if not new_hit_det:
+
+            # See which id is new
+            hit_ids = [idx["name"] for idx in meta["identifiers"]]
+            diff = list({detection_1['obj_id'], detection_2['obj_id']} - set(hit_ids))
+
+            if len(diff) == 0:
+                raise TarxivPipelineError(f"duplicate cross-match:"
+                                          f"offending ids: {detection_1['obj_id']}, {detection_2['obj_id']}")
+            # Here is our new detection
+            det_id = diff[0]
+            if det_id == detection_1['obj_id']:
+                new_hit_det = detection_1
+                new_hit_alert = alert_1
+            elif det_id == detection_2['obj_id']:
+                new_hit_det = detection_2
+                new_hit_alert = alert_2
+            else:
+                # This should never happen
                 raise TarxivPipelineError(f"database found matched hit detection id, but logic failed:"
                                           f"offending ids: {detection_1['obj_id']}, {detection_2['obj_id']}")
 
-            # Otherwise, append new xmatch hit to alert and send
-            else:
-                # Append values to documents
-                meta["identifiers"].append(
-                    {"name": new_hit_det["obj_id"], "source": new_hit_det["source"]}
-                )
-                meta["coords"].append(
-                    {"ra_deg": new_hit_det["ra_deg"],
-                     "dec_deg": new_hit_det["dec_deg"],
-                     "ra_hms": new_hit_det["ra_hms"],
-                     "dec_dms": new_hit_det["dec_dms"],
-                     "source": new_hit_det["source"]}
-                )
-                meta["timestamps"].append(
-                    {"value": new_hit_det["timestamp"], "source": new_hit_det["source"]}
-                )
-                # Append source meta
-                for source in self.config[new_hit_det["source"]]["associated_sources"]:
-                    meta["sources"].append(self.schema_sources[source])
+            # Append values to documents
+            meta["identifiers"].append(
+                {"name": new_hit_det["obj_id"], "source": new_hit_det["source"]}
+            )
+            meta["coords"].append(
+                {"ra_deg": new_hit_det["ra_deg"],
+                 "dec_deg": new_hit_det["dec_deg"],
+                 "ra_hms": new_hit_det["ra_hms"],
+                 "dec_dms": new_hit_det["dec_dms"],
+                 "source": new_hit_det["source"]}
+            )
+            meta["timestamps"].append(
+                {"value": new_hit_det["timestamp"], "source": new_hit_det["source"]}
+            )
+            # Append source meta
+            for source in self.config[new_hit_det["source"]]["associated_sources"]:
+                meta["sources"].append(self.schema_sources[source])
 
-                meta["updated_at"] = (datetime.datetime.now().replace(microsecond=0).isoformat()
-                                      .replace("+00:00", "Z")
-                                      .replace("T", " "))
-                # Upsert to database
-                ctx.replace(doc, meta)
-                # Upsert alert
-                ctx.insert(alerts_collection, new_hit_det["obj_id"], new_hit_alert)
+            meta["updated_at"] = (datetime.datetime.now().replace(microsecond=0).isoformat()
+                                  .replace("+00:00", "Z")
+                                  .replace("T", " "))
+            # Upsert to database
+            ctx.replace(doc, meta)
+            # Upsert alert
+            ctx.insert(alerts_collection, new_hit_det["obj_id"], new_hit_alert)
 
-                # Log
-                status = {"status": "new hit for existing detection",
-                          "new_id": new_hit_det['obj_id'],
-                          "new_source": new_hit_det["source"]}
-                self.logger.info(status, extra=status)
+            # Log
+            status = {"status": "new hit for existing detection",
+                      "new_id": new_hit_det['obj_id'],
+                      "new_source": new_hit_det["source"]}
+            self.logger.info(status, extra=status)
 
         return xmatch_id, meta
 
@@ -259,10 +270,17 @@ class TarxivXmatchFinder(TarxivModule):
 
         # Create Kafka DF
         kafka_host = os.environ["TARXIV_KAFKA_HOST"]
+        """
+        .option("kafka.consumer.timeout.ms", "10000") \
+            .option("kafka.consumer.max.poll.records", "50000") \
+            .option("kafka.consumer.max.poll.interval.ms", "3600000") \
+            .option("kafka.session.timeout.ms", "1800000") \
+            .option("kafka.heartbeat.interval.ms", "5000") \
+            """
         kafka_df = self.spark \
             .readStream \
             .format("kafka") \
-            .option("kafka.bootstrap.servers", f"{kafka_host}:9092") \
+            .option("kafka.bootstrap.servers", "localhost:9092") \
             .option("subscribe", self.config["xmatch_ingest_topic"]) \
             .load()
 
@@ -274,7 +292,6 @@ class TarxivXmatchFinder(TarxivModule):
             .add("dec_deg", FloatType()) \
             .add("timestamp", TimestampType())
 
-
         # Get data from json
         sdf = kafka_df.selectExpr("CAST(value AS STRING)") \
             .select(from_json(col("value"), json_schema).alias("data")) \
@@ -283,9 +300,9 @@ class TarxivXmatchFinder(TarxivModule):
         # What is our comparison window
         window = self.config["xmatch_window_len"]
         # Reduce by days
-        filtered_df = sdf.filter(col("timestamp") >= expr(f"current_timestamp() - INTERVAL {window} HOURS"))
+        #filtered_df = sdf.filter(col("timestamp") >= expr(f"current_timestamp() - INTERVAL {window} HOURS"))
         # Partition on declination
-        sdf = filtered_df.repartitionByRange(180, 'dec_deg')
+        sdf = sdf.repartitionByRange(180, 'dec_deg')
         # Register table for crazy query
         sdf.createOrReplaceTempView("targets")
 
@@ -318,8 +335,9 @@ class TarxivXmatchFinder(TarxivModule):
         match_sdf = self.spark.sql(query)
 
         # Back to json for kafka
-        kafka_df = match_sdf.selectExpr("CAST(id_1 AS STRING) AS key ",
+        kafka_df = match_sdf.selectExpr("CAST(obj_id_1 AS STRING) AS key ",
                                            "to_json(struct(*)) AS value")
+
         query = kafka_df \
             .writeStream \
             .outputMode("append") \
@@ -330,4 +348,3 @@ class TarxivXmatchFinder(TarxivModule):
             .start()
 
         query.awaitTermination()
-

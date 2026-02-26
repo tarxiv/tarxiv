@@ -1,4 +1,6 @@
 # Misc. utility functions
+import time
+
 from logstash_async.handler import AsynchronousLogstashHandler
 from logstash_async.handler import LogstashFormatter
 from decimal import Decimal, ROUND_HALF_UP
@@ -60,7 +62,8 @@ class TarxivModule:
 
         # Log to file
         if LOGFILE & reporting_mode:
-            log_file = os.path.join(self.config["log_dir"], script_name + ".log")
+            log_dir = os.getenv("TARXIV_HOST_LOG_DIR", "")
+            log_file = os.path.join(log_dir, script_name + ".log")
             handler = logging.FileHandler(log_file)
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
@@ -98,6 +101,8 @@ class TarxivModule:
             "frame": str(frame),
         }
         self.logger.info(status, extra=status)
+        time.sleep(5)
+        sys.exit(0)
 
 
 class SurveyMetaMissingError(Exception):

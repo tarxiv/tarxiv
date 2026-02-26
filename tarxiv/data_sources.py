@@ -228,7 +228,7 @@ class ASAS_SN(Survey):  # noqa: N801
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
-            module="asas-sn_api",
+            module="asas-sn",
             reporting_mode=reporting_mode,
             debug=debug,
         )
@@ -344,7 +344,7 @@ class ZTF(Survey):
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
-            module="ztf_api",
+            module="ztf",
             reporting_mode=reporting_mode,
             debug=debug,
         )
@@ -538,7 +538,7 @@ class ATLAS(Survey):
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
-            module="atlas_api",
+            module="atlas",
             reporting_mode=reporting_mode,
             debug=debug,
         )
@@ -702,7 +702,7 @@ class TNS(Survey):
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
-            module="tns_api",
+            module="tns",
             reporting_mode=reporting_mode,
             debug=debug,
         )
@@ -788,7 +788,7 @@ class LSST(Survey):
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
-            module="lsst_api",
+            module="lsst",
             reporting_mode=reporting_mode,
             debug=debug,
         )
@@ -818,7 +818,7 @@ class DummySurvey(Survey):
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
-            module="dummy_api",
+            module="dummy",
             reporting_mode=reporting_mode,
             debug=debug,
         )
