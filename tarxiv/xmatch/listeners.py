@@ -31,14 +31,18 @@ class LSSTListener(TarxivModule):
         self.consumer.subscribe([self.config["lasair"]["kafka_topic"]])
         # Producer for sending to xmatch service
         conf = {'bootstrap.servers': os.environ["TARXIV_KAFKA_HOST"],
-                'queue.buffering.max.messages': 1000,
-                'queue.buffering.max.ms': 5000,
-                'batch.num.messages': 16,
+                'queue.buffering.max.messages': 10000,
+                'queue.buffering.max.ms': 50000,
+                'batch.num.messages': 64,
+                'delivery.timeout.ms': 20000,
+                'request.timeout.ms': 20000,
                 'client.id': self.module}
         self.producer = Producer(conf)
 
     def ingest_alerts(self):
+        poll_idx = 0
         while not self.stop_event.is_set():
+            poll_idx += 1
             try:
                 # Get message
                 msg = self.consumer.poll()
@@ -66,7 +70,8 @@ class LSSTListener(TarxivModule):
                         value=json.dumps(detection).encode("utf-8"),
                         callback=self.producer_error
                     )
-                    self.producer.poll(0)
+                    if poll_idx % 100 == 0:
+                        self.producer.poll(0)
                     # Debug message
                     status = {"status": "forwarded message", "payload": detection}
                     self.logger.debug(status, extra=status)
@@ -112,14 +117,18 @@ class ZTFListener(TarxivModule):
 
         # Producer for sending to xmatch service
         conf = {'bootstrap.servers': os.environ["TARXIV_KAFKA_HOST"],
-                'queue.buffering.max.messages': 1000,
-                'queue.buffering.max.ms': 5000,
-                'batch.num.messages': 16,
+                'queue.buffering.max.messages': 10000,
+                'queue.buffering.max.ms': 50000,
+                'batch.num.messages': 64,
+                'delivery.timeout.ms': 20000,
+                'request.timeout.ms': 20000,
                 'client.id': self.module}
         self.producer = Producer(conf)
 
     def ingest_alerts(self):
+        poll_idx = 0
         while not self.stop_event.is_set():
+            poll_idx += 1
             try:
                 # Get message
                 topic, alert, _ = self.consumer.poll()
@@ -143,7 +152,8 @@ class ZTFListener(TarxivModule):
                         value=json.dumps(detection).encode("utf-8"),
                         callback=self.producer_error
                     )
-                    self.producer.poll(0)
+                    if poll_idx % 100 == 0:
+                        self.producer.poll(0)
                     # Debug message
                     status = {"status": "forwarded message", "payload": detection}
                     self.logger.debug(status, extra=status)
