@@ -324,7 +324,7 @@ class TarxivXmatchFinder(TarxivModule):
 
         query = kafka_df.writeStream \
             .format("console") \
-            .outputMode("complete") \
+            .outputMode("append") \
             .start()
         query.awaitTermination()
 
