@@ -68,7 +68,7 @@ class LSSTListener(TarxivModule):
                     )
                     self.producer.poll(0)
                     # Debug message
-                    status = {"status": "forwarded message", "message": detection}
+                    status = {"status": "forwarded message", "payload": detection}
                     self.logger.debug(status, extra=status)
 
             except Exception as e:
@@ -105,6 +105,7 @@ class ZTFListener(TarxivModule):
         conf = {
             "bootstrap.servers": self.config["ztf"]["kafka_endpoint"],
             "group.id": self.config["ztf"]["kafka_group_id"],
+
         }
         # Make on consumer for each of these topics
         self.consumer = AlertConsumer(survey="ztf", topics=self.config["ztf"]["kafka_topics"], config=conf)
