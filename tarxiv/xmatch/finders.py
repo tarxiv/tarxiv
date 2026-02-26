@@ -152,7 +152,7 @@ class TarxivXMatchProcessing(TarxivModule):
                                {"value": detection_2['timestamp'], "source": detection_2['source']}],
                 "updated_at": datetime.datetime.now().replace(microsecond=0).isoformat()
                                             .replace("+00:00", "Z")
-                                            .replace("T", " ")
+                                            .replace("T", " "),
                 "sources": []
             }
             # Append source meta (citations
