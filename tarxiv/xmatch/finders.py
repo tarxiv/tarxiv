@@ -167,7 +167,7 @@ class TarxivXMatchProcessing(TarxivModule):
             # Log
             status = {"status": "new crossmatched detection",
                       "xmatch_id": xmatch_id,
-                      "surveys": [detection_1["survey"], detection_2["survey"]],
+                      "surveys": [detection_1["source"], detection_2["source"]],
                       "identifiers": [detection_1["obj_id"], detection_2["obj_id"]]}
             self.logger.info(status, extra=status)
 
@@ -302,7 +302,7 @@ class TarxivXMatchProcessing(TarxivModule):
             # Log
             status = {"status": "new crossmatched detection",
                       "xmatch_id": xmatch_id,
-                      "surveys": [detection_1["survey"], detection_2["survey"]],
+                      "surveys": [detection_1["source"], detection_2["source"]],
                       "identifiers": [detection_1["obj_id"], detection_2["obj_id"]]}
             self.logger.info(status, extra=status)
 
