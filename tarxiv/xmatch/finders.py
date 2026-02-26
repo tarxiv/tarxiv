@@ -1,17 +1,14 @@
 from tarxiv.utils import TarxivModule, int_to_alphanumeric, deg2sex, TarxivPipelineError
-from tarxiv.data_sources import ATLAS, ASAS_SN, ZTF, LSST
-from tarxiv.utils import PRINT, LOGFILE, DATABASE
+from tarxiv.data_sources import ATLAS, ASAS_SN, ZTF, LSST, DummySurvey
 from tarxiv.database import TarxivDB
 
 from pyspark.sql.types import StructType, StringType, FloatType, TimestampType
 from pyspark.sql.functions import col, from_json, expr
 from pyspark.sql import SparkSession
 from confluent_kafka import Consumer
-import multiprocessing as mp
 from hop.auth import Auth
 from hop import Stream
 import datetime
-import argparse
 import shutil
 import json
 import os
@@ -47,6 +44,7 @@ class TarxivXMatchProcessing(TarxivModule):
         self.data_sources = {
             "ztf": ZTF(script_name, reporting_mode, debug),
             "lsst": LSST(script_name, reporting_mode, debug),
+            "test": DummySurvey(script_name, reporting_mode, debug),
         }
         # Read in schema sources
         schema_sources = os.path.join(self.config_dir, "sources.json")
