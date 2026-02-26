@@ -21,29 +21,38 @@ tns:
   email: "tns@weizmann.ac.il"
   rate_limit: 4
   # Source info for schema
-  associated_sources: ["tns"]
+  associated_sources:
+    - "tns"
   obj_active_days: 60
   obj_prior_days: 30
 
 # ATLAS Info
 atlas_url: "https://psweb.mp.qub.ac.uk/sne/atlas4/api/"
 atlas:
-  associated_sources: ["atlas", "atlas_twb", "sherlock"]
+  associated_sources:
+    - "atlas"
+    - "atlas_twb"
+    - "sherlock"
 
 # Fink/ZTF info
 fink_url: "https://api.ztf.fink-portal.org/"
 ztf:
-  associated_sources: ["ztf", "fink", "mangrove"]
+  associated_sources:
+    - "ztf"
+    - "fink"
+    - "mangrove"
   kafka_group_id: "kyle_tarxiv"
   kafka_endpoint: "kafka-ztf.fink-broker.org:24499/"
   kafka_topics:
     - "fink_sn_candidates_ztf"
     - "fink_unknowns_ztf"
-    - "fink_new_hostless_ztf"]
+    - "fink_new_hostless_ztf"
 
 # ASAS-SN info
 asas-sn:
-  associated_sources: ["asas-sn", "asas-sn_skypatrol"]
+  associated_sources:
+    - "asas-sn"
+    - "asas-sn_skypatrol"
 
 # LSST info
 lasair:
@@ -52,7 +61,10 @@ lasair:
   kafka_topic: "lasair_18tarxiv_nostars"
   url: "https://api.lasair.lsst.ac.uk/api"
 lsst:
-  associated_sources: ["lsst", "lasair", "sherlock"]
+  associated_sources:
+    - "lsst"
+    - "lasair"
+    - "sherlock"
 
 # ingesting TNS notices by IMAP
 imap:
