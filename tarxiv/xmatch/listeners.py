@@ -33,9 +33,7 @@ class LSSTListener(TarxivModule):
         conf = {'bootstrap.servers': os.environ["TARXIV_KAFKA_HOST"],
                 'queue.buffering.max.messages': 10000,
                 'queue.buffering.max.ms': 50000,
-                'batch.num.messages': 64,
-                'delivery.timeout.ms': 20000,
-                'request.timeout.ms': 20000,
+                'batch.num.messages': 256,
                 'client.id': self.module}
         self.producer = Producer(conf)
 
@@ -119,9 +117,7 @@ class ZTFListener(TarxivModule):
         conf = {'bootstrap.servers': os.environ["TARXIV_KAFKA_HOST"],
                 'queue.buffering.max.messages': 10000,
                 'queue.buffering.max.ms': 50000,
-                'batch.num.messages': 64,
-                'delivery.timeout.ms': 20000,
-                'request.timeout.ms': 20000,
+                'batch.num.messages': 256,
                 'client.id': self.module}
         self.producer = Producer(conf)
 
