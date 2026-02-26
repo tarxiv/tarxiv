@@ -1,4 +1,6 @@
 # Misc. utility functions
+import time
+
 from logstash_async.handler import AsynchronousLogstashHandler
 from logstash_async.handler import LogstashFormatter
 from decimal import Decimal, ROUND_HALF_UP
@@ -97,6 +99,8 @@ class TarxivModule:
             "frame": str(frame),
         }
         self.logger.info(status, extra=status)
+        time.sleep(5)
+        sys.exit(0)
 
 
 class SurveyMetaMissingError(Exception):
