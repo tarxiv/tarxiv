@@ -1,13 +1,15 @@
 #!/usr/bin/env python
 
 from confluent_kafka.admin import AdminClient, _TopicPartition, NewTopic
-from confluent_kafka import Consumer, KafkaException
+from confluent_kafka import Consumer, KafkaException, Producer
 import argparse
+import json
 import os
 
 # PARSER
 parser = argparse.ArgumentParser("kafka-admin")
 group = parser.add_mutually_exclusive_group()
+group.add_argument("-s", "--submit", type=str, help="JSON file of values to submit")
 group.add_argument("-d", "--delete", type=str, help="delete kafka topic")
 group.add_argument("-c", "--create", type=str, help="create kafka topic")
 group.add_argument("-l", "--list", action="store_true", help="list kafka topics")
@@ -16,6 +18,7 @@ parser.add_argument("-p", "--partitions", type=int, default=16,
                     help="number of partitions for new topic")
 parser.add_argument("-r", "--replication", type=int, default=1,
                     help="replication factor for new topic")
+parser.add_argument("-t", "--topic", type=str, help="kafka topic name (for submission)")
 args = parser.parse_args()
 
 # Connect to kafka server
@@ -24,7 +27,33 @@ admin_client_config = {
     'bootstrap.servers': f"{kafka_host}:9092",}
 admin_client = AdminClient(admin_client_config)
 
-if args.list:
+if args.submit:
+    # Get producer
+    conf = {'bootstrap.servers': os.environ["TARXIV_KAFKA_HOST"],
+            'queue.buffering.max.messages': 1000,
+            'queue.buffering.max.ms': 5000,
+            'batch.num.messages': 16,
+            'client.id': "cmdline"}
+    producer = Producer(conf)
+
+    # Read in json file
+    with open(args.submit, "r") as f:
+        json_data = json.load(f)
+
+    # Either submit list or single dict
+    if type(json_data) == list:
+        for item in json_data:
+            # Submit
+            producer.produce(topic=args.topic, value=json.dumps(item).encode("utf-8"))
+    # SINGLE
+    else:
+        # Submit
+        producer.produce(topic=args.topic, value=json.dumps(json_data).encode("utf-8"))
+
+    # FLush before leaving
+    producer.flush()
+
+elif args.list:
     metadata = admin_client.list_topics()
     # Iterate over the topic names (keys of the metadata.topics dictionary)
     print("TOPICS")
