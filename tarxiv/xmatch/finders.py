@@ -76,9 +76,6 @@ class TarxivXMatchProcessing(TarxivModule):
                 # Get sexigesimal coords for both
                 detection_1["ra_hms"], detection_1["dec_dms"] = deg2sex(detection_1["ra_deg"], detection_1["dec_deg"])
                 detection_2["ra_hms"], detection_2["dec_dms"] = deg2sex(detection_2["ra_deg"], detection_2["dec_deg"])
-                # Get full alert for both detections
-                alert_1 = self.data_sources[detection_1["source"]].pull_alert(detection_1["obj_id"])
-                alert_2 = self.data_sources[detection_2["source"]].pull_alert(detection_2["obj_id"])
 
                 # Try
                 try:
@@ -86,7 +83,7 @@ class TarxivXMatchProcessing(TarxivModule):
                     #xmatch_id, meta = self.db.cluster.transactions.run(
                     #    lambda ctx: self.new_xmatch_transaction(ctx, detection_1, detection_2, alert_1, alert_2)
                     #)
-                    xmatch_id, meta = self.new_xmatch_submission(detection_1, detection_2, alert_1, alert_2)
+                    xmatch_id, meta = self.new_xmatch_submission(detection_1, detection_2)
 
                     # Submit to hopskotch
                     stream = Stream(auth=self.hop_auth)
@@ -110,7 +107,7 @@ class TarxivXMatchProcessing(TarxivModule):
                     # Commit consumpiton
                     self.consumer.commit(asynchronous=False)
 
-    def new_xmatch_submission(self, detection_1, detection_2, alert_1, alert_2):
+    def new_xmatch_submission(self, detection_1, detection_2):
         # We need to see if either detection already has a crossmatch in our cache
         query = (f"SELECT META().id AS xmatch_id FROM tarxiv.xmatch.hits "
                  f"WHERE ANY id IN identifiers SATISFIES id.name IN "
@@ -164,6 +161,8 @@ class TarxivXMatchProcessing(TarxivModule):
             # Insert to database
             self.db.upsert(xmatch_id, meta, collection="hits")
             # Inset alert data to database
+            alert_1 = self.data_sources[detection_1["source"]].pull_alert(detection_1["obj_id"])
+            alert_2 = self.data_sources[detection_2["source"]].pull_alert(detection_2["obj_id"])
             self.db.upsert(detection_1["obj_id"], alert_1, collection="alerts")
             self.db.upsert(detection_2["obj_id"], alert_2, collection="alerts")
 
@@ -197,10 +196,8 @@ class TarxivXMatchProcessing(TarxivModule):
             det_id = diff[0]
             if det_id == detection_1['obj_id']:
                 new_hit_det = detection_1
-                new_hit_alert = alert_1
             elif det_id == detection_2['obj_id']:
                 new_hit_det = detection_2
-                new_hit_alert = alert_2
             else:
                 # This should never happen
                 raise TarxivPipelineError(f"database found matched hit detection id, but logic failed:"
@@ -230,7 +227,8 @@ class TarxivXMatchProcessing(TarxivModule):
             # Upsert to database
             self.db.upsert(xmatch_id, meta, collection="hits")
             # Upsert alert
-            self.db.upsert(new_hit_det["obj_id"], new_hit_alert, collection="alerts")
+            alert = self.data_sources[new_hit_det["source"]].pull_alert(new_hit_det["obj_id"])
+            self.db.upsert(new_hit_det["obj_id"], alert, collection="alerts")
 
             # Log
             status = {"status": "new hit for existing detection",
