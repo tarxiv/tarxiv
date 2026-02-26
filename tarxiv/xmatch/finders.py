@@ -268,6 +268,9 @@ class TarxivXmatchFinder(TarxivModule):
             .option("kafka.group.id", "spark_worker") \
             .option("kafka.consumer.timeout.ms", "10000") \
             .option("kafka.consumer.max.poll.records", "50000") \
+            .option("kafka.consumer.max.poll.interval.ms", "3600000") \
+            .option("kafka.session.timeout.ms", "1800000") \
+            .option("kafka.heartbeat.interval.ms", "5000") \
             .option("subscribe", self.config["xmatch_ingest_topic"]) \
             .load()
 
