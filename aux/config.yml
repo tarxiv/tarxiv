@@ -3,12 +3,11 @@
 
 # General
 log_dir: "/data/tarxiv/logs"
-logstash_host: localhost
-logstash_port: 5046
+logstash_host: 157.136.254.204
+logstash_port: 5044
 
 # hosting information
-host: localhost
-user: wintergreen
+host: 157.136.254.204
 api_port: 9001
 
 # temporary
@@ -35,13 +34,23 @@ atlas:
 fink_url: "https://api.ztf.fink-portal.org/"
 ztf:
   associated_sources: ["ztf", "fink", "mangrove"]
+  kafka_group_id: "kyle_tarxiv"
+  kafka_endpoint: "kafka-ztf.fink-broker.org:24499/"
+  kafka_topics:
+    - "fink_sn_candidates_ztf"
+    - "fink_unknowns_ztf"
+    - "fink_new_hostless_ztf"]
 
 # ASAS-SN info
 asas-sn:
   associated_sources: ["asas-sn", "asas-sn_skypatrol"]
 
 # LSST info
-lasair_url: "https://api.lasair.lsst.ac.uk/api"
+lasair:
+  kafka_group_id: "tarxiv"
+  kafka_endpoint: "lasair-lsst-kafka_pub.lsst.ac.uk:9092"
+  kafka_topic: "lasair_18tarxiv_nostars"
+  url: "https://api.lasair.lsst.ac.uk/api"
 lsst:
   associated_sources: ["lsst", "lasair", "sherlock"]
 
@@ -49,3 +58,21 @@ lsst:
 imap:
   server: "imap.gmail.com"
   polling_interval: 1
+
+# Kafka/Xmatch parameters
+xmatch_ingest_topic: "xmatch-finder"
+xmatch_processing_topic: "xmatch-processing"
+# Home many digits to keep in yearly base 36 ids? TXV-2026-xxxxx
+xmatch_id_len: 6
+# How mow many hours do we look back for xmatchs
+xmatch_window_len: 120
+# Size of the xmatch radius in arcseconds
+xmatch_radius: "4"
+
+
+# Spark parameters
+spark_executors: "48"
+spark_executor_cores: "4"
+spark_executor_memory: "4g"
+spark_driver_memory: "16g"
+

@@ -12,14 +12,16 @@ group.add_argument("-d", "--delete", type=str, help="delete kafka topic")
 group.add_argument("-c", "--create", type=str, help="create kafka topic")
 group.add_argument("-l", "--list", action="store_true", help="list kafka topics")
 group.add_argument("-e", "--explain", type=str, help="explain/describe kafka topic")
-parser.add_argument("-p", "--partitions", type=int, help="number of partitions for new topic")
-parser.add_argument("-r", "--replication", type=int, help="replication factor for new topic")
+parser.add_argument("-p", "--partitions", type=int, default=16,
+                    help="number of partitions for new topic")
+parser.add_argument("-r", "--replication", type=int, default=1,
+                    help="replication factor for new topic")
 args = parser.parse_args()
 
 # Connect to kafka server
 kafka_host = os.environ["TARXIV_KAFKA_HOST"]
 admin_client_config = {
-    'bootstrap.servers': f"kafka_host:9092",}
+    'bootstrap.servers': f"{kafka_host}:9092",}
 admin_client = AdminClient(admin_client_config)
 
 if args.list:
@@ -45,7 +47,7 @@ elif args.create:
         future.result()
 
 elif args.explain:
-    conf = {'bootstrap.servers': "localhost:9092",
+    conf = {'bootstrap.servers': f"{kafka_host}:9092",
             'group.id': 'testing1',
             'auto.offset.reset': 'smallest',
             'enable.auto.commit': True,

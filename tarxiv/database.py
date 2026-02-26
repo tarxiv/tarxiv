@@ -42,6 +42,7 @@ class TarxivDB(TarxivModule):
         status = {"status": "connection success"}
         self.logger.info(status, extra=status)
 
+
         # Set scope, each catalog will have its own scope
         self.scope = catalog
 
