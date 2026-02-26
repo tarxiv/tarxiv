@@ -124,7 +124,7 @@ class TarxivXMatchProcessing(TarxivModule):
             # Run increment transaction
             content = self.db.get(year, collection="idx")
             content["current_idx"] += 1
-            self.db.upsert("year", content, collection="idx")
+            self.db.upsert(str(year), content, collection="idx")
 
             # Full detection id will be TXV-2025-xxxxxx
             alpha_id = int_to_alphanumeric(content["current_idx"] , self.config["xmatch_id_len"])
