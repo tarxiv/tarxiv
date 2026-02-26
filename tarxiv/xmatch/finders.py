@@ -98,9 +98,9 @@ class TarxivXMatchProcessing(TarxivModule):
                 except TarxivPipelineError as e:
                     status = {"pipeline_error": str(e)}
                     self.logger.error(status, extra=status)
-                #except (TransactionCommitAmbiguous, TransactionFailed) as e:
-                #    status = {"transaction_error": str(e)}
-                #    self.logger.error(status, extra=status)
+                except (TransactionCommitAmbiguous, TransactionFailed) as e:
+                    status = {"transaction_error": str(e)}
+                    self.logger.error(status, extra=status)
                 finally:
                     # Commit consumpiton
                     self.consumer.commit(asynchronous=False)
@@ -124,7 +124,7 @@ class TarxivXMatchProcessing(TarxivModule):
             doc = ctx.get(idx_collection, year)
             content = doc.content_as[dict]
             content["current_idx"] += 1
-            ctx.repace(doc, content)
+            ctx.replace(doc, content)
 
             # Full detection id will be TXV-2025-xxxxxx
             alpha_id = int_to_alphanumeric(content["current_idx"] , self.config["xmatch_id_len"])
