@@ -98,9 +98,9 @@ class TarxivXMatchProcessing(TarxivModule):
                 except TarxivPipelineError as e:
                     status = {"pipeline_error": str(e)}
                     self.logger.error(status, extra=status)
-                except (TransactionCommitAmbiguous, TransactionFailed) as e:
-                    status = {"transaction_error": str(e)}
-                    self.logger.error(status, extra=status)
+                #except (TransactionCommitAmbiguous, TransactionFailed) as e:
+                #    status = {"transaction_error": str(e)}
+                #    self.logger.error(status, extra=status)
                 finally:
                     # Commit consumpiton
                     self.consumer.commit(asynchronous=False)
@@ -114,7 +114,7 @@ class TarxivXMatchProcessing(TarxivModule):
         query = (f"SELECT META().id AS xmatch_id FROM tarxiv.xmatch.hits "
                  f"WHERE ANY id IN identifiers SATISFIES id.name IN "
                  f"             [{detection_1['obj_id']}, {detection_2['obj_id']}] END")
-        result = list(ctx.query(query))
+        result = ctx.query(query).rows
 
         # If nothing, then we have a new detection hit
         if not result:
