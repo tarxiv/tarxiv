@@ -10,6 +10,7 @@ from .utils import (
 from pyasassn.client import SkyPatrolClient
 from astropy.time import Time
 from collections import OrderedDict
+from lasair import lasair_client
 import numpy as np
 import pandas as pd
 import requests
@@ -227,7 +228,7 @@ class ASAS_SN(Survey):  # noqa: N801
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
-            module="asas-sn",
+            module="asas-sn_api",
             reporting_mode=reporting_mode,
             debug=debug,
         )
@@ -343,7 +344,7 @@ class ZTF(Survey):
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
-            module="ztf",
+            module="ztf_api",
             reporting_mode=reporting_mode,
             debug=debug,
         )
@@ -494,6 +495,42 @@ class ZTF(Survey):
         self.logger.info(status, extra=status)
         return meta, lc_df
 
+    def pull_alert(self, obj_id):
+        status = {"obj_id": obj_id}
+        try:
+            # Query
+            result = requests.post(
+                f"{self.config['fink_url']}/api/v1/objects",
+                json={
+                    "objectId": obj_id,
+                    "withupperlim": True,
+                    "output-format": "json",
+                },
+            )
+            # check status
+            if result.status_code != 200 or result.json() == []:
+                raise SurveyLightCurveMissingError
+
+            else:
+                alert = result.json()
+                status = "pulled alert"
+        except SurveyLightCurveMissingError:
+            status["status"] = "no alert"
+            alert = None
+
+        except Exception as e:
+            status.update(
+                {
+                    "status": "encountered unexpected error",
+                    "error_message": str(e),
+                    "details": traceback.format_exc(),
+                }
+            )
+            alert = None
+
+        self.logger.info(status, extra=status)
+        return alert
+
 
 class ATLAS(Survey):
     """Interface to ATLAS Transient Web Server."""
@@ -501,7 +538,7 @@ class ATLAS(Survey):
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
-            module="atlas",
+            module="atlas_api",
             reporting_mode=reporting_mode,
             debug=debug,
         )
@@ -582,10 +619,10 @@ class ATLAS(Survey):
             if result["sherlock_crossmatches"]:
                 result["sherlock"] = result["sherlock_crossmatches"][0]
                 if result["sherlock"]["z"] is not None:
-                    meta["redshift"] = {
+                    meta["redshift"] = [{
                         "value": result["sherlock"]["z"],
                         "source": "sherlock",
-                    }
+                    }]
 
             # DETECTIONS
             det_df = pd.DataFrame(result["lc"])[
@@ -665,7 +702,7 @@ class TNS(Survey):
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
-            module="tns",
+            module="tns_api",
             reporting_mode=reporting_mode,
             debug=debug,
         )
@@ -746,6 +783,36 @@ class TNS(Survey):
         self.logger.info(status, extra=status)
         return meta, lc_df
 
+
+class LSST(Survey):
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(
+            script_name=script_name,
+            module="lsst_api",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
+        # Get client
+        api_key = os.getenv("TARXIV_LSST_API_KEY", "")
+        self.client = lasair_client(api_key, endpoint=self.config["lasair"]["url"])
+
+    def pull_alert(self, obj_id):
+        status = {"obj_id": obj_id}
+        try:
+            alert = self.client.object(obj_id, lasair_added=True)
+            status["status"] = "pulled alert"
+        except Exception as e:
+            status.update(
+                {
+                    "status": "encountered unexpected error",
+                    "error_message": str(e),
+                    "details": traceback.format_exc(),
+                }
+            )
+            alert = None
+
+        self.logger.info(status, extra=status)
+        return alert
 
 if __name__ == "__main__":
     """Execute the test suite"""

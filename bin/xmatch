@@ -1,0 +1,56 @@
+#!/usr/bin/env python
+from tarxiv.xmatch import TarxivXmatchFinder, TarxivXMatchProcessing, LSSTListener, ZTFListener
+from tarxiv.utils import PRINT, LOGFILE, DATABASE
+import multiprocessing as mp
+import argparse
+
+
+
+def xmatch_processing_worker(idx):
+    txv_det_finder = TarxivXMatchProcessing(worker_id=idx,
+                                           script_name="tarxiv-xmatch-processing",
+                                           reporting_mode=(PRINT | LOGFILE | DATABASE),
+                                           debug=args.debug)
+    txv_det_finder.run()
+
+# Parse args
+parser = argparse.ArgumentParser("xmatch")
+parser.add_argument('--debug', action='store_true', default=False,
+                    help='set to enable printing/logging in debug mode')
+group = parser.add_mutually_exclusive_group()
+group.add_argument("--finder", action="store_true",
+                   help="run spark instance to find new x-matches")
+group.add_argument("--processing", action="store_true",
+                   help="run kafka listener to collate new detections and send alerts")
+group.add_argument("--lsst", action="store_true",
+                   help="run listener to ingest new LSST alerts")
+group.add_argument("--ztf", action="store_true",
+                   help="run listener to ingest new ZTF alerts")
+parser.add_argument("--threads", type=int, default=1,
+                    help="number of processing threads to run")
+args = parser.parse_args()
+
+if args.finder:
+    txv_det_finder = TarxivXmatchFinder(script_name="tarxiv-xmatch-finder",
+                                        reporting_mode=(PRINT | LOGFILE | DATABASE),
+                                        debug=args.debug)
+    txv_det_finder.run()
+
+elif args.alerts:
+    with mp.Pool(processes=args.threads) as pool:
+        results = [pool.apply_async(xmatch_processing_worker, args=(idx+1,))
+                   for idx in range(args.threads)]
+
+        success = sum([r.get() for r in results])
+
+elif args.lsst:
+    lsst_listener = LSSTListener(script_name="tarxiv-lsst-listener",
+                                 reporting_mode=(PRINT | LOGFILE, DATABASE),
+                                 debug=args.debug)
+    lsst_listener.ingest_alerts()
+
+elif args.ztf:
+    ztf_listener = ZTFListener(script_name="tarxiv-ztf-listener",
+                               reporting_mode=(PRINT | LOGFILE, DATABASE),
+                               debug=args.debug)
+    ztf_listener.ingest_alerts()
