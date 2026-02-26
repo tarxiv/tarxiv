@@ -98,9 +98,9 @@ class TarxivXMatchProcessing(TarxivModule):
                 except TarxivPipelineError as e:
                     status = {"pipeline_error": str(e)}
                     self.logger.error(status, extra=status)
-                except (TransactionCommitAmbiguous, TransactionFailed) as e:
-                    status = {"transaction_error": str(e)}
-                    self.logger.error(status, extra=status)
+                #except (TransactionCommitAmbiguous, TransactionFailed) as e:
+                #    status = {"transaction_error": str(e)}
+                #    self.logger.error(status, extra=status)
                 finally:
                     # Commit consumpiton
                     self.consumer.commit(asynchronous=False)
