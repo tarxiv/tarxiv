@@ -153,6 +153,7 @@ class TarxivXMatchProcessing(TarxivModule):
                 "updated_at": datetime.datetime.now().replace(microsecond=0).isoformat()
                                             .replace("+00:00", "Z")
                                             .replace("T", " ")
+                "sources": []
             }
             # Append source meta (citations
             for source in self.config[detection_1['source']]["associated_sources"]:
