@@ -24,7 +24,7 @@ args = parser.parse_args()
 # Connect to kafka server
 kafka_host = os.environ["TARXIV_KAFKA_HOST"]
 admin_client_config = {
-    'bootstrap.servers': f"{kafka_host}:9094",}
+    'bootstrap.servers': f"{kafka_host}:9092",}
 admin_client = AdminClient(admin_client_config)
 
 if args.submit:
