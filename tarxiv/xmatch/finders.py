@@ -265,6 +265,9 @@ class TarxivXmatchFinder(TarxivModule):
             .readStream \
             .format("kafka") \
             .option("kafka.bootstrap.servers", "localhost:9092") \
+            .option("kafka.group.id", "spark_worker") \
+            .option("kafka.consumer.timeout.ms", "10000") \
+            .option("kafka.consumer.max.poll.records", "50000") \
             .option("subscribe", self.config["xmatch_ingest_topic"]) \
             .load()
 
@@ -275,7 +278,6 @@ class TarxivXmatchFinder(TarxivModule):
             .add("ra_deg", FloatType()) \
             .add("dec_deg", FloatType()) \
             .add("timestamp", TimestampType())
-
 
         # Get data from json
         sdf = kafka_df.selectExpr("CAST(value AS STRING)") \
