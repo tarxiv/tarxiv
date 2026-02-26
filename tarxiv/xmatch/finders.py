@@ -114,7 +114,7 @@ class TarxivXMatchProcessing(TarxivModule):
         # We need to see if either detection already has a crossmatch in our cache
         query = (f"SELECT META().id AS xmatch_id FROM tarxiv.xmatch.hits "
                  f"WHERE ANY id IN identifiers SATISFIES id.name IN "
-                 f"             [{detection_1['obj_id']}, {detection_2['obj_id']}] END")
+                 f"['{detection_1['obj_id']}', '{detection_2['obj_id']}'] END")
         result = list(self.db.query(query))
 
         # If nothing, then we have a new detection hit
