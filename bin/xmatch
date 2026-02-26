@@ -45,12 +45,12 @@ elif args.processing:
 
 elif args.lsst:
     lsst_listener = LSSTListener(script_name="tarxiv-lsst-listener",
-                                 reporting_mode=(PRINT | LOGFILE, DATABASE),
+                                 reporting_mode=(PRINT | LOGFILE | DATABASE),
                                  debug=args.debug)
     lsst_listener.ingest_alerts()
 
 elif args.ztf:
     ztf_listener = ZTFListener(script_name="tarxiv-ztf-listener",
-                               reporting_mode=(PRINT | LOGFILE, DATABASE),
+                               reporting_mode=(PRINT | LOGFILE | DATABASE),
                                debug=args.debug)
     ztf_listener.ingest_alerts()
