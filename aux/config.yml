@@ -57,7 +57,7 @@ asas-sn:
 # LSST info
 lasair:
   # THis group need to be changed on different hosts
-  kafka_group_id: "tarxiv_xmatch_04"
+  kafka_group_id: "tarxiv_xmatch_99"
   kafka_endpoint: "lasair-lsst-kafka_pub.lsst.ac.uk:9092"
   kafka_topic: "lasair_18tarxiv_nostars"
   url: "https://api.lasair.lsst.ac.uk/api"

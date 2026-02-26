@@ -3,6 +3,7 @@ from confluent_kafka import Consumer, Producer
 from fink_client.consumer import AlertConsumer
 from astropy.time import Time
 import traceback
+import uuid
 import json
 import os
 
@@ -20,7 +21,7 @@ class LSSTListener(TarxivModule):
         # Create consumer (24 hour timeout)
         self.consumer = Consumer({
             'bootstrap.servers': self.config["lasair"]["kafka_endpoint"],
-            'group.id': self.config["lasair"]["kafka_group_id"],
+            'group.id': self.config["lasair"]["kafka_group_id"] ,
             'auto.offset.reset': 'smallest',
             'enable.auto.commit': False,  # Manual commit
             'enable.auto.offset.store': True,  # Manual store/commit
@@ -34,6 +35,9 @@ class LSSTListener(TarxivModule):
                 'queue.buffering.max.messages': 10000,
                 'queue.buffering.max.ms': 50000,
                 'batch.num.messages': 256,
+                'delivery.timeout.ms': 30000,
+                'request.timeout.ms': 20000,
+                'linger.ms': 100,
                 'client.id': self.module}
         self.producer = Producer(conf)
 
@@ -118,6 +122,9 @@ class ZTFListener(TarxivModule):
                 'queue.buffering.max.messages': 10000,
                 'queue.buffering.max.ms': 50000,
                 'batch.num.messages': 256,
+                'delivery.timeout.ms': 30000,
+                'request.timeout.ms': 20000,
+                'linger.ms': 100,
                 'client.id': self.module}
         self.producer = Producer(conf)
 
