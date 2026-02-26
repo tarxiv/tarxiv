@@ -114,7 +114,7 @@ class TarxivXMatchProcessing(TarxivModule):
         query = (f"SELECT META().id AS xmatch_id FROM tarxiv.xmatch.hits "
                  f"WHERE ANY id IN identifiers SATISFIES id.name IN "
                  f"             [{detection_1['obj_id']}, {detection_2['obj_id']}] END")
-        result = ctx.query(query).content_as[dict]
+        result = ctx.query(query)
 
         # If nothing, then we have a new detection hit
         if not result:
@@ -181,7 +181,7 @@ class TarxivXMatchProcessing(TarxivModule):
                            "offending_ids": [detection_1['obj_id'], detection_2['obj_id']]}
                 self.logger.warn(warning, extra=warning)
             # Get first xmatch
-            xmatch_id = result[0].content_as[dict]["xmatch_id"]
+            xmatch_id = result[0]["xmatch_id"]
             # Now get the document with context
             doc = ctx.get(hits_collection, xmatch_id)
             meta = doc.content_as[dict]
