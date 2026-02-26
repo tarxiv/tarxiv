@@ -259,12 +259,12 @@ class TarxivXmatchFinder(TarxivModule):
 
         # Create Kafka DF
         kafka_host = os.environ["TARXIV_KAFKA_HOST"]
+        # .option("kafka.consumer.timeout.ms", "10000") \
+        # .option("kafka.consumer.max.poll.records", "50000") \
         kafka_df = self.spark \
             .readStream \
             .format("kafka") \
-            .option("kafka.bootstrap.servers", f"{kafka_host}:9092") \
-            .option("kafka.consumer.timeout.ms", "10000") \
-            .option("kafka.consumer.max.poll.records", "50000") \
+            .option("kafka.bootstrap.servers", "localhost:9092") \
             .option("subscribe", self.config["xmatch_ingest_topic"]) \
             .load()
 
