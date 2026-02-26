@@ -26,7 +26,8 @@ class LSSTListener(TarxivModule):
             'enable.auto.offset.store': True,  # Manual store/commit
             'max.poll.interval.ms': 3600000,
             'session.timeout.ms': 1800000,
-            'heartbeat.interval.ms': 3000,
+            'heartbeat.interval.ms': 30000,
+            'request.timeout.ms': 30000,
             'enable.partition.eof': False})
         self.consumer.subscribe([self.config["lasair"]["kafka_topic"]])
         # Producer for sending to xmatch service
