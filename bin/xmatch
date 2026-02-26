@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from tarxiv.xmatch import TarxivXmatchFinder, TarxivXMatchProcessing, LSSTListener, ZTFListener
-from tarxiv.utils import PRINT, LOGFILE,
+from tarxiv.utils import PRINT, LOGFILE
 import multiprocessing as mp
 import argparse
 
