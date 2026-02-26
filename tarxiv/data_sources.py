@@ -516,7 +516,7 @@ class ZTF(Survey):
                 status = {"status": "pulled alert"}
         except SurveyLightCurveMissingError:
             status["status"] = "no alert"
-            alert = None
+            alert = {}
 
         except Exception as e:
             status.update(
@@ -526,7 +526,7 @@ class ZTF(Survey):
                     "details": traceback.format_exc(),
                 }
             )
-            alert = None
+            alert = {}
 
         self.logger.info(status, extra=status)
         return alert
@@ -809,7 +809,7 @@ class LSST(Survey):
                     "details": traceback.format_exc(),
                 }
             )
-            alert = None
+            alert = {}
 
         self.logger.info(status, extra=status)
         return alert
