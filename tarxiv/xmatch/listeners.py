@@ -62,7 +62,7 @@ class LSSTListener(TarxivModule):
                     }
                     # Now send to xmatch kafka sink
                     self.producer.produce(
-                        topic=self.config["kafka_xmatch_ingest_topic"],
+                        topic=self.config["xmatch_ingest_topic"],
                         value=json.dumps(detection).encode("utf-8"),
                         callback=self.producer_error
                     )
