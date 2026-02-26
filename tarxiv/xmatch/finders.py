@@ -100,8 +100,7 @@ class TarxivXMatchProcessing(TarxivModule):
                     self.logger.error(status, extra=status)
                 except (TransactionCommitAmbiguous, TransactionFailed) as e:
                     status = {"transaction_error": str(e),
-                              "transaction_info": e._exc_info['inner_cause'],
-                              "logs": e.logs()}
+                              "transaction_info": e._exc_info['inner_cause']}
                     self.logger.error(status, extra=status)
                 finally:
                     # Commit consumpiton
