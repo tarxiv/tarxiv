@@ -327,13 +327,6 @@ class TarxivXmatchFinder(TarxivModule):
         kafka_df = match_sdf.selectExpr("CAST(obj_id_1 AS STRING) AS key ",
                                            "to_json(struct(*)) AS value")
 
-        query = kafka_df.writeStream \
-            .format("console") \
-            .outputMode("append") \
-            .start()
-        query.awaitTermination()
-
-
         query = kafka_df \
             .writeStream \
             .outputMode("append") \
