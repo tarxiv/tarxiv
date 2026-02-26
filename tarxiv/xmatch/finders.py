@@ -318,7 +318,7 @@ class TarxivXmatchFinder(TarxivModule):
         match_sdf = self.spark.sql(query)
 
         # Back to json for kafka
-        kafka_df = match_sdf.selectExpr("CAST(id_1 AS STRING) AS key ",
+        kafka_df = match_sdf.selectExpr("CAST(obj_id_1 AS STRING) AS key ",
                                            "to_json(struct(*)) AS value")
         query = kafka_df \
             .writeStream \
