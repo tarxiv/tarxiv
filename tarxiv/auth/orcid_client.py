@@ -1,5 +1,4 @@
 """ORCID OAuth helpers used by the dashboard."""
-from __future__ import annotations
 
 import logging
 import os
@@ -9,19 +8,18 @@ from urllib.parse import urlencode
 import requests
 from pydantic import BaseModel, ConfigDict
 
+# from ..utils import TarxivModule
+
 logger = logging.getLogger(__name__)
 
-ORCID_AUTH_URL = os.environ.get("ORCID_AUTH_URL", "https://orcid.org/oauth/authorize")
-ORCID_TOKEN_URL = os.environ.get("ORCID_TOKEN_URL", "https://orcid.org/oauth/token")
-ORCID_API_BASE = os.environ.get("ORCID_API_BASE", "https://pub.orcid.org/v3.0")
+ORCID_AUTH_URL = os.environ.get(
+    "ORCID_AUTH_URL", "https://sandbox.orcid.org/oauth/authorize"
+)
+ORCID_TOKEN_URL = os.environ.get(
+    "ORCID_TOKEN_URL", "https://sandbox.orcid.org/oauth/token"
+)
+ORCID_API_BASE = os.environ.get("ORCID_API_BASE", "https://pub.sandbox.orcid.org/v3.0")
 ORCID_SCOPE = os.environ.get("ORCID_SCOPE", "/authenticate")
-
-
-def _require_env(name: str) -> str:
-    value = os.environ.get(name)
-    if not value:
-        raise RuntimeError(f"Missing {name} in environment.")
-    return value
 
 
 class ProfileRow(BaseModel):
@@ -42,7 +40,8 @@ class ProfileRow(BaseModel):
 class ProfileView(BaseModel):
     id: Optional[str] = None
     provider_user_id: Optional[str] = None
-    email: str = ""
+    # email: str = ""
+    email: Optional[str] = None
     username: Optional[str] = None
     nickname: Optional[str] = None
     picture_url: Optional[str] = None
@@ -54,7 +53,16 @@ class ProfileView(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
-def serialize_profile(user_row: Dict[str, Any], fallback_email: str = "") -> Dict[str, Any]:
+def _require_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise RuntimeError(f"Missing {name} in environment.")
+    return value
+
+
+def serialize_profile(
+    user_row: Dict[str, Any], fallback_email: str = ""
+) -> Dict[str, Any]:
     """Normalize a profile payload for UI storage."""
     data = dict(user_row or {})
     if fallback_email and not data.get("email"):
@@ -65,8 +73,11 @@ def serialize_profile(user_row: Dict[str, Any], fallback_email: str = "") -> Dic
 
 def build_orcid_authorize_url(state: str) -> str:
     """Return an ORCID authorize URL for the current environment."""
+    logger.warning("Building ORCID authorize URL with state: %s", state)
     client_id = _require_env("ORCID_CLIENT_ID")
-    redirect_uri = _require_env("ORCID_REDIRECT_URI")
+    # redirect_uri = _require_env("ORCID_REDIRECT_URI")
+    redirect_uri = _require_env("TARXIV_ORCID_REDIRECT_URI")
+
     params = {
         "client_id": client_id,
         "response_type": "code",
@@ -74,14 +85,18 @@ def build_orcid_authorize_url(state: str) -> str:
         "redirect_uri": redirect_uri,
         "state": state,
     }
+    logger.warning(f"ORCID auth URL: {ORCID_AUTH_URL}")
+    logger.warning(f"ORCID auth URL params: {params}")
     return f"{ORCID_AUTH_URL}?{urlencode(params)}"
 
 
 def exchange_code_for_token(code: str) -> Dict[str, Any]:
     """Exchange an authorization code for an ORCID access token."""
+    logger.warning("Exchanging ORCID code for token: %s", code)
     client_id = _require_env("ORCID_CLIENT_ID")
     client_secret = _require_env("ORCID_CLIENT_SECRET")
-    redirect_uri = _require_env("ORCID_REDIRECT_URI")
+    # redirect_uri = _require_env("ORCID_REDIRECT_URI")
+    redirect_uri = _require_env("TARXIV_ORCID_REDIRECT_URI")
     payload = {
         "client_id": client_id,
         "client_secret": client_secret,
@@ -95,6 +110,7 @@ def exchange_code_for_token(code: str) -> Dict[str, Any]:
         headers={"Accept": "application/json"},
         timeout=20,
     )
+    logger.warning("ORCID token response: %s", response.text)
     if not response.ok:
         raise RuntimeError(f"ORCID token exchange failed: {response.text}")
     return response.json()
@@ -102,6 +118,8 @@ def exchange_code_for_token(code: str) -> Dict[str, Any]:
 
 def fetch_orcid_profile(orcid_id: str, access_token: str) -> Dict[str, Any]:
     """Fetch the ORCID person record for the authenticated user."""
+    logger.warning("Fetching ORCID profile for ID: %s", orcid_id)
+    logger.warning("with access token: %s", access_token)
     url = f"{ORCID_API_BASE}/{orcid_id}/person"
     response = requests.get(
         url,
@@ -111,6 +129,11 @@ def fetch_orcid_profile(orcid_id: str, access_token: str) -> Dict[str, Any]:
         },
         timeout=20,
     )
+    logger.warning(
+        f"ORCID request: {response.request.method}; URL: {response.request.url}; Headers: {response.request.headers}"
+    )
+    logger.warning(f"ORCID profile response status: {response.status_code}")
+    logger.warning("ORCID profile response: %s", response.text)
     if not response.ok:
         logger.warning("Failed to fetch ORCID profile: %s", response.text)
         return {}
@@ -131,7 +154,9 @@ def _extract_name(person: Dict[str, Any]) -> Dict[str, Optional[str]]:
     return {"given": given, "family": family, "credit": credit}
 
 
-def normalize_orcid_profile(orcid_id: str, token_data: Dict[str, Any], person: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_orcid_profile(
+    orcid_id: str, token_data: Dict[str, Any], person: Dict[str, Any]
+) -> Dict[str, Any]:
     """Create a profile payload from ORCID API responses."""
     name = _extract_name(person)
     email = _extract_email(person)
@@ -157,7 +182,9 @@ def complete_orcid_login(code: str) -> Dict[str, Any]:
     if not orcid_id or not access_token:
         raise RuntimeError("ORCID login did not return a user identifier.")
     person = fetch_orcid_profile(orcid_id, access_token)
+    logger.warning(f"Fetched ORCID person record: {person}")
     profile = normalize_orcid_profile(orcid_id, token_data, person)
+    logger.warning(f"Normalized ORCID profile: {profile}")
     return {
         "access_token": access_token,
         "refresh_token": token_data.get("refresh_token"),
