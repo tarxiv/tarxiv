@@ -1,10 +1,11 @@
 """Authentication callbacks for the dashboard."""
+
 import secrets
 from urllib.parse import parse_qs
 
 from dash import Input, Output, State, ctx, html, no_update
 
-from ...auth import build_orcid_authorize_url, complete_orcid_login
+from ...auth.orcid_client import ORCIDAuthClient
 from ..components import avatar_fallback, avatar_image
 from ..styles import (
     LOGIN_BUTTON_STYLE,
@@ -17,12 +18,12 @@ from ..styles import (
 from .search_callbacks import create_message_banner
 
 
-def register_auth_callbacks(app, logger):
+def register_auth_callbacks(app, orcid_client: ORCIDAuthClient, logger):
     """Wire up authentication-related callbacks."""
 
     @app.callback(
         [
-            Output("auth-location", "href"),
+            Output("orcid-redirect-url", "data"),
             Output("auth-orcid-state", "data"),
             Output("auth-message-banner", "children", allow_duplicate=True),
         ],
@@ -35,10 +36,12 @@ def register_auth_callbacks(app, logger):
 
         state = secrets.token_urlsafe(16)
         try:
-            auth_url = build_orcid_authorize_url(state)
+            auth_url = orcid_client.build_orcid_authorize_url(state)
         except Exception as exc:
             logger.error({"orcid_config_error": str(exc)})
-            error_banner = create_message_banner(f"ORCID login unavailable: {exc}", "error")
+            error_banner = create_message_banner(
+                f"ORCID login unavailable: {exc}", "error"
+            )
             return no_update, no_update, error_banner
 
         return auth_url, state, no_update
@@ -65,11 +68,13 @@ def register_auth_callbacks(app, logger):
             return no_update, no_update, no_update, no_update
 
         if expected_state and state != expected_state:
-            error_banner = create_message_banner("ORCID login failed: invalid state.", "error")
+            error_banner = create_message_banner(
+                "ORCID login failed: invalid state.", "error"
+            )
             return no_update, error_banner, None, ""
 
         try:
-            session_payload = complete_orcid_login(code)
+            session_payload = orcid_client.complete_orcid_login(code)
             user = session_payload.get("user", {})
             success = create_message_banner(
                 f"Logged in as {user.get('username') or user.get('email') or 'ORCID user'}",
@@ -123,7 +128,11 @@ def register_auth_callbacks(app, logger):
                 "Logout",
                 id="auth-logout-button",
                 n_clicks=0,
-                style={**LOGIN_BUTTON_STYLE, "backgroundColor": "#e5e7eb", "color": "#111827"},
+                style={
+                    **LOGIN_BUTTON_STYLE,
+                    "backgroundColor": "#e5e7eb",
+                    "color": "#111827",
+                },
             ),
         ]
         return (
@@ -177,6 +186,20 @@ def register_auth_callbacks(app, logger):
     def set_profile_drawer(open_state):
         return PROFILE_DRAWER_OPEN_STYLE if open_state else PROFILE_DRAWER_STYLE
 
+    app.clientside_callback(
+        """
+        function(url) {
+            if (url) {
+                window.location.href = url;
+            }
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("orcid-redirect-dummy", "data"),
+        Input("orcid-redirect-url", "data"),
+        prevent_initial_call=True,
+    )
+
     @app.callback(
         Output("user-profile-panel", "children"),
         Input("auth-session-store", "data"),
@@ -201,15 +224,18 @@ def register_auth_callbacks(app, logger):
                 style={"marginBottom": "6px", "fontSize": "14px"},
             )
 
-        initials = "".join(
-            filter(
-                None,
-                [
-                    (profile.get("forename") or "")[:1],
-                    (profile.get("surname") or "")[:1],
-                ],
+        initials = (
+            "".join(
+                filter(
+                    None,
+                    [
+                        (profile.get("forename") or "")[:1],
+                        (profile.get("surname") or "")[:1],
+                    ],
+                )
             )
-        ) or (profile.get("username") or "U")[:2]
+            or (profile.get("username") or "U")[:2]
+        )
 
         return [
             html.Div(
@@ -220,14 +246,24 @@ def register_auth_callbacks(app, logger):
                     html.Div(
                         [
                             html.Div(
-                                profile.get("nickname") or profile.get("username") or profile.get("email"),
+                                profile.get("nickname")
+                                or profile.get("username")
+                                or profile.get("email"),
                                 style={"fontWeight": "600", "fontSize": "16px"},
                             ),
-                            html.Div(profile.get("email"), style={"fontSize": "13px", "color": "#7f8c8d"}),
+                            html.Div(
+                                profile.get("email"),
+                                style={"fontSize": "13px", "color": "#7f8c8d"},
+                            ),
                         ]
                     ),
                 ],
-                style={"display": "flex", "alignItems": "center", "gap": "12px", "marginBottom": "16px"},
+                style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "gap": "12px",
+                    "marginBottom": "16px",
+                },
             ),
             html.Div(
                 [

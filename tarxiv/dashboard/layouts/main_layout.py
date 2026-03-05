@@ -1,4 +1,5 @@
 """Main dashboard layout."""
+
 from dash import dcc, html
 from ..styles import CONTAINER_STYLE, PAGE_STYLE, COLORS
 from ..components import (
@@ -18,10 +19,12 @@ def create_layout():
     """
     return html.Div(
         [
-            dcc.Location(id="auth-location", refresh=True),
+            dcc.Location(id="auth-location", refresh=False),
             dcc.Store(id="auth-session-store", storage_type="session"),
             dcc.Store(id="auth-orcid-state", storage_type="session"),
             dcc.Store(id="profile-drawer-open", data=False),
+            dcc.Store(id="orcid-redirect-url", storage_type="memory"),
+            dcc.Store(id="orcid-redirect-dummy", storage_type="memory"),
             create_navbar(),
             create_profile_drawer(),
             # Content container
@@ -29,21 +32,23 @@ def create_layout():
                 [
                     html.Div(
                         "Explore astronomical transients and their lightcurves.",
-                        style={"color": COLORS["muted"], "fontSize": "14px", "margin": "10px 0"},
+                        style={
+                            "color": COLORS["muted"],
+                            "fontSize": "14px",
+                            "margin": "10px 0",
+                        },
                     ),
                     html.Div(id="auth-message-banner", style={"marginBottom": "10px"}),
                     html.Div(
-                        id="message-banner",
-                        children=[],
-                        style={"marginBottom": "20px"}
+                        id="message-banner", children=[], style={"marginBottom": "20px"}
                     ),
                     # Unified search with tabs
                     create_unified_search(),
                     # Results section
                     create_results_section(),
                 ],
-                style=CONTAINER_STYLE
+                style=CONTAINER_STYLE,
             ),
         ],
-        style=PAGE_STYLE
+        style=PAGE_STYLE,
     )
