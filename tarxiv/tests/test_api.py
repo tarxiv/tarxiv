@@ -5,14 +5,14 @@ from unittest.mock import MagicMock
 from tarxiv.api import API
 import os
 
+
 class MockTarxivModule:
     """Mock version of TarxivModule for testing purposes."""
 
     def __init__(self, *args, **kwargs):
         self.module = "mock tarxiv module"
         self.config_dir = os.environ.get(
-            "TARXIV_CONFIG_DIR",
-            os.path.join(os.path.dirname(__file__), "../aux")
+            "TARXIV_CONFIG_DIR", os.path.join(os.path.dirname(__file__), "../aux")
         )
         self.config_file = os.path.join(self.config_dir, "config.yml")
         self.config = {"log_dir": None, "api_port": 5000}
@@ -57,14 +57,18 @@ def test_get_object_meta_success(mock_api):
     client = mock_api.app.test_client()
     mock_api.txv_db.get.return_value = {"foo": "bar"}
 
-    response = client.post("/get_object_meta/test_obj",json={}, headers={"Authorization": "TOKEN"})
+    response = client.post(
+        "/get_object_meta/test_obj", json={}, headers={"Authorization": "TOKEN"}
+    )
     assert response.status_code == 200
     assert response.json == {"foo": "bar"}
 
 
 def test_get_object_meta_bad_token(mock_api):
     client = mock_api.app.test_client()
-    response = client.post("/get_object_meta/test_obj", json={}, headers={"Authorization": "WRONG"})
+    response = client.post(
+        "/get_object_meta/test_obj", json={}, headers={"Authorization": "WRONG"}
+    )
     assert response.status_code == 401
     assert response.json["error"] == "bad token"
 
@@ -72,6 +76,8 @@ def test_get_object_meta_bad_token(mock_api):
 def test_get_object_meta_missing_obj(mock_api):
     client = mock_api.app.test_client()
     mock_api.txv_db.get.return_value = None
-    response = client.post("/get_object_meta/test_obj", json={},headers={"Authorization": "TOKEN"})
+    response = client.post(
+        "/get_object_meta/test_obj", json={}, headers={"Authorization": "TOKEN"}
+    )
     assert response.status_code == 404
     assert response.json["error"] == "no such object"

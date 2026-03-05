@@ -4,8 +4,8 @@ from tarxiv.pipeline import TNSPipeline
 import warnings
 import argparse
 
-from pandas.errors import SettingWithCopyWarning # Location may vary by pandas version
-warnings.simplefilter(action='ignore', category=SettingWithCopyWarning)
+#from pandas.errors import SettingWithCopyWarning # Location may vary by pandas version
+#warnings.simplefilter(action='ignore', category=SettingWithCopyWarning)
 
 # Get config dir from arguments
 parser = argparse.ArgumentParser('tns-ingest',

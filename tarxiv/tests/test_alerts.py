@@ -69,9 +69,7 @@ def test_gmail_init_no_token(mock_config):
     """Test Gmail initialization when no token exists."""
     with (
         patch("os.path.exists") as mock_exists,
-        patch(
-            "google.oauth2.credentials.Credentials.from_authorized_user_file"
-        ),
+        patch("google.oauth2.credentials.Credentials.from_authorized_user_file"),
         patch(
             "google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file"
         ) as mock_flow_from_secrets,
