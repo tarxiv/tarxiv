@@ -1,12 +1,14 @@
 import os
 import json
+import secrets
 
-from flask import Flask, Blueprint, request, make_response
+from flask import Flask, Blueprint, request, make_response, redirect, session
 import cherrypy
 from paste.translogger import TransLogger
 
 from .utils import TarxivModule
 from .database import TarxivDB
+from .auth import sign_token, verify_token, PROVIDERS
 
 
 class API(TarxivModule):
@@ -19,8 +21,11 @@ class API(TarxivModule):
             reporting_mode=reporting_mode,
             debug=debug,
         )
-        
-        self.logger.info({"status": "initializing API module"}, extra={"status": "initializing API module"})
+
+        self.logger.info(
+            {"status": "initializing API module"},
+            extra={"status": "initializing API module"},
+        )
         # Get couchbase connection
         self.txv_db = TarxivDB("tns", "api", script_name, reporting_mode, debug)
 
@@ -37,15 +42,13 @@ class API(TarxivModule):
         # Now build a dictionary of valid values
         self.valid_operators = ["<", ">", "=", "<=", ">=", "IN", "LIKE"]
 
-        if token := os.getenv("TARXIV_DASHBOARD_TOKEN"):
-            self.token = token
-        else:
-            raise ValueError("TARXIV_DASHBOARD_TOKEN not set")
-
         # Build application
         status = {"status": "setting up flask application"}
         self.logger.info(status, extra=status)
         self.app = Flask(__name__)
+        self.app.secret_key = os.environ.get(
+            "TARXIV_API_SECRET_KEY"
+        ) or secrets.token_hex(32)
         # Register routes
         self.routes()
         self.app.register_blueprint(Blueprint("main", __name__))
@@ -71,15 +74,60 @@ class API(TarxivModule):
         cherrypy.engine.start()
         cherrypy.engine.block()
 
-    def check_token(self, token):
-        # TODO: implement actual authentication
-        return token == os.getenv("TARXIV_DASHBOARD_TOKEN")
+    def check_token(self, token: str) -> bool:
+        """Validate a TarXiv JWT from an Authorization header."""
+        if not token:
+            return False
+        try:
+            verify_token(token)
+            return True
+        except Exception:
+            return False
 
     def routes(self):
         # Basic index route for testing server is running
         @self.app.route("/", methods=["GET"])
         def index():
             return server_response({"status": "TarXiv API is running"}, 200)
+
+        @self.app.route("/auth/<string:provider>/login", methods=["GET"])
+        def auth_login(provider):
+            if provider not in PROVIDERS:
+                return server_response({"error": f"Unknown provider: {provider}"}, 404)
+            state = secrets.token_urlsafe(16)
+            session["oauth_state"] = state
+            session["oauth_provider"] = provider
+            try:
+                auth_url = PROVIDERS[provider].build_authorize_url(state)
+            except RuntimeError as exc:
+                return server_response({"error": str(exc)}, 500)
+            return redirect(auth_url)
+
+        @self.app.route("/auth/<string:provider>/callback", methods=["GET"])
+        def auth_callback(provider):
+            if provider not in PROVIDERS:
+                return server_response({"error": f"Unknown provider: {provider}"}, 404)
+            state = request.args.get("state")
+            code = request.args.get("code")
+            if not code:
+                return server_response({"error": "Missing authorization code"}, 400)
+            expected_state = session.pop("oauth_state", None)
+            if expected_state and state != expected_state:
+                return server_response({"error": "Invalid OAuth state"}, 400)
+            try:
+                result = PROVIDERS[provider].complete_login(code)
+            except Exception as exc:
+                self.logger.error(
+                    {"oauth_error": str(exc)}, extra={"oauth_error": str(exc)}
+                )
+                return server_response({"error": "Authentication failed"}, 502)
+            token = sign_token(
+                sub=result["sub"],
+                provider=result["provider"],
+                profile=result["profile"],
+            )
+            dashboard_url = os.environ.get("TARXIV_DASHBOARD_URL", "/")
+            return redirect(f"{dashboard_url.rstrip('/')}/?token={token}")
 
         # HFS - 2025-05-28: These self.app.route things are Flask decorators which become
         # endpoints for the API

@@ -1,5 +1,10 @@
 """Auth helpers for TarXiv."""
 
-from .orcid_client import ORCIDAuthClient
+from .token_utils import sign_token, verify_token
+from .providers import PROVIDERS
 
-__all__ = ["ORCIDAuthClient"]
+__all__ = [
+    "sign_token",
+    "verify_token",
+    "PROVIDERS",
+]

@@ -8,7 +8,6 @@ Add the following to your `.env` (or export in your shell):
 
 - `ORCID_CLIENT_ID`: ORCID application client ID
 - `ORCID_CLIENT_SECRET`: ORCID application client secret
-- `ORCID_REDIRECT_URI`: Redirect URI registered with ORCID (example: `http://localhost:8050/`)
 - `ORCID_SCOPE`: Optional, defaults to `/authenticate`
 - `ORCID_AUTH_URL`, `ORCID_TOKEN_URL`, `ORCID_API_BASE`: Optional overrides for sandbox
 
