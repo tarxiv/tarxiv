@@ -269,9 +269,8 @@ def format_object_metadata(object_id, meta, logger=None):
                     value = str(value[0])
             summary_items.append(
                 dmc.Text(
-                    dmc.Text(f"{label}: {value}"),
-                    style={"marginBottom": "6px"},
-                )
+                    f"{label}: {value}",
+                ),
             )
 
     return dmc.Stack(
