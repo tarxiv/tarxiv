@@ -3,7 +3,10 @@
 import pytest
 from unittest.mock import MagicMock
 from tarxiv.api import API
+from tarxiv.auth.token_utils import sign_token
 import os
+
+_TEST_JWT_SECRET = "test-jwt-secret-for-api-tests-32b"
 
 
 class MockTarxivModule:
@@ -22,6 +25,7 @@ class MockTarxivModule:
 
 @pytest.fixture
 def mock_api(monkeypatch, tmp_path):
+    monkeypatch.setenv("TARXIV_JWT_SECRET", _TEST_JWT_SECRET)
     # HFS - 2025-05-28: Fake the TarXivDB object instantiation which is needed for the API object
     # we also have to fake TarxivModule, which is parent to API and TarxivDB
     monkeypatch.setattr(
@@ -56,9 +60,10 @@ def test_get_object_meta_success(mock_api):
     # the self.app.route functions in API object
     client = mock_api.app.test_client()
     mock_api.txv_db.get.return_value = {"foo": "bar"}
+    token = sign_token("test-user", "orcid", {})
 
     response = client.post(
-        "/get_object_meta/test_obj", json={}, headers={"Authorization": "TOKEN"}
+        "/get_object_meta/test_obj", json={}, headers={"Authorization": token}
     )
     assert response.status_code == 200
     assert response.json == {"foo": "bar"}
@@ -76,8 +81,9 @@ def test_get_object_meta_bad_token(mock_api):
 def test_get_object_meta_missing_obj(mock_api):
     client = mock_api.app.test_client()
     mock_api.txv_db.get.return_value = None
+    token = sign_token("test-user", "orcid", {})
     response = client.post(
-        "/get_object_meta/test_obj", json={}, headers={"Authorization": "TOKEN"}
+        "/get_object_meta/test_obj", json={}, headers={"Authorization": token}
     )
     assert response.status_code == 404
     assert response.json["error"] == "no such object"
