@@ -42,6 +42,7 @@ dependencies = [
     "dash-extensions",
     "visdcc",
     "pydantic",
+    "PyJWT>=2.8",
 ]
 requires-python = ">=3.11,<3.14"
 
@@ -65,4 +66,10 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "imap",
     "gmail",
+    "auth: marks tests for the authentication system (token_utils, providers, API auth routes)",
+]
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.0.0",
 ]
