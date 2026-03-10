@@ -1,4 +1,5 @@
 """Auth UI components for the dashboard."""
+
 from dash import html
 from ..styles import (
     NAVBAR_STYLE,
@@ -21,14 +22,25 @@ def create_navbar():
         [
             html.Div(
                 [
-                    html.Div("TarXiv", style={"fontWeight": "700", "fontSize": "18px", "color": COLORS["secondary"]}),
+                    html.Div(
+                        "TarXiv",
+                        style={
+                            "fontWeight": "700",
+                            "fontSize": "18px",
+                            "color": "var(--mantine-color-text)",
+                        },
+                    ),
                     html.Div(
                         "Transient Archive dashboard",
-                        style={"color": COLORS["muted"], "fontSize": "13px"},
+                        style={
+                            "color": "var(--mantine-color-text)",
+                            "fontSize": "13px",
+                        },
                     ),
                 ],
                 style=NAV_TITLE_STYLE,
             ),
+            html.Div(id="auth-message-banner", style={"marginBottom": "10px"}),
             html.Div(
                 [
                     html.Div(
@@ -45,7 +57,10 @@ def create_navbar():
                                     html.Div(
                                         id="auth-user-email",
                                         children="",
-                                        style={"fontSize": "12px", "color": COLORS["muted"]},
+                                        style={
+                                            "fontSize": "12px",
+                                            "color": "var(--mantine-color-text)",
+                                        },
                                     ),
                                 ]
                             ),
@@ -88,7 +103,11 @@ def create_profile_drawer():
                 [
                     html.H3(
                         "Your profile",
-                        style={"marginTop": 0, "marginBottom": "6px", "color": COLORS["secondary"]},
+                        style={
+                            "marginTop": 0,
+                            "marginBottom": "6px",
+                            "color": "var(--mantine-color-text)",
+                        },
                     ),
                     html.Button(
                         "Close",
@@ -97,13 +116,17 @@ def create_profile_drawer():
                         style={
                             **BUTTON_STYLE,
                             "backgroundColor": "white",
-                            "color": COLORS["secondary"],
+                            "color": "var(--mantine-color-text)",
                             "border": "1px solid #e5e7eb",
                             "padding": "4px 10px",
                         },
                     ),
                 ],
-                style={"display": "flex", "alignItems": "center", "justifyContent": "space-between"},
+                style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "justifyContent": "space-between",
+                },
             ),
             html.Div(id="user-profile-panel"),
         ],

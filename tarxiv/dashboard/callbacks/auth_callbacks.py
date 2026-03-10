@@ -1,12 +1,16 @@
 """Authentication callbacks for the dashboard."""
 
-import secrets
+import os
 from urllib.parse import parse_qs
 
 from dash import Input, Output, State, ctx, html, no_update
 
-from ...auth.orcid_client import ORCIDAuthClient
-from ..components import avatar_fallback, avatar_image
+from ...auth.token_utils import verify_token
+from ..components import (
+    avatar_fallback,
+    avatar_image,
+    create_message_banner,
+)
 from ..styles import (
     LOGIN_BUTTON_STYLE,
     ORCID_BUTTON_STYLE,
@@ -15,76 +19,84 @@ from ..styles import (
     PROFILE_DRAWER_STYLE,
     PROFILE_DRAWER_OPEN_STYLE,
 )
-from .search_callbacks import create_message_banner
 
 
-def register_auth_callbacks(app, orcid_client: ORCIDAuthClient, logger):
+def _api_login_url(provider: str = "orcid") -> str:
+    # api_url = os.environ.get("TARXIV_DASHBOARD_API_URL", "").rstrip("/")
+    # return f"{api_url}/auth/{provider}/login"
+    api_url = os.environ.get("TARXIV_DASHBOARD_API_URL", "").rstrip("/")
+    print(f"_api_login_url: api_url={api_url}, provider={provider}")
+    return f"{api_url}/auth/{provider}/login"
+
+
+def register_auth_callbacks(app, logger):
     """Wire up authentication-related callbacks."""
-
-    @app.callback(
-        [
-            Output("orcid-redirect-url", "data"),
-            Output("auth-orcid-state", "data"),
-            Output("auth-message-banner", "children", allow_duplicate=True),
-        ],
+    # Redirect the browser to the API login endpoint.
+    # The API handles the full OAuth exchange and redirects back with ?token=...
+    app.clientside_callback(
+        f"""
+        function(n_clicks) {{
+            if (n_clicks) {{
+                window.location.href = "{_api_login_url("orcid")}";
+            }}
+            return window.dash_clientside.no_update;
+        }}
+        """,
+        Output("orcid-redirect-dummy", "data"),
         Input("auth-orcid-login", "n_clicks"),
         prevent_initial_call=True,
     )
-    def start_orcid_login(login_clicks):
-        if not login_clicks:
-            return no_update, no_update, no_update
-
-        state = secrets.token_urlsafe(16)
-        try:
-            auth_url = orcid_client.build_orcid_authorize_url(state)
-        except Exception as exc:
-            logger.error({"orcid_config_error": str(exc)})
-            error_banner = create_message_banner(
-                f"ORCID login unavailable: {exc}", "error"
-            )
-            return no_update, no_update, error_banner
-
-        return auth_url, state, no_update
 
     @app.callback(
         [
             Output("auth-session-store", "data", allow_duplicate=True),
             Output("auth-message-banner", "children", allow_duplicate=True),
-            Output("auth-orcid-state", "data", allow_duplicate=True),
             Output("auth-location", "search"),
         ],
         Input("auth-location", "search"),
-        State("auth-orcid-state", "data"),
         prevent_initial_call=True,
     )
-    def handle_orcid_callback(search, expected_state):
+    def handle_token_callback(search):
+        """Pick up ?token=<jwt> after API redirects back, validate, and store."""
         if not search:
-            return no_update, no_update, no_update, no_update
+            return no_update, no_update, no_update
 
         params = parse_qs(search.lstrip("?"))
-        code = (params.get("code") or [None])[0]
-        state = (params.get("state") or [None])[0]
-        if not code:
-            return no_update, no_update, no_update, no_update
-
-        if expected_state and state != expected_state:
-            error_banner = create_message_banner(
-                "ORCID login failed: invalid state.", "error"
-            )
-            return no_update, error_banner, None, ""
+        token = (params.get("token") or [None])[0]
+        if not token:
+            return no_update, no_update, no_update
 
         try:
-            session_payload = orcid_client.complete_orcid_login(code)
-            user = session_payload.get("user", {})
-            success = create_message_banner(
-                f"Logged in as {user.get('username') or user.get('email') or 'ORCID user'}",
-                "success",
+            payload = verify_token(token)
+        except Exception as exc:
+            expired = "expired" in str(exc).lower() or "Signature has expired" in str(
+                exc
             )
-            return session_payload, success, None, ""
-        except Exception as exc:  # broad to surface auth issues to UI
-            logger.error({"orcid_error": str(exc)})
-            error_banner = create_message_banner(f"ORCID login failed: {exc}", "error")
-            return no_update, error_banner, None, ""
+            msg = (
+                "Session expired — please log in again."
+                if expired
+                else "Login failed: invalid token."
+            )
+            logger.error({"jwt_error": str(exc)})
+            banner = create_message_banner(msg, "error")
+            return None, banner, ""
+
+        profile = payload.get("profile", {})
+        session_payload = {
+            "token": token,
+            "user": profile,
+            "provider": payload.get("provider"),
+            "sub": payload.get("sub"),
+        }
+        name = (
+            profile.get("username")
+            or profile.get("nickname")
+            or profile.get("forename")
+            or profile.get("email")
+            or "ORCID user"
+        )
+        banner = create_message_banner(f"Logged in as {name}", "success")
+        return session_payload, banner, ""
 
     @app.callback(
         [
@@ -186,20 +198,6 @@ def register_auth_callbacks(app, orcid_client: ORCIDAuthClient, logger):
     def set_profile_drawer(open_state):
         return PROFILE_DRAWER_OPEN_STYLE if open_state else PROFILE_DRAWER_STYLE
 
-    app.clientside_callback(
-        """
-        function(url) {
-            if (url) {
-                window.location.href = url;
-            }
-            return window.dash_clientside.no_update;
-        }
-        """,
-        Output("orcid-redirect-dummy", "data"),
-        Input("orcid-redirect-url", "data"),
-        prevent_initial_call=True,
-    )
-
     @app.callback(
         Output("user-profile-panel", "children"),
         Input("auth-session-store", "data"),
@@ -210,7 +208,8 @@ def register_auth_callbacks(app, orcid_client: ORCIDAuthClient, logger):
             return [
                 html.H3("Your profile", style={"marginTop": 0, "color": "#2c3e50"}),
                 html.P(
-                    "Sign in with ORCID to see your profile, tags, and teams. This section will grow as we add permissions and roles.",
+                    "Sign in with ORCID to see your profile, tags, and teams. "
+                    "This section will grow as we add permissions and roles.",
                     style={"color": "#7f8c8d", "fontSize": "14px"},
                 ),
             ]

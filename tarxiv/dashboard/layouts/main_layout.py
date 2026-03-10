@@ -60,10 +60,8 @@ def create_layout() -> dmc.MantineProvider:
                 ),
                 # Authentication and profile management
                 dcc.Location(id="auth-location", refresh=False),
-                dcc.Store(id="auth-session-store", storage_type="session"),
-                dcc.Store(id="auth-orcid-state", storage_type="session"),
+                dcc.Store(id="auth-session-store", storage_type="local"),
                 dcc.Store(id="profile-drawer-open", data=False),
-                dcc.Store(id="orcid-redirect-url", storage_type="memory"),
                 dcc.Store(id="orcid-redirect-dummy", storage_type="memory"),
                 create_navbar(),
                 create_profile_drawer(),

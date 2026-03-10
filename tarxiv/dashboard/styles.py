@@ -101,6 +101,17 @@ AVATAR_FALLBACK_STYLE = {
     "fontSize": "14px",
 }
 
+BUTTON_STYLE = {
+    "backgroundColor": "#3498db",
+    "color": "white",
+    "border": "none",
+    "borderRadius": "4px",
+    "padding": "10px 20px",
+    "fontSize": "14px",
+    "cursor": "pointer",
+    "fontWeight": "500",
+}
+
 LOGIN_BUTTON_STYLE = {**BUTTON_STYLE, "padding": "8px 16px"}
 SIGNUP_BUTTON_STYLE = {
     **BUTTON_STYLE,

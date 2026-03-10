@@ -2,7 +2,6 @@
 
 import dash
 from ..database import TarxivDB
-from ..auth import ORCIDAuthClient
 from ..utils import TarxivModule
 from .layouts import create_layout
 from .callbacks import (
@@ -33,7 +32,6 @@ class TarxivDashboard(TarxivModule):
 
         # Get couchbase connection
         self.txv_db = TarxivDB("tns", "api", script_name, reporting_mode, debug)
-        self.orcid_client = ORCIDAuthClient(script_name, reporting_mode, debug)
 
         # Build Dash application
         status = {"status": "setting up dash application"}
@@ -69,7 +67,7 @@ class TarxivDashboard(TarxivModule):
 
     def setup_callbacks(self):
         """Set up the dashboard callbacks."""
-        register_auth_callbacks(self.app, self.orcid_client, self.logger)
+        register_auth_callbacks(self.app, self.logger)
         register_cookie_callbacks(self.app, self.logger)
         register_style_callbacks(self.app, self.logger)
         register_plotting_callbacks(self.app, self.logger)
