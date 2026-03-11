@@ -40,7 +40,6 @@ dependencies = [
     "dash-mantine-components",
     "dash-iconify",
     "dash-extensions",
-    "visdcc",
     "pydantic",
     "lasair",
     "fink_client",
