@@ -40,7 +40,6 @@ dependencies = [
     "dash-mantine-components",
     "dash-iconify",
     "dash-extensions",
-    "visdcc",
     "pydantic",
 ]
 requires-python = ">=3.11,<3.14"
