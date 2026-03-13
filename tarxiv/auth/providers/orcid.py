@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict
 
 logger = logging.getLogger(__name__)
 
+# TODO: Move these to .env file
 ORCID_AUTH_URL = os.environ.get(
     "ORCID_AUTH_URL", "https://sandbox.orcid.org/oauth/authorize"
 )

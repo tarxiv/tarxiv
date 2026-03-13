@@ -31,6 +31,8 @@ _TEST_JWT_SECRET = "test-jwt-secret-for-auth-tests-32b"
 _TEST_DASHBOARD_URL = "http://localhost:8050"
 
 # Realistic ORCID API responses used across multiple tests
+# TODO: How realistic is this?
+# Should we capture an example response from the actual ORCID sandbox API to ensure our mocks are accurate?
 ORCID_TOKEN_RESPONSE = {
     "access_token": "test-access-token-abc123",
     "orcid": "0000-0002-1825-0097",
