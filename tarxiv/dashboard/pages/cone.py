@@ -2,6 +2,7 @@ import dash
 from dash import html, Input, Output, State, no_update, callback, dcc
 import dash_mantine_components as dmc
 from dash_extensions import Keyboard
+from ...auth import get_jwt_from_request, validate_token, TokenStatus
 from ..components import (
     title_card,
     expressive_card,
@@ -14,7 +15,6 @@ from pydantic import ValidationError
 from flask import current_app, request
 from werkzeug.exceptions import Unauthorized
 import os
-from urllib.parse import unquote
 
 dash.register_page(
     __name__,
@@ -29,7 +29,7 @@ dash.register_page(
 def layout(**kwargs):
     # logger = current_app.config["TXV_LOGGER"]
 
-    token = unquote(request.cookies.get("tarxiv_user_token", ""))
+    # token = get_jwt_from_request(request)
 
     return dmc.Stack(
         children=[
@@ -46,8 +46,7 @@ def layout(**kwargs):
                             dmc.Text(
                                 "Search for objects within a specified radius of sky coordinates",
                             ),
-                            # dmc.Group(
-                            dmc.Stack(
+                            dmc.Group(
                                 [
                                     Keyboard(
                                         children=dmc.Group(
@@ -81,19 +80,6 @@ def layout(**kwargs):
                                                     style={
                                                         "width": "150px",
                                                     },
-                                                ),
-                                                dmc.VisuallyHidden(
-                                                    dmc.TextInput(
-                                                        # When API auth is implemented, remove this input from the UI
-                                                        # and remove the prepopulate_token() callback.
-                                                        id="token",
-                                                        placeholder="Enter a token",
-                                                        value=token,  # Pre-populate with URL parameter
-                                                        style={
-                                                            "width": "400px",
-                                                            "marginRight": "10px",
-                                                        },
-                                                    )
                                                 ),
                                             ]
                                         ),
@@ -155,18 +141,30 @@ def layout(**kwargs):
         State("ra-input", "value"),
         State("dec-input", "value"),
         State("radius-input", "value"),
-        State("token", "value"),
         State("active-settings-store", "data"),
     ],
     prevent_initial_call=True,
 )
-def handle_cone_search(n_clicks, n_keydowns, ra, dec, radius, token, settings):
+def handle_cone_search(n_clicks, n_keydowns, ra, dec, radius, settings):
     """Handle cone search button clicks."""
     logger = current_app.config["TXV_LOGGER"]
 
-    if not token:
+    token = get_jwt_from_request(request)
+    validation = validate_token(token)
+
+    if validation["status"] == TokenStatus.EXPIRED:
         warning_banner = create_message_banner(
-            "Please provide an API token to perform the search.", "warning"
+            "Your session has expired. Please log in again.", "warning"
+        )
+        return html.Div(), "", warning_banner, no_update, no_update
+    elif validation["status"] == TokenStatus.INVALID and token:
+        warning_banner = create_message_banner(
+            "Invalid authentication token. Please log in again.", "error"
+        )
+        return html.Div(), "", warning_banner, no_update, no_update
+    elif not token or validation["status"] != TokenStatus.VALID:
+        warning_banner = create_message_banner(
+            "Please log in to perform the search.", "warning"
         )
         return html.Div(), "", warning_banner, no_update, no_update
 
@@ -230,14 +228,16 @@ def get_cone_search_results(ra, dec, radius, token, logger) -> list:
     """
     host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
     port = os.getenv("TARXIV_API_PORT", "9001")
-    api_url = os.getenv("TARXIV_DASHBOARD_API_URL", f"http://{host}:{port}")
+    # api_url = os.getenv("TARXIV_DASHBOARD_API_URL", f"http://{host}:{port}")
+    # TODO: api_url still needs sorting.
+    api_url = f"http://{host}:{port}"
     response_cone = requests.post(
         url=f"{api_url}/cone_search",
         timeout=10,
         headers={
             "accept": "application/json",
             "Content-Type": "application/json",
-            "Authorization": token,
+            "Authorization": f"Bearer {token}",
         },
         json={"ra": ra, "dec": dec, "radius": radius},
     )

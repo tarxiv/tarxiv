@@ -15,10 +15,15 @@ from ..schemas import (
     MetadataResponseModel,
     LightcurveResponseModel,
 )
+from ...auth import (
+    get_authenticated_user,
+    get_jwt_from_request,
+    validate_token,
+    TokenStatus,
+)
 import requests
 from pydantic import ValidationError
 import os
-from urllib.parse import unquote
 
 dash.register_page(
     __name__,
@@ -35,21 +40,33 @@ def layout(id=None, **kwargs):
     # perform search if id is provided in URL, otherwise show empty search page
     logger = current_app.config["TXV_LOGGER"]
 
-    token = unquote(request.cookies.get("tarxiv_user_token", ""))
+    token = get_jwt_from_request(request)
+    user = get_authenticated_user(jwt_token=token)
 
-    if id and token:
+    if id and user:
         # User came via deep link and has a saved session
         results, status, banner, lc_store, meta_store = perform_search(
             id, token, logger
         )
-    elif id and not token:
+    elif id and not user:
+        validation = validate_token(token)
+
         # Deep link but no token: Show the search bar pre-filled with ID
         # but warn the user that a token is missing.
         results = html.Div()
         status = "Authentication required"
-        banner = create_message_banner(
-            "Please enter your API token to view data.", "warning"
-        )
+
+        if validation["status"] == TokenStatus.EXPIRED:
+            banner = create_message_banner(
+                "Your session has expired. Please log in again.", "warning"
+            )
+        elif validation["status"] == TokenStatus.INVALID and token:
+            banner = create_message_banner(
+                "Invalid authentication token. Please log in again.", "error"
+            )
+        else:
+            banner = create_message_banner("Please log in to view data.", "warning")
+
         lc_store = None
         meta_store = None
     else:
@@ -93,19 +110,6 @@ def layout(id=None, **kwargs):
                                                     "width": "400px",
                                                     "marginRight": "10px",
                                                 },
-                                            ),
-                                            dmc.VisuallyHidden(
-                                                dmc.TextInput(
-                                                    # When API auth is implemented, remove this input from the UI
-                                                    # and remove the prepopulate_token() callback.
-                                                    id="token",
-                                                    placeholder="Enter a token",
-                                                    value=token,  # Pre-populate with URL parameter
-                                                    style={
-                                                        "width": "400px",
-                                                        "marginRight": "10px",
-                                                    },
-                                                )
                                             ),
                                         ],
                                         captureKeys=["Enter"],
@@ -214,7 +218,9 @@ def fetch_api_data(endpoint, object_id, token, logger):
     # TODO: Refactor to use a shared API client module instead of hardcoding requests here
     host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
     port = os.getenv("TARXIV_API_PORT", "9001")
-    api_url = os.getenv("TARXIV_DASHBOARD_API_URL", f"http://{host}:{port}")
+    # api_url = os.getenv("TARXIV_DASHBOARD_API_URL", f"http://{host}:{port}")
+    # TODO: api_url still needs sorting.
+    api_url = f"http://{host}:{port}"
     # try:
     response = requests.post(
         url=f"{api_url}/{endpoint}/{object_id}",
@@ -222,7 +228,7 @@ def fetch_api_data(endpoint, object_id, token, logger):
         headers={
             "accept": "application/json",
             "Content-Type": "application/json",
-            "Authorization": token,
+            "Authorization": f"Bearer {token}",
         },
     )
     logger.info({"info": f"{endpoint} response status: {response.status_code}"})
@@ -238,7 +244,9 @@ def get_metadata_data(object_id, token, logger):
 
     if response.status_code == 200:
         try:
-            data = MetadataResponseModel.model_validate_json(response.text, strict=False)
+            data = MetadataResponseModel.model_validate_json(
+                response.text, strict=False
+            )
             return data.model_dump()
         except ValidationError as e:
             logger.exception(e)
@@ -310,7 +318,9 @@ def perform_search(object_id, token, logger):
             None,
         )
     except Exception as e:
-        logger.error({"error": f"Unexpected error fetching metadata for {object_id}: {str(e)}"})
+        logger.error(
+            {"error": f"Unexpected error fetching metadata for {object_id}: {str(e)}"}
+        )
         logger.exception(e)
         return (
             html.Div(),
