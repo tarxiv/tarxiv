@@ -75,7 +75,7 @@ def test_get_object_meta_bad_token(mock_api):
         "/get_object_meta/test_obj", json={}, headers={"Authorization": "WRONG"}
     )
     assert response.status_code == 401
-    assert response.json["error"] == "bad token"
+    assert response.json["error"] == "Invalid or missing token."
 
 
 def test_get_object_meta_missing_obj(mock_api):
