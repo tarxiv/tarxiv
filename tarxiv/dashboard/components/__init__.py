@@ -1,8 +1,6 @@
 """Dashboard components."""
 
 from .auth import (
-    create_navbar,
-    create_profile_drawer,
     avatar_fallback,
     avatar_image,
 )
@@ -32,8 +30,6 @@ from .cookies import (
 )
 
 __all__ = [
-    "create_navbar",
-    "create_profile_drawer",
     "avatar_fallback",
     "avatar_image",
     "create_lightcurve_plot",

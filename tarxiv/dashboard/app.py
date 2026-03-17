@@ -59,7 +59,9 @@ class TarxivDashboard(TarxivModule):
 
     def setup_layout(self):
         """Set up the dashboard layout."""
-        self.app.layout = create_layout()
+        # self.app.layout = create_layout() # This is now wrong!!
+        # We need to set app.layout to a function that creates the layout, not the layout itself, in order to ensure that the user authentication state is evaluated on every page load. See https://dash.plotly.com/urls and https://dash.plotly.com/advanced-callbacks for details.
+        self.app.layout = create_layout
 
     def setup_themes(self):
         """Set up the dashboard themes."""

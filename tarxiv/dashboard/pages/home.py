@@ -2,7 +2,9 @@ import dash
 import dash_mantine_components as dmc
 from ..components.cards import title_card, expressive_card, create_message_banner
 from flask import request
-from urllib.parse import unquote
+
+# from urllib.parse import unquote
+from ...auth import validate_token, TokenStatus
 
 dash.register_page(
     __name__,
@@ -15,7 +17,8 @@ dash.register_page(
 
 
 def layout(**kwargs):
-    token = unquote(request.cookies.get("tarxiv_user_token", ""))
+    token = request.cookies.get("tarxiv_token", "")
+    validation = validate_token(token)
     return dmc.Stack(
         children=[
             title_card(
@@ -30,11 +33,20 @@ def layout(**kwargs):
                     ),
                 ],
             ),
-            # create a banner is the user has no token
             create_message_banner(
-                message="You have not provided a token. Please enter your token in the User page to access the functionality of the dashboard.",
-                message_type="warning",
-                hide=bool(token),
+                message="Your session has expired, log in again via the User page.",
+                message_type="error",
+                hide=validation["status"] != TokenStatus.EXPIRED,
+            ),
+            create_message_banner(
+                message="Invalid token detected, log in again to continue accessing the dashboard.",
+                message_type="error",
+                hide=validation["status"] != TokenStatus.INVALID,
+            ),
+            create_message_banner(
+                message="You are logged in. Explore the database using the navigation bar.",
+                message_type="success",
+                hide=validation["status"] != TokenStatus.VALID,
             ),
         ]
     )
