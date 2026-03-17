@@ -8,7 +8,7 @@ TestBuildAuthorizeUrl — ORCID provider URL construction
 TestCompleteLogin   — ORCID code exchange and profile normalisation (HTTP mocked)
 TestAuthLogin       — GET /auth/<provider>/login route
 TestAuthCallback    — GET /auth/<provider>/callback route
-TestCheckToken      — API.check_token() boolean gate used by protected endpoints
+TestCheckToken      — API.is_token_valid() boolean gate used by protected endpoints
 """
 
 import base64
@@ -16,13 +16,18 @@ import json
 import time
 from urllib.parse import parse_qs, urlparse
 
-import jwt as _pyjwt
+import jwt as pyjwt
 import pytest
 from unittest.mock import MagicMock
 
 import tarxiv.auth.providers.orcid as orcid_provider
 from tarxiv.api import API
-from tarxiv.auth.token_utils import sign_token, verify_token
+from tarxiv.auth.token_utils import (
+    sign_token,
+    verify_token,
+    validate_token,
+    TokenStatus,
+)
 import os
 
 # ─── Constants ───────────────────────────────────────────────────────────────
@@ -166,7 +171,7 @@ def orcid_env(monkeypatch):
 class TestSignToken:
     def test_sign_token_basic(self, jwt_secret, valid_profile):
         token = sign_token("test-sub", "orcid", valid_profile)
-        payload = _pyjwt.decode(token, jwt_secret, algorithms=["HS256"])
+        payload = pyjwt.decode(token, jwt_secret, algorithms=["HS256"])
         assert payload["sub"] == "test-sub"
         assert payload["provider"] == "orcid"
         assert "iat" in payload
@@ -175,17 +180,17 @@ class TestSignToken:
 
     def test_sign_token_default_ttl_is_24h(self, jwt_secret, valid_profile):
         token = sign_token("sub", "orcid", valid_profile)
-        payload = _pyjwt.decode(token, jwt_secret, algorithms=["HS256"])
+        payload = pyjwt.decode(token, jwt_secret, algorithms=["HS256"])
         assert 86390 <= payload["exp"] - payload["iat"] <= 86410
 
     def test_sign_token_custom_ttl(self, jwt_secret, valid_profile):
         token = sign_token("sub", "orcid", valid_profile, ttl=3600)
-        payload = _pyjwt.decode(token, jwt_secret, algorithms=["HS256"])
+        payload = pyjwt.decode(token, jwt_secret, algorithms=["HS256"])
         assert 3590 <= payload["exp"] - payload["iat"] <= 3610
 
     def test_sign_token_embeds_full_profile(self, jwt_secret, valid_profile):
         token = sign_token("sub", "orcid", valid_profile)
-        payload = _pyjwt.decode(token, jwt_secret, algorithms=["HS256"])
+        payload = pyjwt.decode(token, jwt_secret, algorithms=["HS256"])
         assert payload["profile"]["email"] == valid_profile["email"]
         assert payload["profile"]["forename"] == valid_profile["forename"]
         assert payload["profile"]["surname"] == valid_profile["surname"]
@@ -223,14 +228,14 @@ class TestVerifyToken:
     def test_verify_token_expired_raises(self, jwt_secret, valid_profile):
         # ttl=-1 produces exp = now - 1, which is immediately expired
         token = sign_token("test-sub", "orcid", valid_profile, ttl=-1)
-        with pytest.raises(_pyjwt.ExpiredSignatureError):
+        with pytest.raises(pyjwt.ExpiredSignatureError):
             verify_token(token)
 
     def test_verify_token_tampered_signature_raises(self, jwt_secret, valid_profile):
         token = sign_token("test-sub", "orcid", valid_profile)
         header, payload_b64, _ = token.split(".")
         tampered = f"{header}.{payload_b64}.invalidsignatureXXX"
-        with pytest.raises(_pyjwt.InvalidTokenError):
+        with pytest.raises(pyjwt.InvalidTokenError):
             verify_token(tampered)
 
     def test_verify_token_tampered_payload_raises(self, jwt_secret, valid_profile):
@@ -243,11 +248,11 @@ class TestVerifyToken:
         new_b64 = (
             base64.urlsafe_b64encode(json.dumps(data).encode()).rstrip(b"=").decode()
         )
-        with pytest.raises(_pyjwt.InvalidTokenError):
+        with pytest.raises(pyjwt.InvalidTokenError):
             verify_token(f"{header}.{new_b64}.{sig}")
 
     def test_verify_token_garbage_string_raises(self, jwt_secret):
-        with pytest.raises(_pyjwt.InvalidTokenError):
+        with pytest.raises(pyjwt.InvalidTokenError):
             verify_token("not-a-jwt-at-all")
 
     def test_verify_token_missing_secret_raises(self, monkeypatch, valid_profile):
@@ -261,8 +266,62 @@ class TestVerifyToken:
         monkeypatch.setenv("TARXIV_JWT_SECRET", "secret-aaaaaaaaaaaaaaaaaa-32-bytes")
         token = sign_token("sub", "orcid", valid_profile)
         monkeypatch.setenv("TARXIV_JWT_SECRET", "secret-bbbbbbbbbbbbbbbbbbb-32-bytes")
-        with pytest.raises(_pyjwt.InvalidSignatureError):
+        with pytest.raises(pyjwt.InvalidSignatureError):
             verify_token(token)
+
+
+# ─── validate_token ──────────────────────────────────────────────────────────
+
+
+@pytest.mark.auth
+class TestValidateToken:
+    """Test the structured token validator that returns status, profile, and error."""
+
+    def test_validate_token_valid_returns_profile(self, jwt_secret, valid_profile):
+        token = sign_token("test-sub", "orcid", valid_profile)
+        result = validate_token(token)
+        assert result["status"] == TokenStatus.VALID
+        assert result["profile"] == valid_profile
+        assert result["error"] is None
+
+    def test_validate_token_expired_returns_expired_status(
+        self, jwt_secret, valid_profile
+    ):
+        token = sign_token("test-sub", "orcid", valid_profile, ttl=-1)
+        result = validate_token(token)
+        assert result["status"] == TokenStatus.EXPIRED
+        assert result["profile"] is None
+        assert "expired" in result["error"].lower()
+
+    def test_validate_token_tampered_returns_invalid(self, jwt_secret, valid_profile):
+        token = sign_token("test-sub", "orcid", valid_profile)
+        header, payload_b64, _ = token.split(".")
+        tampered = f"{header}.{payload_b64}.invalidsig"
+        result = validate_token(tampered)
+        assert result["status"] == TokenStatus.INVALID
+        assert result["profile"] is None
+        assert "invalid" in result["error"].lower()
+
+    def test_validate_token_garbage_returns_invalid(self, jwt_secret):
+        result = validate_token("not-a-token-at-all")
+        assert result["status"] == TokenStatus.INVALID
+        assert result["profile"] is None
+
+    def test_validate_token_none_returns_invalid(self, jwt_secret):
+        result = validate_token(None)
+        assert result["status"] == TokenStatus.INVALID
+        assert result["profile"] is None
+        assert "no token" in result["error"].lower()
+
+    def test_validate_token_empty_string_returns_invalid(self, jwt_secret):
+        result = validate_token("")
+        assert result["status"] == TokenStatus.INVALID
+
+    def test_validate_token_with_bearer_prefix(self, jwt_secret, valid_profile):
+        token = sign_token("test-sub", "orcid", valid_profile)
+        result = validate_token(f"Bearer {token}")
+        assert result["status"] == TokenStatus.VALID
+        assert result["profile"] == valid_profile
 
 
 # ─── providers/orcid.py: build_authorize_url ─────────────────────────────────
@@ -450,7 +509,7 @@ class TestAuthCallback:
         self._seed_session_state(client, "valid-state")
         response = client.get("/auth/orcid/callback?code=authcode123&state=valid-state")
         token = _token_from_location(response.headers["Location"])
-        payload = _pyjwt.decode(token, jwt_secret, algorithms=["HS256"])
+        payload = pyjwt.decode(token, jwt_secret, algorithms=["HS256"])
         assert payload["sub"] == "0000-0002-1825-0097"
         assert payload["provider"] == "orcid"
 
@@ -461,7 +520,7 @@ class TestAuthCallback:
         self._seed_session_state(client, "valid-state")
         response = client.get("/auth/orcid/callback?code=authcode123&state=valid-state")
         token = _token_from_location(response.headers["Location"])
-        profile = _pyjwt.decode(token, jwt_secret, algorithms=["HS256"])["profile"]
+        profile = pyjwt.decode(token, jwt_secret, algorithms=["HS256"])["profile"]
         assert profile["email"] == valid_profile["email"]
         assert profile["forename"] == valid_profile["forename"]
 
@@ -525,41 +584,41 @@ class TestAuthCallback:
         assert response.headers["Location"].startswith("/?token=")
 
 
-# ─── API.check_token ─────────────────────────────────────────────────────────
+# ─── API.is_token_valid ─────────────────────────────────────────────────────────
 
 
 @pytest.mark.auth
 class TestCheckToken:
     def test_valid_jwt_returns_true(self, mock_api, valid_profile):
         token = sign_token("test-sub", "orcid", valid_profile)
-        assert mock_api.check_token(token) is True
+        assert mock_api.validate_token_request(token)["is_valid"] is True
 
     def test_valid_jwt_with_bearer_prefix_returns_true(self, mock_api, valid_profile):
         token = sign_token("test-sub", "orcid", valid_profile)
-        assert mock_api.check_token(f"Bearer {token}") is True
+        assert mock_api.validate_token_request(f"Bearer {token}")["is_valid"] is True
 
     def test_expired_jwt_returns_false(self, mock_api, valid_profile):
         token = sign_token("test-sub", "orcid", valid_profile, ttl=-1)
-        assert mock_api.check_token(token) is False
+        assert mock_api.validate_token_request(token)["is_valid"] is False
 
     def test_tampered_signature_returns_false(self, mock_api, valid_profile):
         token = sign_token("test-sub", "orcid", valid_profile)
         header, payload_b64, _ = token.split(".")
         tampered = f"{header}.{payload_b64}.invalidsig"
-        assert mock_api.check_token(tampered) is False
+        assert mock_api.validate_token_request(tampered)["is_valid"] is False
 
     def test_garbage_string_returns_false(self, mock_api):
-        assert mock_api.check_token("not-a-token") is False
+        assert mock_api.validate_token_request("not-a-token")["is_valid"] is False
 
     def test_empty_string_returns_false(self, mock_api):
-        assert mock_api.check_token("") is False
+        assert mock_api.validate_token_request("")["is_valid"] is False
 
     def test_none_returns_false(self, mock_api):
-        assert mock_api.check_token(None) is False
+        assert mock_api.validate_token_request(None)["is_valid"] is False
 
     def test_wrong_secret_returns_false(self, mock_api, monkeypatch, valid_profile):
         # Token signed with a different secret should be rejected
         monkeypatch.setenv("TARXIV_JWT_SECRET", "different-secret-long-32-bytes!!")
         token = sign_token("sub", "orcid", valid_profile)
         monkeypatch.setenv("TARXIV_JWT_SECRET", _TEST_JWT_SECRET)
-        assert mock_api.check_token(token) is False
+        assert mock_api.validate_token_request(token)["is_valid"] is False
