@@ -8,7 +8,7 @@ from paste.translogger import TransLogger
 
 from .utils import TarxivModule
 from .database import TarxivDB
-from .auth import sign_token, verify_token, PROVIDERS
+from .auth import sign_token, PROVIDERS, validate_token, TokenStatus
 
 
 class API(TarxivModule):
@@ -74,15 +74,16 @@ class API(TarxivModule):
         cherrypy.engine.start()
         cherrypy.engine.block()
 
-    def check_token(self, token: str) -> bool:
-        """Validate a TarXiv JWT from an Authorization header."""
-        if not token:
-            return False
-        try:
-            verify_token(token)
-            return True
-        except Exception:
-            return False
+    def validate_token_request(self, token: str) -> dict:
+        """Validate a JWT and return structured status for error handling."""
+
+        result = validate_token(token)
+        return {
+            "is_valid": result["status"] == TokenStatus.VALID,
+            "status": result["status"],
+            "profile": result["profile"],
+            "error": result["error"],
+        }
 
     def routes(self):
         # Basic index route for testing server is running
@@ -133,8 +134,6 @@ class API(TarxivModule):
         # endpoints for the API
         @self.app.route("/get_object_meta/<string:obj_name>", methods=["POST"])
         def get_object_meta(obj_name):
-            # Get request json (HFS: no longer used 2025-10-24)
-            # request_json = request.get_json()
             token = request.headers.get("Authorization")
             # Start log
             log = {
@@ -146,8 +145,12 @@ class API(TarxivModule):
 
             try:
                 # Return error if bad token
-                if self.check_token(token) is False:
-                    raise PermissionError("bad token")
+                validation = self.validate_token_request(token)
+                if not validation["is_valid"]:
+                    if validation["status"] == "expired":
+                        raise PermissionError("Session expired — please log in again.")
+                    else:
+                        raise PermissionError("Invalid or missing token.")
                 # Find object info
                 result = self.txv_db.get(obj_name, "objects")
                 # Return nothing if bad request
@@ -174,8 +177,6 @@ class API(TarxivModule):
 
         @self.app.route("/get_object_lc/<string:obj_name>", methods=["POST"])
         def get_object_lc(obj_name):
-            # Get request json (HFS: no longer used 2025-10-24)
-            # request_json = request.get_json()
             token = request.headers.get("Authorization")
             # Start log
             log = {
@@ -186,8 +187,12 @@ class API(TarxivModule):
             }
             try:
                 # Return error if bad token
-                if self.check_token(token) is False:
-                    raise PermissionError("bad token")
+                validation = self.validate_token_request(token)
+                if not validation["is_valid"]:
+                    if validation["status"] == "expired":
+                        raise PermissionError("Session expired — please log in again.")
+                    else:
+                        raise PermissionError("Invalid or missing token.")
                 # Find object info
                 result = self.txv_db.get(obj_name, "lightcurves")
                 # Return nothing if bad request
@@ -234,7 +239,8 @@ class API(TarxivModule):
         #     }
         #     try:
         #         # Return error if bad token
-        #         if self.check_token(token) is False:
+        #         validation = self.validate_token_request(token)
+        #         if not validation["is_valid"]:
         #             raise PermissionError("bad token")
         #         # Build query
         #         query_str = (
@@ -273,11 +279,8 @@ class API(TarxivModule):
 
         @self.app.route("/cone_search", methods=["POST"])
         def cone_search():
-            # Get request json
-            # self.logger.info(f"cone_search request: {request}")
             request_json = request.get_json()
             token = request.headers.get("Authorization")
-            # self.logger.info(f"request json: {request_json}")
             # Start log
             log = {
                 "query_type": "cone_search",
@@ -287,9 +290,12 @@ class API(TarxivModule):
             }
             try:
                 # Return error if bad token
-                if self.check_token(token) is False:
-                    raise PermissionError("bad token")
-                # self.logger.info("Token accepted")
+                validation = self.validate_token_request(token)
+                if not validation["is_valid"]:
+                    if validation["status"] == "expired":
+                        raise PermissionError("Session expired — please log in again.")
+                    else:
+                        raise PermissionError("Invalid or missing token.")
                 # Extract parameters
                 ra = request_json["ra"]
                 dec = request_json["dec"]
