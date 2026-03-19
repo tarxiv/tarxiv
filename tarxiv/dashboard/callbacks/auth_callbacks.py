@@ -17,7 +17,7 @@ from ..components import create_message_banner
 
 
 def _api_login_url(provider: str = "orcid") -> str:
-    api_url = os.environ.get("TARXIV_DASHBOARD_API_URL", "").rstrip("/")
+    api_url = os.environ.get("TARXIV_EXTERNAL_API_URL", "").rstrip("/")
     return f"{api_url}/auth/{provider}/login"
 
 

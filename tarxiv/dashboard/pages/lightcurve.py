@@ -218,10 +218,7 @@ def fetch_api_data(endpoint, object_id, token, logger):
     # TODO: Refactor to use a shared API client module instead of hardcoding requests here
     host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
     port = os.getenv("TARXIV_API_PORT", "9001")
-    # api_url = os.getenv("TARXIV_DASHBOARD_API_URL", f"http://{host}:{port}")
-    # TODO: api_url still needs sorting.
-    api_url = f"http://{host}:{port}"
-    # try:
+    api_url = os.getenv("TARXIV_INTERNAL_API_URL", f"http://{host}:{port}")
     response = requests.post(
         url=f"{api_url}/{endpoint}/{object_id}",
         timeout=10,
@@ -233,9 +230,6 @@ def fetch_api_data(endpoint, object_id, token, logger):
     )
     logger.info({"info": f"{endpoint} response status: {response.status_code}"})
     return response
-    # except Exception as e:
-    #     logger.error({"error": f"Failed to fetch {endpoint}: {str(e)}"})
-    #     return None
 
 
 def get_metadata_data(object_id, token, logger):

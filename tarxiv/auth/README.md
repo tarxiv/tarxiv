@@ -74,7 +74,8 @@ Algorithm: `HS256`. Secret: `TARXIV_JWT_SECRET` environment variable (must be id
 | Variable | Description |
 |---|---|
 | `TARXIV_JWT_SECRET` | Same shared secret as above — used to verify incoming JWTs. |
-| `TARXIV_DASHBOARD_API_URL` | Full URL of the API, e.g. `https://api.tarxiv.com`. Used to construct the login redirect link. |
+| `TARXIV_INTERNAL_API_URL` | Full URL of the API for internal dash app. Used to refer to docker container. |
+| `TARXIV_EXTERNAL_API_URL` | Full URL of the API for external use. Used to redirect browser to API for OAuth logins. |
 
 ---
 
