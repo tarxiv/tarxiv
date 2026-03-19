@@ -9,7 +9,6 @@ from googleapiclient.errors import HttpError
 from queue import Queue, Empty
 from bs4 import BeautifulSoup
 import threading
-import signal
 import base64
 import time
 import os
@@ -63,11 +62,6 @@ class Gmail(TarxivModule):
         self.t = None
         # Create internal queue
         self.q = Queue()
-        # Create stop flag for monitoring
-        self.stop_event = threading.Event()
-        # Signals
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
 
     def poll(self, timeout=1):
         """Once we have began monitoring notices, poll the queue for new messages and alerts
@@ -219,16 +213,6 @@ class Gmail(TarxivModule):
                 # Submit to queue for processing
                 self.q.put(alerts)
 
-    def _signal_handler(self, sig, frame):
-        status = {
-            "status": "received exit signal",
-            "signal": str(sig),
-            "frame": str(frame),
-        }
-        self.logger.info(status, extra=status)
-        self.stop_monitoring()
-        os._exit(1)
-
 
 class IMAP(TarxivModule):
     """Module for interfacing with an IMAP email server and parsing TNS alerts."""
@@ -264,9 +248,6 @@ class IMAP(TarxivModule):
         self.q = Queue()
         # Create stop flag for monitoring
         self.stop_event = threading.Event()
-        # Signals
-        # signal.signal(signal.SIGINT, self._signal_handler)
-        # signal.signal(signal.SIGTERM, self._signal_handler)
 
     def poll(self, timeout=1):
         """Once we have began monitoring notices, poll the queue for new messages and alerts
@@ -431,13 +412,3 @@ class IMAP(TarxivModule):
                     "error": str(e),
                 })
                 time.sleep(self.config["imap"]["polling_interval"] * 2)
-
-    def _signal_handler(self, sig, frame):
-        status = {
-            "status": "received exit signal",
-            "signal": str(sig),
-            "frame": str(frame),
-        }
-        self.logger.info(status, extra=status)
-        self.stop_monitoring()
-        os._exit(1)

@@ -1,5 +1,5 @@
 import dash
-from dash import html, callback, no_update, dcc
+from dash import html, callback, no_update, dcc, clientside_callback
 from dash.dependencies import Input, Output, State
 from dash_extensions import Keyboard
 from flask import current_app, request
@@ -171,46 +171,50 @@ def search_navigation(n_clicks, n_keydowns, object_id):
     return f"/lightcurve/{object_id}"
 
 
-@callback(
-    Output("aladin-lite-runjs", "run"),
-    # Triggered by the search-store or metadata container being updated
+clientside_callback(
+    """
+    function(storeData) {
+    if (!storeData) return;
+
+    const ra = storeData.ra_deg[0].value;
+    const dec = storeData.dec_deg[0].value;
+
+    // The ID Plotly generates for pattern-matching is complex,
+    // so we target the container expressive_card or a stable parent.
+    const graphContainer = document.body;
+
+    const observer = new MutationObserver((mutations, obs) => {
+        // Look for the Plotly internal class that signifies rendering is done
+        const graphExists = document.querySelector('.js-plotly-plot');
+
+        if (graphExists) {
+            obs.disconnect(); // Stop watching
+
+            window.A.init.then(() => {
+                const container = document.getElementById('aladin-lite-div');
+                if (container) {
+                    container.innerHTML = '';
+                    window.A.aladin('#aladin-lite-div', {
+                        survey: 'P/PanSTARRS/DR1/color-z-zg-g',
+                        target: ra + ' ' + dec,
+                        fov: 0.025,
+                    });
+                }
+            });
+        }
+    });
+
+    observer.observe(graphContainer, {
+        childList: true,
+        subtree: true
+    });
+
+    return "Observer active";
+}
+    """,
+    Output("aladin-status-dummy", "children"),
     Input("lightcurve-meta-store", "data"),
 )
-def update_aladin_viewer(store_data):
-    """Triggers the Aladin JS ONLY when new data arrives."""
-    if not store_data:
-        return no_update
-
-    # Extract RA/Dec from your stored metadata
-    # (Assuming your store_data has these keys)
-    print(f"Received store data for Aladin: {store_data}")
-    ra = store_data.get("ra_deg", 0)[0].get("value", 0)
-    dec = store_data.get("dec_deg", 0)[0].get("value", 0)
-    print(f"Extracted RA: {ra}, Dec: {dec} for Aladin viewer.")
-
-    return generate_aladin_js(ra, dec)
-
-
-def generate_aladin_js(ra, dec):
-    """v3 compliant Aladin initialization."""
-    print(f"Generating Aladin JS for RA: {ra}, Dec: {dec}")
-    return f"""
-// Clear the div first to prevent the 'Multiple Instance' loop
-document.getElementById('aladin-lite-div').innerHTML = '';
-
-// v3 requires the .then() wrapper
-A.init.then(() => {{
-    var aladin = A.aladin('#aladin-lite-div', {{
-        survey: 'P/PanSTARRS/DR1/color-z-zg-g', // v3 uses different survey ID format
-        fov: 0.025,
-        target: '{ra} {dec}',
-        reticleColor: '#ff89ff',
-        reticleSize: 32,
-    }});
-
-    // Add your catalogs here...
-}});
-"""
 
 
 def fetch_api_data(endpoint, object_id, token, logger):

@@ -11,7 +11,6 @@ import datetime
 import deepdiff
 import traceback
 import zipfile
-import signal
 import json
 import io
 import os
@@ -227,6 +226,8 @@ class TNSPipeline(TarxivModule):
         status = {"status": "processing bulk object list", "n_objs": len(tns_df)}
         self.logger.info(status, extra=status)
         for _, obj in tns_df.iterrows():
+            if self.stop_event.is_set():
+                break
             # FRB Naming conventions are weird
             if obj["type"] == "FRB" and obj["name"][:3] != "FRB":
                 obj_name = "FRB" + obj["name"]
@@ -259,6 +260,8 @@ class TNSPipeline(TarxivModule):
         # Pull TNS info and update
         for obj_name in daily_objects:
             try:
+                if self.stop_event.is_set():
+                    break
                 # Get survey information
                 obj_meta, obj_lc, update_meta = self.get_object(obj_name)
                 # Upsert to database
@@ -289,15 +292,12 @@ class TNSPipeline(TarxivModule):
                 )
 
     def run_pipeline(self):
-        # Set signals
-        signal.signal(signal.SIGINT, handler=self.signal_handler)
-        # signal.signal(signal.SIGTERM, handler=self.signal_handler)
 
         # Start monitoring notices
         self.gmail.monitor_notices()
 
         # Run logic loop
-        while True:
+        while not self.stop_event.is_set():
             # Get next message
             alerts = self.gmail.poll(timeout=1)
 
@@ -333,12 +333,3 @@ class TNSPipeline(TarxivModule):
                             "exception": stack_trace,
                         }
                     )
-
-    def signal_handler(self, sig, frame):
-        status = {
-            "status": "received exit signal",
-            "signal": str(sig),
-            "frame": str(frame),
-        }
-        self.logger.info(status, extra=status)
-        os._exit(1)

@@ -61,6 +61,37 @@ if ! [ -f "$FILE" ]; then
     --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
     --bucket tarxiv --create-collection tns.lightcurves
   sleep 2
+
+  # Create xmatch scope
+  /opt/couchbase/bin/couchbase-cli collection-manage \
+    -c http://$TARXIV_COUCHBASE_HOST:8091 \
+    --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+    --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --bucket tarxiv --create-scope xmatch
+  sleep 2
+  # Create hits collection`
+  /opt/couchbase/bin/couchbase-cli collection-manage \
+    -c http://$TARXIV_COUCHBASE_HOST:8091 \
+    --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+    --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --bucket tarxiv --create-collection xmatch.hits
+  sleep 2
+  # Create alerts collection`
+  /opt/couchbase/bin/couchbase-cli collection-manage \
+    -c http://$TARXIV_COUCHBASE_HOST:8091 \
+    --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+    --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --bucket tarxiv --create-collection xmatch.alerts
+  sleep 2
+  # Create alerts collection`
+  /opt/couchbase/bin/couchbase-cli collection-manage \
+    -c http://$TARXIV_COUCHBASE_HOST:8091 \
+    --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+    --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --bucket tarxiv --create-collection xmatch.idx
+  sleep 2
+
+
   # Create indexes
   echo "building indexes"
   /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
@@ -69,6 +100,36 @@ if ! [ -f "$FILE" ]; then
   /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
     --script "CREATE PRIMARY INDEX ON tarxiv.tns.lightcurves"
   sleep 2
+  # Indexes for xmatch
+  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --script "CREATE PRIMARY INDEX ON tarxiv.xmatch.hits"
+  sleep 2
+  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --script "CREATE PRIMARY INDEX ON tarxiv.xmatch.alerts"
+  sleep 2
+  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --script "CREATE PRIMARY INDEX ON tarxiv.xmatch.idx"
+  sleep 2
+  # Index for sub querys
+  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --script "CREATE INDEX detection_idx ON tarxiv.xmatch.hits (ALL ARRAY id.name FOR id IN identifiers END)"
+  sleep 2
+  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --script "CREATE INDEX update_idx ON tarxiv.xmatch.hits(updated_at)"
+  sleep 2
+
+
+  # Submit initial values counts into idx (hopefully wont have to worry about this in 2030)
+  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --script "INSERT INTO tarxiv.xmatch.idx (KEY, VALUE)
+              VALUES
+                (\"2026\", { \"current_idx\": 0}),
+                (\"2027\", { \"current_idx\": 0}),
+                (\"2028\", { \"current_idx\": 0}),
+                (\"2029\", { \"current_idx\": 0}),
+                (\"2030\", { \"current_idx\": 0});"
+  sleep 2
+
   # Create user and enable roles
   echo "Assinging user roles"
   /opt/couchbase/bin/couchbase-cli user-manage \

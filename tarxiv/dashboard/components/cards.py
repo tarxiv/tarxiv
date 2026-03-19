@@ -4,7 +4,6 @@ import dash_mantine_components as dmc
 from dash import dcc, html
 from dash_iconify import DashIconify
 
-import visdcc
 import json
 from ..styles import CARD_STYLE
 
@@ -283,9 +282,8 @@ def format_object_metadata(object_id, meta, logger=None):
                     value = str(value[0])
             summary_items.append(
                 dmc.Text(
-                    dmc.Text(f"{label}: {value}"),
-                    style={"marginBottom": "6px"},
-                )
+                    f"{label}: {value}",
+                ),
             )
 
     return dmc.Stack(
@@ -320,11 +318,8 @@ def format_object_metadata(object_id, meta, logger=None):
             ),
             expressive_card(
                 children=[
-                    dcc.Loading(
-                        visdcc.Run_js(
-                            id="aladin-lite-runjs",
-                        )
-                    ),
+                    # A hidden div to receive the "success" message from our JS
+                    html.Div(id="aladin-status-dummy", style={"display": "none"}),
                     html.Div(
                         id="aladin-lite-div",
                         style={"width": "100%", "height": "500px"},

@@ -40,9 +40,12 @@ dependencies = [
     "dash-mantine-components",
     "dash-iconify",
     "dash-extensions",
-    "visdcc",
     "pydantic",
     "PyJWT>=2.8",
+    "lasair",
+    "fink_client",
+    "confluent_kafka",
+    "pyspark"
 ]
 requires-python = ">=3.11,<3.14"
 

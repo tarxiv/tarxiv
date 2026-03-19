@@ -52,5 +52,17 @@
     "bibcode": "2020MNRAS.492.4768D",
     "reference": "Ducoin et al. 2020",
     "alias": 8
+  },
+  "lasair": {
+    "name": "lasair",
+    "bibcode": "2019RNAAS...3...26S",
+    "reference": "Smith et al. 2019",
+    "alias": 8
+  },
+  "lsst": {
+    "name": "lsst_survey",
+    "bibcode": "2020arXiv200111067B",
+    "reference": "Brough et al. 2020",
+    "alias": 8
   }
 }

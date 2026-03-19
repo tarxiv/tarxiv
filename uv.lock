@@ -3020,7 +3020,6 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
     { name = "skypatrol" },
-    { name = "visdcc" },
     { name = "werkzeug" },
 ]
 
@@ -3071,7 +3070,6 @@ requires-dist = [
     { name = "requests" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "skypatrol" },
-    { name = "visdcc" },
     { name = "werkzeug" },
 ]
 provides-extras = ["dev"]
@@ -3285,18 +3283,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c7/24/5f1b3bdffd70275f6661c76461e25f024d5a38a46f04aaca912426a2b1d3/urllib3-2.6.3.tar.gz", hash = "sha256:1b62b6884944a57dbe321509ab94fd4d3b307075e0c2eae991ac71ee15ad38ed", size = 435556, upload-time = "2026-01-07T16:24:43.925Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/39/08/aaaad47bc4e9dc8c725e68f9d04865dbcb2052843ff09c97b08904852d84/urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4", size = 131584, upload-time = "2026-01-07T16:24:42.685Z" },
-]
-
-[[package]]
-name = "visdcc"
-version = "0.0.63"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "dash" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/2d/71/2f9ecfafb138e4dd776c6ee95020d3125262dc46a58525a83a7b9337a591/visdcc-0.0.63.tar.gz", hash = "sha256:3c11b24f3a63060b90fa40b260aa7296329ae46f7239cff20daa1b4f753f3400", size = 1770894, upload-time = "2025-03-20T08:54:06.055Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/05/af/cf2d4d57c55a14480ea83f1f609183b5ad877b322b1fbb8d8afc32a14355/visdcc-0.0.63-py3-none-any.whl", hash = "sha256:f4ac6f53ba1269a80c190f54395755af73a3cd537159d845f3be00d4501f4037", size = 1783369, upload-time = "2025-03-20T08:54:03.957Z" },
 ]
 
 [[package]]
