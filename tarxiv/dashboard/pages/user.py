@@ -96,15 +96,16 @@ def layout(**kwargs):
                                     id="api-token",
                                     truncate=True,
                                 ),
-                                dmc.CopyButton(  # TODO: WHY DOESN'T THIS WORK?!?!
-                                    id="copy-token-button",
-                                    value=token,
-                                    children="Copy to clipboard",
-                                    # timeout=60 * 1000,  # Reset after 1 minute
-                                    # color=var(--tarxiv-primary),
-                                    variant="outline",
-                                    size="xs",
-                                ),
+                                # dmc.CopyButton(  # TODO: WHY DOESN'T THIS WORK?!?!
+                                #     id="copy-token-button",
+                                #     value=str(token),
+                                #     children="Copy to clipboard",
+                                #     timeout=60 * 1000,  # Reset after 1 minute
+                                #     variant="outline",
+                                #     size="xs",
+                                #     copiedColor="blue",
+                                #     copiedChildren="Copied!",
+                                # ),
                             ]
                         ),
                     ],
