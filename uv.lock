@@ -620,6 +620,20 @@ toml = [
 ]
 
 [[package]]
+name = "coveralls"
+version = "4.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "coverage", extra = ["toml"] },
+    { name = "requests" },
+    { name = "typer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/97/16/aa263cb5450de470234f5176ce42664c5e0535aab1a2094b739447065797/coveralls-4.1.0.tar.gz", hash = "sha256:dab364025ba80cbb95ce56c6fc62cd9172d7fd637060ea235dde99d9b46a4494", size = 12736, upload-time = "2026-02-28T15:16:47.591Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/f1/5a884d2e8e3e7e7d854d3032b777bd22aad1598161cf9aa77ac37d684908/coveralls-4.1.0-py3-none-any.whl", hash = "sha256:bfacfda2d443c24fc90d67035027cec15015fff2dbd036427e8bf8f4953dda2e", size = 14168, upload-time = "2026-02-28T15:16:46.181Z" },
+]
+
+[[package]]
 name = "cryptography"
 version = "46.0.5"
 source = { registry = "https://pypi.org/simple" }
@@ -862,6 +876,29 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/20/b5/23b216d9d985a956623b6bd12d4086b60f0059b27799f23016af04a74ea1/fastjsonschema-2.21.2.tar.gz", hash = "sha256:b1eb43748041c880796cd077f1a07c3d94e93ae84bba5ed36800a33554ae05de", size = 374130, upload-time = "2025-08-14T18:49:36.666Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/a8/20d0723294217e47de6d9e2e40fd4a9d2f7c4b6ef974babd482a59743694/fastjsonschema-2.21.2-py3-none-any.whl", hash = "sha256:1c797122d0a86c5cace2e54bf4e819c36223b552017172f32c5c024a6b77e463", size = 24024, upload-time = "2025-08-14T18:49:34.776Z" },
+]
+
+[[package]]
+name = "fink-client"
+version = "10.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "astropy" },
+    { name = "confluent-kafka" },
+    { name = "coverage" },
+    { name = "coveralls" },
+    { name = "fastavro" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "psutil" },
+    { name = "pyarrow" },
+    { name = "pyyaml" },
+    { name = "tabulate" },
+    { name = "tqdm" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e7/0d/0cc673d060e1cba49856ce1ed954a9d8a419d3d1c70c58aae2677f062cf7/fink_client-10.1-py3-none-any.whl", hash = "sha256:434964e1d22a5ca1db8f4eeeb62652c959dda43582cc7dbb1fc13569a9be65b8", size = 39138, upload-time = "2026-02-26T11:46:31.194Z" },
 ]
 
 [[package]]
@@ -1678,6 +1715,15 @@ wheels = [
 ]
 
 [[package]]
+name = "lasair"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5f/b8/c72f8bb737f8b5621d12d8532de98f421868521c07f49b360713436fee67/lasair-0.1.2.tar.gz", hash = "sha256:6d52588e81df8665bb3229a7f92df1364c7ec5c3ae79a15245f3005a18a69ef6", size = 13523, upload-time = "2025-11-21T15:08:32.904Z" }
+
+[[package]]
 name = "limits"
 version = "5.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2319,6 +2365,15 @@ wheels = [
 ]
 
 [[package]]
+name = "py4j"
+version = "0.10.9.9"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/38/31/0b210511177070c8d5d3059556194352e5753602fa64b85b7ab81ec1a009/py4j-0.10.9.9.tar.gz", hash = "sha256:f694cad19efa5bd1dee4f3e5270eb406613c974394035e5bfc4ec1aba870b879", size = 761089, upload-time = "2025-01-15T03:53:18.624Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bd/db/ea0203e495be491c85af87b66e37acfd3bf756fd985f87e46fc5e3bf022c/py4j-0.10.9.9-py2.py3-none-any.whl", hash = "sha256:c7c26e4158defb37b0bb124933163641a2ff6e3a3913f7811b0ddbe07ed61533", size = 203008, upload-time = "2025-01-15T03:53:15.648Z" },
+]
+
+[[package]]
 name = "pyarrow"
 version = "23.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2521,6 +2576,15 @@ sdist = { url = "https://files.pythonhosted.org/packages/f3/91/9c6ee907786a473bf
 wheels = [
     { url = "https://files.pythonhosted.org/packages/10/bd/c038d7cc38edc1aa5bf91ab8068b63d4308c66c4c8bb3cbba7dfbc049f9c/pyparsing-3.3.2-py3-none-any.whl", hash = "sha256:850ba148bd908d7e2411587e247a1e4f0327839c40e2e5e6d05a007ecc69911d", size = 122781, upload-time = "2026-01-21T03:57:55.912Z" },
 ]
+
+[[package]]
+name = "pyspark"
+version = "4.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "py4j" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/19/bf/58ee13add151469c25825b7125bbf62c3bdcec05eec4d458fcb5c5516066/pyspark-4.1.1.tar.gz", hash = "sha256:77f78984aa84fbe865c717dd37b49913b4e5c97d76ef6824f932f1aefa6621ec", size = 455359625, upload-time = "2026-01-09T09:38:38.28Z" }
 
 [[package]]
 name = "pytest"
@@ -2991,6 +3055,15 @@ wheels = [
 ]
 
 [[package]]
+name = "tabulate"
+version = "0.10.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/46/58/8c37dea7bbf769b20d58e7ace7e5edfe65b849442b00ffcdd56be88697c6/tabulate-0.10.0.tar.gz", hash = "sha256:e2cfde8f79420f6deeffdeda9aaec3b6bc5abce947655d17ac662b126e48a60d", size = 91754, upload-time = "2026-03-04T18:55:34.402Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/99/55/db07de81b5c630da5cbf5c7df646580ca26dfaefa593667fc6f2fe016d2e/tabulate-0.10.0-py3-none-any.whl", hash = "sha256:f0b0622e567335c8fabaaa659f1b33bcb6ddfe2e496071b743aa113f8774f2d3", size = 39814, upload-time = "2026-03-04T18:55:31.284Z" },
+]
+
+[[package]]
 name = "tarxiv"
 version = "0.0.9"
 source = { editable = "." }
@@ -2999,22 +3072,26 @@ dependencies = [
     { name = "atlasapiclient" },
     { name = "beautifulsoup4" },
     { name = "cherrypy" },
+    { name = "confluent-kafka" },
     { name = "couchbase" },
     { name = "dash" },
     { name = "dash-extensions" },
     { name = "dash-iconify" },
     { name = "dash-mantine-components" },
     { name = "deepdiff" },
+    { name = "fink-client" },
     { name = "flask" },
     { name = "google-api-python-client" },
     { name = "google-auth" },
     { name = "google-auth-oauthlib" },
     { name = "google-cloud" },
     { name = "hop-client" },
+    { name = "lasair" },
     { name = "pandas" },
     { name = "paste" },
     { name = "pydantic" },
     { name = "pyjwt" },
+    { name = "pyspark" },
     { name = "pytest" },
     { name = "python-logstash-async" },
     { name = "pyyaml" },
@@ -3044,12 +3121,14 @@ requires-dist = [
     { name = "atlasapiclient" },
     { name = "beautifulsoup4" },
     { name = "cherrypy" },
+    { name = "confluent-kafka" },
     { name = "couchbase" },
     { name = "dash", specifier = ">=3.3.0" },
     { name = "dash-extensions" },
     { name = "dash-iconify" },
     { name = "dash-mantine-components" },
     { name = "deepdiff" },
+    { name = "fink-client" },
     { name = "flask" },
     { name = "google-api-python-client" },
     { name = "google-auth" },
@@ -3058,10 +3137,12 @@ requires-dist = [
     { name = "hop-client" },
     { name = "ipython", marker = "extra == 'dev'" },
     { name = "jupyter", marker = "extra == 'dev'" },
+    { name = "lasair" },
     { name = "pandas" },
     { name = "paste" },
     { name = "pydantic" },
     { name = "pyjwt", specifier = ">=2.8" },
+    { name = "pyspark" },
     { name = "pytest" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
