@@ -93,6 +93,8 @@ class API(TarxivModule):
 
         @self.app.route("/auth/<string:provider>/login", methods=["GET"])
         def auth_login(provider):
+            status = {"status": f"login attempt for provider {provider}"}
+            self.logger.info(status, extra=status)
             if provider not in PROVIDERS:
                 return server_response({"error": f"Unknown provider: {provider}"}, 404)
             state = secrets.token_urlsafe(16)
@@ -102,19 +104,38 @@ class API(TarxivModule):
                 auth_url = PROVIDERS[provider].build_authorize_url(state)
             except RuntimeError as exc:
                 return server_response({"error": str(exc)}, 500)
+            status = {
+                "status": f"redirecting to {provider} for authentication",
+                "auth_url": auth_url,
+            }
+            self.logger.info(status, extra=status)
             return redirect(auth_url)
 
         @self.app.route("/auth/<string:provider>/callback", methods=["GET"])
         def auth_callback(provider):
+            status = {"status": f"handling callback from provider {provider}"}
+            self.logger.info(status, extra=status)
+
             if provider not in PROVIDERS:
                 return server_response({"error": f"Unknown provider: {provider}"}, 404)
+
             state = request.args.get("state")
             code = request.args.get("code")
+
+            status = {"status": f"received callback with state {state} and code {code}"}
+            self.logger.info(status, extra=status)
+
             if not code:
                 return server_response({"error": "Missing authorization code"}, 400)
             expected_state = session.pop("oauth_state", None)
             if expected_state and state != expected_state:
                 return server_response({"error": "Invalid OAuth state"}, 400)
+
+            status = {
+                "status": f"completing login for provider {provider} with code {code}"
+            }
+            self.logger.info(status, extra=status)
+
             try:
                 result = PROVIDERS[provider].complete_login(code)
             except Exception as exc:
@@ -128,6 +149,12 @@ class API(TarxivModule):
                 profile=result["profile"],
             )
             dashboard_url = os.environ.get("TARXIV_DASHBOARD_URL", "/")
+            status = {
+                "status": "authentication successful, redirecting to dashboard with token",
+                "dashboard_url": dashboard_url,
+                "token": token,
+            }
+            self.logger.info(status, extra=status)
             return redirect(f"{dashboard_url.rstrip('/')}/?token={token}")
 
         # HFS - 2025-05-28: These self.app.route things are Flask decorators which become

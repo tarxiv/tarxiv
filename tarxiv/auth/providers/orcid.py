@@ -54,6 +54,8 @@ def _require_env(name: str) -> str:
     value = os.environ.get(name)
     if not value:
         raise RuntimeError(f"Missing required environment variable: {name}")
+    status = {"status": f"environment variable {name} is set to {value}"}
+    logger.info(status, extra=status)
     return value
 
 
@@ -67,6 +69,8 @@ def build_authorize_url(state: str) -> str:
         # "redirect_uri": f"{_require_env('VIRTUAL_HOST').rstrip('/')}/auth/orcid/callback",
         "state": state,
     }
+    status = {"status": "building ORCID authorization URL", "params": params}
+    logger.info(status, extra=status)
     return f"{ORCID_AUTH_URL}?{urlencode(params)}"
 
 
@@ -79,12 +83,23 @@ def _exchange_code(code: str) -> Dict[str, Any]:
         "redirect_uri": _require_env("TARXIV_ORCID_REDIRECT_URI"),
         # "redirect_uri": f"{_require_env('VIRTUAL_HOST').rstrip('/')}/auth/orcid/callback",
     }
+    status = {
+        "status": "exchanging ORCID authorization code for access token",
+        "payload": payload,
+    }
+    logger.info(status, extra=status)
     response = requests.post(
         ORCID_TOKEN_URL,
         data=payload,
         headers={"Accept": "application/json"},
         timeout=20,
     )
+    status = {
+        "status": "received response from ORCID token exchange",
+        "response_status": response.status_code,
+        "response_body": response.text,
+    }
+    logger.info(status, extra=status)
     if not response.ok:
         raise RuntimeError(f"ORCID token exchange failed: {response.text}")
     return response.json()
@@ -92,6 +107,8 @@ def _exchange_code(code: str) -> Dict[str, Any]:
 
 def _fetch_person(orcid_id: str, access_token: str) -> Dict[str, Any]:
     url = f"{ORCID_API_BASE}/{orcid_id}/person"
+    status = {"status": "fetching ORCID profile", "orcid_id": orcid_id, "url": url}
+    logger.info(status, extra=status)
     response = requests.get(
         url,
         headers={
@@ -100,6 +117,12 @@ def _fetch_person(orcid_id: str, access_token: str) -> Dict[str, Any]:
         },
         timeout=20,
     )
+    status = {
+        "status": "received response from ORCID profile fetch",
+        "response_status": response.status_code,
+        "response_body": response.text,
+    }
+    logger.info(status, extra=status)
     if not response.ok:
         logger.warning("Failed to fetch ORCID profile: %s", response.text)
         return {}
@@ -133,6 +156,12 @@ def complete_login(code: str) -> Dict[str, Any]:
     token_data = _exchange_code(code)
     orcid_id = token_data.get("orcid")
     access_token = token_data.get("access_token")
+    status = {
+        "status": "extracted ORCID token data",
+        "orcid_id": orcid_id,
+        "token_data": token_data,
+    }
+    logger.info(status, extra=status)
     if not orcid_id or not access_token:
         raise RuntimeError("ORCID login did not return a user identifier.")
 
@@ -151,6 +180,9 @@ def complete_login(code: str) -> Dict[str, Any]:
         surname=name["family"],
         bio=(person.get("biography") or {}).get("content"),
     ).model_dump(exclude_none=True)
+
+    status = {"status": "constructed normalised ORCID profile", "profile": profile}
+    logger.info(status, extra=status)
 
     return {
         "sub": orcid_id,
