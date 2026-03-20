@@ -1,7 +1,6 @@
 """Auth UI components for the dashboard."""
 
 from dash import html
-import dash_mantine_components as dmc
 from ..styles import (
     AVATAR_STYLE,
     AVATAR_FALLBACK_STYLE,
