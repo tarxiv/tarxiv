@@ -368,7 +368,7 @@ def format_cone_search_results(
                         [
                             dmc.Anchor(
                                 f"{obj_name}",
-                                href="#",
+                                href=f"/lightcurve/{obj_name}",
                                 id={"type": "object-link", "index": idx},
                                 underline="always",
                                 style={
