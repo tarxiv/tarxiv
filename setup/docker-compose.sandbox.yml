@@ -1,7 +1,6 @@
 services:
   tarxiv-api:
     environment:
-      TARXIV_ORCID_BASE_URL: ${TARXIV_ORCID_BASE_URL:-https://sandbox.orcid.org}
       TARXIV_ORCID_REDIRECT_URI: ${TARXIV_ORCID_REDIRECT_URI:-}
       VIRTUAL_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.sandbox.tarxiv.com}
       LETSENCRYPT_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.sandbox.tarxiv.com}

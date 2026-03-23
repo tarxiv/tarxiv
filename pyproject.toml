@@ -36,11 +36,12 @@ dependencies = [
     "paste",
     "cherrypy",
     "python-logstash-async>=4.0.0",
-    "dash>=3.2.0",
+    "dash>=3.3.0",
     "dash-mantine-components",
     "dash-iconify",
     "dash-extensions",
     "pydantic",
+    "PyJWT>=2.8",
     "lasair",
     "fink_client",
     "confluent_kafka",
@@ -68,4 +69,10 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "imap",
     "gmail",
+    "auth: marks tests for the authentication system (token_utils, providers, API auth routes)",
+]
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.0.0",
 ]

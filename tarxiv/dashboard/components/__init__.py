@@ -1,6 +1,13 @@
 """Dashboard components."""
 
-from .plots import create_lightcurve_plot, create_sky_plot
+from .auth import (
+    avatar_fallback,
+    avatar_image,
+)
+from .plots import (
+    create_lightcurve_plot,
+    create_sky_plot,
+)
 from .cards import (
     format_object_metadata,
     format_cone_search_results,
@@ -23,6 +30,8 @@ from .cookies import (
 )
 
 __all__ = [
+    "avatar_fallback",
+    "avatar_image",
     "create_lightcurve_plot",
     "create_sky_plot",
     "format_object_metadata",

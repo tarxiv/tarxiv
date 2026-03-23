@@ -122,11 +122,26 @@ def expressive_card(children, title=None, title_order: int = 2, **kwargs):
 
 
 def create_nav_item(
-    icon: str,
+    icon,
     label: str,
     is_active: bool,
     id: str = "",
 ):
+    icon_container = (
+        DashIconify(icon=icon, width=35, id=id)
+        if isinstance(icon, str)
+        else html.Div(
+            icon,
+            style={
+                "width": "35px",
+                "height": "35px",
+                "display": "flex",
+                "alignItems": "center",
+                "justifyContent": "center",
+            },
+        )
+    )
+
     return dmc.UnstyledButton(
         className="nav-item-hover",
         px=2,
@@ -143,8 +158,7 @@ def create_nav_item(
             "transition": "background-color 200ms ease",
         },
         children=[
-            # DashIconify(icon=icon, width=28, id=id),
-            DashIconify(icon=icon, width=35, id=id),
+            icon_container,
             dmc.Text(
                 label,
                 size="xs",
@@ -354,7 +368,7 @@ def format_cone_search_results(
                         [
                             dmc.Anchor(
                                 f"{obj_name}",
-                                href="#",
+                                href=f"/lightcurve/{obj_name}",
                                 id={"type": "object-link", "index": idx},
                                 underline="always",
                                 style={
