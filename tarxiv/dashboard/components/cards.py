@@ -1,10 +1,12 @@
 """Card components for displaying object data."""
 
+import json
+from typing import Literal
+
 import dash_mantine_components as dmc
 from dash import dcc, html
 from dash_iconify import DashIconify
 
-import json
 from ..styles import CARD_STYLE
 
 
@@ -81,12 +83,15 @@ def footer_card():
     )
 
 
-def expressive_card(children, title=None, title_order: int = 2, **kwargs):
+def expressive_card(
+    children, title=None, title_order: Literal[1, 2, 3, 4, 5, 6] = 2, **kwargs
+):
     """Create a styled card with expressive design.
 
     Args:
         children: List of child components
         title: Optional title for the card
+        title_order: Heading order (1-6)
         **kwargs: Additional keyword arguments for dmc.Paper
 
     Returns
@@ -247,17 +252,13 @@ def format_object_metadata(object_id, meta, logger=None):
 
     Args:
         object_id: Object identifier
-        meta: Metdata dictionary
+        meta: Metadata dictionary
         logger: Optional logger instance
 
     Returns
     -------
         html.Div containing formatted cards
     """
-    # Create a summary card
-    summary_items = []
-
-    # Extract key fields
     fields_to_display = [
         ("identifiers", "Identifiers"),
         ("ra_deg", "RA (deg)"),
@@ -270,21 +271,99 @@ def format_object_metadata(object_id, meta, logger=None):
         ("redshift", "Redshift"),
         ("host_name", "Host Name"),
     ]
+    field_labels = dict(fields_to_display)
 
-    for field, label in fields_to_display:
-        if field in meta and meta[field]:
-            value = meta[field]
-            # Format list values
-            if isinstance(value, list) and len(value) > 0:
-                if isinstance(value[0], dict) and "value" in value[0]:
-                    value = value[0]["value"]
+    sources_data = meta.get("sources", [])
+    source_names = []
+    for s in sources_data:
+        name = s.get("name") if isinstance(s, dict) else s
+        if isinstance(name, str) and name and name not in source_names:
+            source_names.append(name)
+
+    if "tns" in source_names:
+        source_names.remove("tns")
+        source_names.insert(0, "tns")
+
+    source_variant_map = {
+        "tns": ["tns"],
+        "atlas_survey": ["atlas_survey", "atlas"],
+        "atlas_twb": ["atlas_twb", "atlas"],
+        "ztf_survey": ["ztf_survey", "ztf"],
+        "asas-sn_survey": ["asas-sn_survey", "asas-sn"],
+        "asas-sn_skypatrol": ["asas-sn_skypatrol", "asas-sn"],
+        "sherlock": ["sherlock"],
+        "fink": ["fink"],
+        "mangrove": ["mangrove"],
+    }
+
+    variant_to_tabs = {}
+    for tab_name, variants in source_variant_map.items():
+        if tab_name not in source_names:
+            continue
+        for variant in variants:
+            variant_to_tabs.setdefault(variant, []).append(tab_name)
+
+    tab_contents = {name: [] for name in source_names}
+    default_tab = (
+        "tns" if "tns" in tab_contents else (source_names[0] if source_names else None)
+    )
+
+    for field, values in meta.items():
+        if field in {"schema", "sources"}:
+            continue
+
+        label = field_labels.get(field, field.replace("_", " ").title())
+        entries = values if isinstance(values, list) else [values]
+
+        for entry in entries:
+            if isinstance(entry, dict):
+                source_id = entry.get("source")
+                matched_tabs = variant_to_tabs.get(source_id, []) if source_id else []
+                if not matched_tabs and default_tab:
+                    matched_tabs = [default_tab]
+
+                if field == "identifiers" and "name" in entry:
+                    value = entry["name"]
+                elif "value" in entry:
+                    value = entry["value"]
                 else:
-                    value = str(value[0])
-            summary_items.append(
-                dmc.Text(
-                    f"{label}: {value}",
-                ),
+                    value = json.dumps(entry, separators=(",", ":"), default=str)
+
+                for tab in matched_tabs:
+                    tab_contents[tab].append(dmc.Text(f"{label}: {value}"))
+            elif default_tab:
+                tab_contents[default_tab].append(dmc.Text(f"{label}: {entry}"))
+
+    # Create Tabs component
+    tabs_list = []
+    tabs_panels = []
+
+    for name in source_names:
+        display_label = name.upper()
+        tabs_list.append(dmc.TabsTab(display_label, value=name))
+        panel_children = (
+            dmc.Stack(tab_contents[name], py="md")
+            if tab_contents[name]
+            else dmc.Text("No source-specific metadata available.")
+        )
+        tabs_panels.append(
+            dmc.TabsPanel(
+                panel_children,
+                value=name,
             )
+        )
+
+    metadata_component = dmc.Tabs(
+        [
+            dmc.ScrollArea(
+                dmc.TabsList(tabs_list, justify="flex-start"),
+                offsetScrollbars=True,
+                type="hover",
+            )
+        ]
+        + tabs_panels,
+        value=default_tab,
+    )
 
     return dmc.Stack(
         [
@@ -299,7 +378,7 @@ def format_object_metadata(object_id, meta, logger=None):
             ),
             # Metadata card
             expressive_card(
-                children=dmc.Stack(summary_items),
+                children=metadata_component,
                 title=f"Object Metadata: {object_id}",
             ),
             # Full JSON card
