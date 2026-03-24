@@ -11,7 +11,7 @@ from ..components import (
     format_object_metadata,
     create_message_banner,
 )
-from ..schemas import (
+from ...schemas import (
     MetadataResponseModel,
     LightcurveResponseModel,
 )

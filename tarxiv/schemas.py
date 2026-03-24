@@ -96,3 +96,29 @@ class ConeSearchResponseSingle(BaseModel):
 
 
 ConeSearchResponseModel = TypeAdapter(list[ConeSearchResponseSingle])
+
+# =============================================================================
+# Domain Models (DTOs)
+# =============================================================================
+from uuid import UUID
+from datetime import datetime
+from pydantic import BaseModel, ConfigDict
+
+
+class UserDTO(BaseModel):
+    id: UUID
+    orcid_id: str
+    provider_user_id: str | None = None
+    username: str | None = None
+    nickname: str | None = None
+    email: str | None = None
+    institution_id: UUID | None = None
+    institution: str | None = None
+    forename: str | None = None
+    surname: str | None = None
+    picture_url: str | None = None
+    bio: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
