@@ -1,5 +1,5 @@
 import dash
-from dash import html, callback, no_update, dcc
+from dash import html, callback, no_update, dcc, clientside_callback
 from dash.dependencies import Input, Output, State
 from dash_extensions import Keyboard
 from flask import current_app, request
@@ -15,10 +15,15 @@ from ..schemas import (
     MetadataResponseModel,
     LightcurveResponseModel,
 )
+from ...auth import (
+    get_authenticated_user,
+    get_jwt_from_request,
+    validate_token,
+    TokenStatus,
+)
 import requests
 from pydantic import ValidationError
 import os
-from urllib.parse import unquote
 
 dash.register_page(
     __name__,
@@ -35,21 +40,33 @@ def layout(id=None, **kwargs):
     # perform search if id is provided in URL, otherwise show empty search page
     logger = current_app.config["TXV_LOGGER"]
 
-    token = unquote(request.cookies.get("tarxiv_user_token", ""))
+    token = get_jwt_from_request(request)
+    user = get_authenticated_user(jwt_token=token)
 
-    if id and token:
+    if id and user:
         # User came via deep link and has a saved session
         results, status, banner, lc_store, meta_store = perform_search(
             id, token, logger
         )
-    elif id and not token:
+    elif id and not user:
+        validation = validate_token(token)
+
         # Deep link but no token: Show the search bar pre-filled with ID
         # but warn the user that a token is missing.
         results = html.Div()
         status = "Authentication required"
-        banner = create_message_banner(
-            "Please enter your API token to view data.", "warning"
-        )
+
+        if validation["status"] == TokenStatus.EXPIRED:
+            banner = create_message_banner(
+                "Your session has expired. Please log in again.", "warning"
+            )
+        elif validation["status"] == TokenStatus.INVALID and token:
+            banner = create_message_banner(
+                "Invalid authentication token. Please log in again.", "error"
+            )
+        else:
+            banner = create_message_banner("Please log in to view data.", "warning")
+
         lc_store = None
         meta_store = None
     else:
@@ -64,9 +81,10 @@ def layout(id=None, **kwargs):
 
     return dmc.Stack(
         children=[
-            dcc.Store(id="lightcurve-store", storage_type="session", data=lc_store),
+            # NOTE JL: Switched to memory storage since we want the data to be cleared when the user leaves the page.
+            dcc.Store(id="lightcurve-store", storage_type="memory", data=lc_store),
             dcc.Store(
-                id="lightcurve-meta-store", storage_type="session", data=meta_store
+                id="lightcurve-meta-store", storage_type="memory", data=meta_store
             ),
             title_card(
                 title_text="TarXiv Database Explorer",
@@ -92,19 +110,6 @@ def layout(id=None, **kwargs):
                                                     "width": "400px",
                                                     "marginRight": "10px",
                                                 },
-                                            ),
-                                            dmc.VisuallyHidden(
-                                                dmc.TextInput(
-                                                    # When API auth is implemented, remove this input from the UI
-                                                    # and remove the prepopulate_token() callback.
-                                                    id="token",
-                                                    placeholder="Enter a token",
-                                                    value=token,  # Pre-populate with URL parameter
-                                                    style={
-                                                        "width": "400px",
-                                                        "marginRight": "10px",
-                                                    },
-                                                )
                                             ),
                                         ],
                                         captureKeys=["Enter"],
@@ -166,67 +171,69 @@ def search_navigation(n_clicks, n_keydowns, object_id):
     return f"/lightcurve/{object_id}"
 
 
-@callback(
-    Output("aladin-lite-runjs", "run"),
-    # Triggered by the search-store or metadata container being updated
+clientside_callback(
+    """
+    function(storeData) {
+    if (!storeData) return;
+
+    const ra = storeData.ra_deg[0].value;
+    const dec = storeData.dec_deg[0].value;
+
+    // The ID Plotly generates for pattern-matching is complex,
+    // so we target the container expressive_card or a stable parent.
+    const graphContainer = document.body;
+
+    const observer = new MutationObserver((mutations, obs) => {
+        // Look for the Plotly internal class that signifies rendering is done
+        const graphExists = document.querySelector('.js-plotly-plot');
+
+        if (graphExists) {
+            obs.disconnect(); // Stop watching
+
+            window.A.init.then(() => {
+                const container = document.getElementById('aladin-lite-div');
+                if (container) {
+                    container.innerHTML = '';
+                    window.A.aladin('#aladin-lite-div', {
+                        survey: 'P/PanSTARRS/DR1/color-z-zg-g',
+                        target: ra + ' ' + dec,
+                        fov: 0.025,
+                    });
+                }
+            });
+        }
+    });
+
+    observer.observe(graphContainer, {
+        childList: true,
+        subtree: true
+    });
+
+    return "Observer active";
+}
+    """,
+    Output("aladin-status-dummy", "children"),
     Input("lightcurve-meta-store", "data"),
 )
-def update_aladin_viewer(store_data):
-    """Triggers the Aladin JS ONLY when new data arrives."""
-    if not store_data:
-        return no_update
-
-    # Extract RA/Dec from your stored metadata
-    # (Assuming your store_data has these keys)
-    print(f"Received store data for Aladin: {store_data}")
-    ra = store_data.get("ra_deg", 0)[0].get("value", 0)
-    dec = store_data.get("dec_deg", 0)[0].get("value", 0)
-    print(f"Extracted RA: {ra}, Dec: {dec} for Aladin viewer.")
-
-    return generate_aladin_js(ra, dec)
-
-
-def generate_aladin_js(ra, dec):
-    """v3 compliant Aladin initialization."""
-    print(f"Generating Aladin JS for RA: {ra}, Dec: {dec}")
-    return f"""
-// Clear the div first to prevent the 'Multiple Instance' loop
-document.getElementById('aladin-lite-div').innerHTML = '';
-
-// v3 requires the .then() wrapper
-A.init.then(() => {{
-    var aladin = A.aladin('#aladin-lite-div', {{
-        survey: 'P/PanSTARRS/DR1/color-z-zg-g', // v3 uses different survey ID format
-        fov: 0.025,
-        target: '{ra} {dec}',
-        reticleColor: '#ff89ff',
-        reticleSize: 32,
-    }});
-
-    // Add your catalogs here...
-}});
-"""
 
 
 def fetch_api_data(endpoint, object_id, token, logger):
     """Helper to perform API requests."""
-    domain = os.getenv("TARXIV_HOST")
-    port = os.getenv("TARXIV_PORT")
-    # try:
+    # TODO: Refactor to use a shared API client module instead of hardcoding requests here
+    host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
+    port = os.getenv("TARXIV_API_PORT", "9001")
+    api_url = os.getenv("TARXIV_INTERNAL_API_URL", f"http://{host}:{port}")
     response = requests.post(
-        url=f"http://{domain}:{port}/{endpoint}/{object_id}",
+        url=f"{api_url}/{endpoint}/{object_id}",
         timeout=10,
         headers={
             "accept": "application/json",
             "Content-Type": "application/json",
-            "Authorization": token,
+            "Authorization": f"Bearer {token}",
         },
     )
     logger.info({"info": f"{endpoint} response status: {response.status_code}"})
     return response
-    # except Exception as e:
-    #     logger.error({"error": f"Failed to fetch {endpoint}: {str(e)}"})
-    #     return None
 
 
 def get_metadata_data(object_id, token, logger):
@@ -235,9 +242,12 @@ def get_metadata_data(object_id, token, logger):
 
     if response.status_code == 200:
         try:
-            data = MetadataResponseModel.model_validate_json(response.text)
+            data = MetadataResponseModel.model_validate_json(
+                response.text, strict=False
+            )
             return data.model_dump()
         except ValidationError as e:
+            logger.exception(e)
             logger.error(
                 {"error": f"Failed to parse metadata for object {object_id}: {str(e)}"}
             )
@@ -306,6 +316,10 @@ def perform_search(object_id, token, logger):
             None,
         )
     except Exception as e:
+        logger.error(
+            {"error": f"Unexpected error fetching metadata for {object_id}: {str(e)}"}
+        )
+        logger.exception(e)
         return (
             html.Div(),
             "Error",

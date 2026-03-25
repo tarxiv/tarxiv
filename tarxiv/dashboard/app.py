@@ -8,6 +8,7 @@ from .callbacks import (
     register_cookie_callbacks,
     register_style_callbacks,
     register_plotting_callbacks,
+    register_auth_callbacks,
 )
 from .components import register_tarxiv_templates
 from .components.theme_manager import generate_css
@@ -58,7 +59,9 @@ class TarxivDashboard(TarxivModule):
 
     def setup_layout(self):
         """Set up the dashboard layout."""
-        self.app.layout = create_layout()
+        # self.app.layout = create_layout() # This is now wrong!!
+        # We need to set app.layout to a function that creates the layout, not the layout itself, in order to ensure that the user authentication state is evaluated on every page load. See https://dash.plotly.com/urls and https://dash.plotly.com/advanced-callbacks for details.
+        self.app.layout = create_layout
 
     def setup_themes(self):
         """Set up the dashboard themes."""
@@ -66,6 +69,7 @@ class TarxivDashboard(TarxivModule):
 
     def setup_callbacks(self):
         """Set up the dashboard callbacks."""
+        register_auth_callbacks(self.app, self.logger)
         register_cookie_callbacks(self.app, self.logger)
         register_style_callbacks(self.app, self.logger)
         register_plotting_callbacks(self.app, self.logger)

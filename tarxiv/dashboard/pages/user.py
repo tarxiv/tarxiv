@@ -1,14 +1,15 @@
 import dash
-from dash import callback, Output, Input, State, no_update, clientside_callback
 import dash_mantine_components as dmc
 from ..components.cards import (
     title_card,
     expressive_card,
-    create_message_banner,
 )
+from ..components.auth import avatar_fallback, avatar_image
+from ..styles import ORCID_BUTTON_STYLE
 from urllib.parse import unquote
+import flask
 from flask import request
-from dash_extensions import Keyboard
+from ...auth import get_authenticated_user
 
 dash.register_page(
     __name__,
@@ -21,7 +22,115 @@ dash.register_page(
 
 
 def layout(**kwargs):
-    token = unquote(request.cookies.get("tarxiv_user_token", ""))
+    token = unquote(request.cookies.get("tarxiv_token", ""))
+
+    user_profile = None
+    if flask.has_request_context():
+        user_profile = get_authenticated_user(flask.request)
+
+    if user_profile:
+        name = (
+            user_profile.get("username")
+            or user_profile.get("nickname")
+            or user_profile.get("forename")
+            or user_profile.get("email")
+            or "User"
+        )
+        email = user_profile.get("email", "")
+        avatar_src = user_profile.get("picture_url")
+        avatar = avatar_image(avatar_src) if avatar_src else avatar_fallback(name[:1])
+
+        def line(label, value):
+            return dmc.Group(
+                [dmc.Text(f"{label}: ", fw=700), dmc.Text(value or "—")], gap="xs"
+            )
+
+        auth_content = dmc.Stack(
+            [
+                dmc.Stack(
+                    id="user-profile-panel",
+                    children=[
+                        line("Institution", user_profile.get("institution")),
+                        line("Bio", user_profile.get("bio")),
+                        dmc.Text(
+                            "Tags and team membership will appear here as we flesh out permissions.",
+                            size="sm",
+                            c="dimmed",
+                        ),
+                    ],
+                ),
+                dmc.Group(
+                    id="auth-user-chip",
+                    children=[
+                        dmc.Group(id="auth-avatar-wrapper", children=avatar),
+                        dmc.Stack(
+                            [
+                                dmc.Text(name, id="auth-user-name", fw=600, size="sm"),
+                                dmc.Text(
+                                    email, id="auth-user-email", size="xs", c="dimmed"
+                                ),
+                            ],
+                            gap=0,
+                        ),
+                        dmc.Button(
+                            "Logout",
+                            id="auth-logout-button",
+                            n_clicks=0,
+                            variant="light",
+                            color="red",
+                        ),
+                    ],
+                    justify="space-between",
+                    mt="md",
+                ),
+                dmc.Group(  # Field to show token for API access. The token is very long... Include a copy to clipboard button and wrap the text
+                    id="api-token-group",
+                    children=[
+                        dmc.Text("Your API token:", size="sm", fw=500),
+                        dmc.Group(
+                            [
+                                dmc.Text(
+                                    token,
+                                    size="xs",
+                                    c="dimmed",
+                                    id="api-token",
+                                    truncate=True,
+                                ),
+                                # dmc.CopyButton(  # TODO: WHY DOESN'T THIS WORK?!?!
+                                #     id="copy-token-button",
+                                #     value=str(token),
+                                #     children="Copy to clipboard",
+                                #     timeout=60 * 1000,  # Reset after 1 minute
+                                #     variant="outline",
+                                #     size="xs",
+                                #     copiedColor="blue",
+                                #     copiedChildren="Copied!",
+                                # ),
+                            ]
+                        ),
+                    ],
+                ),
+            ]
+        )
+    else:
+        auth_content = dmc.Stack(
+            [
+                dmc.Text(
+                    "Sign in with ORCID to see your profile, tags, and teams. "
+                    "This section will grow as we add permissions and roles."
+                ),
+                dmc.Group(
+                    [
+                        dmc.Button(
+                            "Sign in with ORCID",
+                            id="auth-orcid-login",
+                            n_clicks=0,
+                            style=ORCID_BUTTON_STYLE,
+                        )
+                    ]
+                ),
+            ]
+        )
 
     return dmc.Stack(
         children=[
@@ -30,111 +139,8 @@ def layout(**kwargs):
                 subtitle_text="Explore astronomical transients and their lightcurves",
             ),
             expressive_card(
-                title="User Settings",
-                children=[
-                    dmc.Text("Enter your token here:"),
-                    dmc.Group(
-                        children=[
-                            Keyboard(
-                                dmc.PasswordInput(
-                                    id="token",
-                                    placeholder="Enter your token here",
-                                    value=token,
-                                    w=300,
-                                ),
-                                captureKeys=["Enter"],
-                                id="submit-token-keyboard",
-                                n_keydowns=0,
-                            ),
-                            dmc.Button(
-                                "Save Token",
-                                id="submit-token-button",
-                                n_clicks=0,
-                            ),
-                        ],
-                    ),
-                ],
-            ),
-            create_message_banner(
-                message="Success! Cookie has been saved.",
-                message_type="success",
-                id="cookie-result-banner-success",
-                hide=True,
-                duration=5000,  # Auto-hide after 5 seconds
-            ),
-            create_message_banner(
-                message="Failed to set cookie. Check browser permissions.",
-                message_type="error",
-                id="cookie-result-banner-failure",
-                hide=True,
+                title="ORCID Account",
+                children=[auth_content],
             ),
         ]
     )
-
-
-# Register the clientside callback to set the cookie when the token is submitted
-# if remember is checked,
-#   set a cookie that expires in 30 days
-# otherwise
-#   set a session cookie
-clientside_callback(
-    """
-    function(n_clicks, n_keydowns, token_value, cookie_permissions) {
-        // Prevent running on initial load
-        if (!n_clicks && !n_keydowns) {
-            return [true, true];
-        }
-
-        try {
-            if (cookie_permissions && cookie_permissions.remember) {
-                // Set cookie to expire in 30 days
-                document.cookie = "tarxiv_user_token=" + encodeURIComponent(token_value) + "; path=/; max-age=2592000; SameSite=Lax";
-            } else {
-                // Session cookie (expires when the browser is closed)
-                document.cookie = "tarxiv_user_token=" + encodeURIComponent(token_value) + "; path=/; SameSite=Lax";
-            }
-            return [false, true];
-        } catch (e) {
-            console.error(e);
-            return [true, false];
-        }
-    }
-    """,
-    [
-        Output("cookie-result-banner-success", "hide"),
-        Output("cookie-result-banner-failure", "hide"),
-    ],
-    [
-        Input("submit-token-button", "n_clicks"),
-        Input("submit-token-keyboard", "n_keydowns"),
-    ],
-    [
-        State("token", "value"),
-        State("cookie-consent-store", "data"),
-    ],
-    prevent_initial_call=True,
-)
-
-
-# Register the server-side callback to update the active settings store with the new token
-@callback(
-    Output("active-settings-store", "data", allow_duplicate=True),
-    [
-        Input("submit-token-button", "n_clicks"),
-        Input("submit-token-keyboard", "n_keydowns"),
-    ],
-    [
-        State("token", "value"),
-        State("active-settings-store", "data"),
-    ],
-    prevent_initial_call=True,
-)
-def save_token(n_clicks, n_keydowns, token, settings):
-    if not token:
-        return no_update  # Don't update if token is empty
-
-    settings.update(
-        {"tarxiv_user_token": token}
-    )  # Update the settings with the new token
-
-    return settings

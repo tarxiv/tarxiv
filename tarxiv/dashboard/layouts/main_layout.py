@@ -2,13 +2,17 @@
 
 from dash import html, dcc
 import dash
+import flask
 import dash_mantine_components as dmc
 from ..components import (
     get_theme_components,
     footer_card,
     get_cookie_popup,
     create_nav_link,
+    avatar_fallback,
+    avatar_image,
 )
+from ...auth import get_authenticated_user
 
 SETTING_DEFAULTS = {  # These defaults need to correspond with the PERMISSION_MAP in cookie_callbacks.py
     "theme": "tarxiv_light",
@@ -20,12 +24,36 @@ SETTING_DEFAULTS = {  # These defaults need to correspond with the PERMISSION_MA
 def create_layout() -> dmc.MantineProvider:
     """Create the main dashboard layout.
 
+    Note: This is evaluated dynamically on every page load via app.layout = create_layout
+
     Returns
     -------
         html.Div containing the complete dashboard layout
     """
     theme, theme_switch = get_theme_components()
-    user_page = dash.page_registry.get("tarxiv.dashboard.pages.user")
+    user_page = dash.page_registry.get(
+        "tarxiv.dashboard.pages.user",
+        {"name": "User", "icon": "mdi:user-outline", "relative_path": "/user"},
+    )
+
+    # Check if user is authenticated and update layout
+    user_profile = None
+    user_icon = user_page.get("icon", "mdi:help-circle")
+    if flask.has_request_context():
+        user_profile = get_authenticated_user(flask.request)
+        if user_profile:
+            name = (
+                user_profile.get("username")
+                or user_profile.get("nickname")
+                or user_profile.get("forename")
+                or user_profile.get("email")
+                or "User"
+            )
+            avatar_src = user_profile.get("picture_url")
+            user_icon = (
+                avatar_image(avatar_src) if avatar_src else avatar_fallback(name[:1])
+            )
+
     return dmc.MantineProvider(
         theme=theme,
         # children=html.Div(
@@ -56,6 +84,11 @@ def create_layout() -> dmc.MantineProvider:
                     storage_type="session",
                     data=SETTING_DEFAULTS,
                 ),
+                # Authentication and profile management
+                dcc.Location(
+                    id="auth-location", refresh=True
+                ),  # Note: Changed to refresh=True for full layout rebuilds
+                dcc.Store(id="orcid-redirect-dummy", storage_type="memory"),
                 html.Div(
                     id="dummy-output", style={"display": "none"}
                 ),  # Dummy output for clientside callback
@@ -86,9 +119,7 @@ def create_layout() -> dmc.MantineProvider:
                                 html.Div(
                                     children=[
                                         create_nav_link(
-                                            icon=user_page.get(
-                                                "icon", "mdi:help-circle"
-                                            ),
+                                            icon=user_icon,
                                             label=user_page["name"],
                                             # label=page["title"],
                                             href=user_page["relative_path"],
@@ -126,6 +157,7 @@ def create_layout() -> dmc.MantineProvider:
                                         "flex": "1"
                                     },  # Allow this div to grow to push footer down
                                     children=[
+                                        html.Div(id="auth-message-banner"),
                                         dash.page_container,
                                     ],
                                 ),

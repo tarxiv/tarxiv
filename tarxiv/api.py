@@ -1,9 +1,14 @@
-from .database import TarxivDB
-from .utils import TarxivModule
-from flask import Flask, Blueprint, request, make_response
-from paste.translogger import TransLogger
-import cherrypy
+import os
 import json
+import secrets
+
+from flask import Flask, Blueprint, request, make_response, redirect, session
+import cherrypy
+from paste.translogger import TransLogger
+
+from .utils import TarxivModule
+from .database import TarxivDB
+from .auth import sign_token, PROVIDERS, validate_token, TokenStatus
 
 
 class API(TarxivModule):
@@ -17,6 +22,10 @@ class API(TarxivModule):
             debug=debug,
         )
 
+        self.logger.info(
+            {"status": "initializing API module"},
+            extra={"status": "initializing API module"},
+        )
         # Get couchbase connection
         self.txv_db = TarxivDB("tns", "api", script_name, reporting_mode, debug)
 
@@ -37,6 +46,9 @@ class API(TarxivModule):
         status = {"status": "setting up flask application"}
         self.logger.info(status, extra=status)
         self.app = Flask(__name__)
+        self.app.secret_key = os.environ.get(
+            "TARXIV_API_SECRET_KEY"
+        ) or secrets.token_hex(32)
         # Register routes
         self.routes()
         self.app.register_blueprint(Blueprint("main", __name__))
@@ -62,9 +74,16 @@ class API(TarxivModule):
         cherrypy.engine.start()
         cherrypy.engine.block()
 
-    def check_token(self, token):
-        # TODO: implement actual authentication
-        return token == self.config["api_token"]
+    def validate_token_request(self, token: str) -> dict:
+        """Validate a JWT and return structured status for error handling."""
+
+        result = validate_token(token)
+        return {
+            "is_valid": result["status"] == TokenStatus.VALID,
+            "status": result["status"],
+            "profile": result["profile"],
+            "error": result["error"],
+        }
 
     def routes(self):
         # Basic index route for testing server is running
@@ -72,12 +91,76 @@ class API(TarxivModule):
         def index():
             return server_response({"status": "TarXiv API is running"}, 200)
 
+        @self.app.route("/auth/<string:provider>/login", methods=["GET"])
+        def auth_login(provider):
+            status = {"status": f"login attempt for provider {provider}"}
+            self.logger.info(status, extra=status)
+            if provider not in PROVIDERS:
+                return server_response({"error": f"Unknown provider: {provider}"}, 404)
+            state = secrets.token_urlsafe(16)
+            session["oauth_state"] = state
+            session["oauth_provider"] = provider
+            try:
+                auth_url = PROVIDERS[provider].build_authorize_url(state)
+            except RuntimeError as exc:
+                return server_response({"error": str(exc)}, 500)
+            status = {
+                "status": f"redirecting to {provider} for authentication",
+                "auth_url": auth_url,
+            }
+            self.logger.info(status, extra=status)
+            return redirect(auth_url)
+
+        @self.app.route("/auth/<string:provider>/callback", methods=["GET"])
+        def auth_callback(provider):
+            status = {"status": f"handling callback from provider {provider}"}
+            self.logger.info(status, extra=status)
+
+            if provider not in PROVIDERS:
+                return server_response({"error": f"Unknown provider: {provider}"}, 404)
+
+            state = request.args.get("state")
+            code = request.args.get("code")
+
+            status = {"status": f"received callback with state {state} and code {code}"}
+            self.logger.info(status, extra=status)
+
+            if not code:
+                return server_response({"error": "Missing authorization code"}, 400)
+            expected_state = session.pop("oauth_state", None)
+            if expected_state and state != expected_state:
+                return server_response({"error": "Invalid OAuth state"}, 400)
+
+            status = {
+                "status": f"completing login for provider {provider} with code {code}"
+            }
+            self.logger.info(status, extra=status)
+
+            try:
+                result = PROVIDERS[provider].complete_login(code)
+            except Exception as exc:
+                self.logger.error(
+                    {"oauth_error": str(exc)}, extra={"oauth_error": str(exc)}
+                )
+                return server_response({"error": "Authentication failed"}, 502)
+            token = sign_token(
+                sub=result["sub"],
+                provider=result["provider"],
+                profile=result["profile"],
+            )
+            dashboard_url = os.environ.get("TARXIV_DASHBOARD_URL", "/")
+            status = {
+                "status": "authentication successful, redirecting to dashboard with token",
+                "dashboard_url": dashboard_url,
+                "token": token,
+            }
+            self.logger.info(status, extra=status)
+            return redirect(f"{dashboard_url.rstrip('/')}/?token={token}")
+
         # HFS - 2025-05-28: These self.app.route things are Flask decorators which become
         # endpoints for the API
         @self.app.route("/get_object_meta/<string:obj_name>", methods=["POST"])
         def get_object_meta(obj_name):
-            # Get request json (HFS: no longer used 2025-10-24)
-            # request_json = request.get_json()
             token = request.headers.get("Authorization")
             # Start log
             log = {
@@ -89,8 +172,12 @@ class API(TarxivModule):
 
             try:
                 # Return error if bad token
-                if self.check_token(token) is False:
-                    raise PermissionError("bad token")
+                validation = self.validate_token_request(token)
+                if not validation["is_valid"]:
+                    if validation["status"] == "expired":
+                        raise PermissionError("Session expired — please log in again.")
+                    else:
+                        raise PermissionError("Invalid or missing token.")
                 # Find object info
                 result = self.txv_db.get(obj_name, "objects")
                 # Return nothing if bad request
@@ -117,8 +204,6 @@ class API(TarxivModule):
 
         @self.app.route("/get_object_lc/<string:obj_name>", methods=["POST"])
         def get_object_lc(obj_name):
-            # Get request json (HFS: no longer used 2025-10-24)
-            # request_json = request.get_json()
             token = request.headers.get("Authorization")
             # Start log
             log = {
@@ -129,8 +214,12 @@ class API(TarxivModule):
             }
             try:
                 # Return error if bad token
-                if self.check_token(token) is False:
-                    raise PermissionError("bad token")
+                validation = self.validate_token_request(token)
+                if not validation["is_valid"]:
+                    if validation["status"] == "expired":
+                        raise PermissionError("Session expired — please log in again.")
+                    else:
+                        raise PermissionError("Invalid or missing token.")
                 # Find object info
                 result = self.txv_db.get(obj_name, "lightcurves")
                 # Return nothing if bad request
@@ -177,7 +266,8 @@ class API(TarxivModule):
         #     }
         #     try:
         #         # Return error if bad token
-        #         if self.check_token(token) is False:
+        #         validation = self.validate_token_request(token)
+        #         if not validation["is_valid"]:
         #             raise PermissionError("bad token")
         #         # Build query
         #         query_str = (
@@ -216,11 +306,8 @@ class API(TarxivModule):
 
         @self.app.route("/cone_search", methods=["POST"])
         def cone_search():
-            # Get request json
-            # self.logger.info(f"cone_search request: {request}")
             request_json = request.get_json()
             token = request.headers.get("Authorization")
-            # self.logger.info(f"request json: {request_json}")
             # Start log
             log = {
                 "query_type": "cone_search",
@@ -230,9 +317,12 @@ class API(TarxivModule):
             }
             try:
                 # Return error if bad token
-                if self.check_token(token) is False:
-                    raise PermissionError("bad token")
-                # self.logger.info("Token accepted")
+                validation = self.validate_token_request(token)
+                if not validation["is_valid"]:
+                    if validation["status"] == "expired":
+                        raise PermissionError("Session expired — please log in again.")
+                    else:
+                        raise PermissionError("Invalid or missing token.")
                 # Extract parameters
                 ra = request_json["ra"]
                 dec = request_json["dec"]

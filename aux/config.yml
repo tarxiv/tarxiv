@@ -9,9 +9,6 @@ logstash_port: 5044
 # hosting information
 host: 157.136.254.204
 api_port: 9001
-
-# temporary
-api_token: "kjnf?£as9$oi8ur"
   
 # tns certifications/params
 tns:
