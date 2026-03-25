@@ -275,6 +275,8 @@ class TNSPipeline(TarxivModule):
                 stream = Stream(auth=self.hop_auth)
                 # Submit to hopskotch
                 with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
+                    # Add fields for hopskotch alert
+
                     s.write(update_meta)
                     status = {
                         "status": "submitted hopskotch alert",
@@ -318,6 +320,9 @@ class TNSPipeline(TarxivModule):
                     stream = Stream(self.hop_auth)
                     # Submit to hopskotch
                     with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
+                        # Additional information for hopskotch
+                        hop_msg = {}
+                        update_meta | {"title": "TNS Public Alert"}
                         s.write(update_meta)
                         status = {
                             "status": "submitted hopskotch alert",

@@ -78,6 +78,12 @@ imap:
   server: "imap.gmail.com"
   polling_interval: 1
 
+
+# For testing
+test:
+  associated_sources:
+    - "tns"
+
 # Kafka/Xmatch parameters
 xmatch_ingest_topic: "xmatch-finder"
 xmatch_processing_topic: "xmatch-processing"
