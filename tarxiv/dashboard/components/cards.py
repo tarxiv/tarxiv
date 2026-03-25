@@ -259,97 +259,279 @@ def format_object_metadata(object_id, meta, logger=None):
     -------
         html.Div containing formatted cards
     """
-    fields_to_display = [
-        ("identifiers", "Identifiers"),
-        ("ra_deg", "RA (deg)"),
-        ("dec_deg", "Dec (deg)"),
-        ("ra_hms", "RA (HMS)"),
-        ("dec_dms", "Dec (DMS)"),
-        ("object_type", "Object Type"),
-        ("discovery_date", "Discovery Date"),
-        ("reporting_group", "Reporting Group"),
-        ("redshift", "Redshift"),
-        ("host_name", "Host Name"),
-    ]
-    field_labels = dict(fields_to_display)
-
-    sources_data = meta.get("sources", [])
-    source_names = []
-    for s in sources_data:
-        name = s.get("name") if isinstance(s, dict) else s
-        if isinstance(name, str) and name and name not in source_names:
-            source_names.append(name)
-
-    if "tns" in source_names:
-        source_names.remove("tns")
-        source_names.insert(0, "tns")
-
-    source_variant_map = {
-        "tns": ["tns"],
-        "atlas_survey": ["atlas_survey", "atlas"],
-        "atlas_twb": ["atlas_twb", "atlas"],
-        "ztf_survey": ["ztf_survey", "ztf"],
-        "asas-sn_survey": ["asas-sn_survey", "asas-sn"],
-        "asas-sn_skypatrol": ["asas-sn_skypatrol", "asas-sn"],
-        "sherlock": ["sherlock"],
-        "fink": ["fink"],
-        "mangrove": ["mangrove"],
+    field_labels = {
+        "identifiers": "Identifiers",
+        "ra_deg": "RA (deg)",
+        "dec_deg": "Dec (deg)",
+        "object_type": "Object Type",
+        "discovery_date": "Discovery Date",
+        "reporting_group": "Reporting Group",
+        "discovery_data_source": "Discovery Data Source",
+        "redshift": "Redshift",
+        "host_name": "Host Name",
+        "peak_mag": "Peak Magnitude",
+        "latest_detection": "Latest Detection",
     }
 
-    variant_to_tabs = {}
-    for tab_name, variants in source_variant_map.items():
-        if tab_name not in source_names:
-            continue
-        for variant in variants:
-            variant_to_tabs.setdefault(variant, []).append(tab_name)
+    # Associated-source groupings mirrored from aux/config.yml.
+    associated_sources = {
+        "tns": {"tns"},
+        "ztf": {"ztf", "fink", "mangrove"},
+        "atlas": {"atlas", "atlas_twb", "sherlock"},
+        "asas-sn": {"asas-sn", "asas-sn_skypatrol"},
+    }
 
-    tab_contents = {name: [] for name in source_names}
-    default_tab = (
-        "tns" if "tns" in tab_contents else (source_names[0] if source_names else None)
-    )
+    tab_order = [
+        ("all", "ALL SOURCES"),
+        ("tns", "TNS"),
+        ("ztf", "ZTF"),
+        ("atlas", "ATLAS"),
+        ("asas-sn", "ASAS-SN"),
+    ]
+    tab_data = {
+        tab_key: {
+            "kv_rows": [],
+            "photometry": {
+                "peak_mag": [],
+                "latest_detection": [],
+            },
+        }
+        for tab_key, _ in tab_order
+    }
 
-    for field, values in meta.items():
-        if field in {"schema", "sources"}:
-            continue
+    def value_from_entry(field_name, entry_value):
+        if isinstance(entry_value, dict):
+            if field_name == "identifiers" and "name" in entry_value:
+                return entry_value["name"]
+            if "value" in entry_value:
+                return entry_value["value"]
+            if "name" in entry_value:
+                return entry_value["name"]
+            return json.dumps(entry_value, separators=(",", ":"), default=str)
+        return entry_value
 
-        label = field_labels.get(field, field.replace("_", " ").title())
-        entries = values if isinstance(values, list) else [values]
+    def add_text(tab_key, label, field_name, entry_value):
+        source = entry_value.get("source") if isinstance(entry_value, dict) else None
+        value = value_from_entry(field_name, entry_value)
+        tab_data[tab_key]["kv_rows"].append(
+            {
+                "field": label,
+                "source": source or "-",
+                "value": value,
+            }
+        )
 
+    def add_field_for_sources(tab_key, field_name, allowed_sources):
+        if field_name not in meta:
+            return
+        entries = (
+            meta[field_name]
+            if isinstance(meta[field_name], list)
+            else [meta[field_name]]
+        )
+        label = field_labels[field_name]
         for entry in entries:
-            if isinstance(entry, dict):
-                source_id = entry.get("source")
-                matched_tabs = variant_to_tabs.get(source_id, []) if source_id else []
-                if not matched_tabs and default_tab:
-                    matched_tabs = [default_tab]
+            source = entry.get("source") if isinstance(entry, dict) else None
+            if source in allowed_sources:
+                add_text(tab_key, label, field_name, entry)
 
-                if field == "identifiers" and "name" in entry:
-                    value = entry["name"]
-                elif "value" in entry:
-                    value = entry["value"]
-                else:
-                    value = json.dumps(entry, separators=(",", ":"), default=str)
+    def add_grouped_by_filter(tab_key, field_name, allowed_sources):
+        if field_name not in meta:
+            return
+        entries = (
+            meta[field_name]
+            if isinstance(meta[field_name], list)
+            else [meta[field_name]]
+        )
+        matched = [
+            entry
+            for entry in entries
+            if isinstance(entry, dict) and entry.get("source") in allowed_sources
+        ]
+        if not matched:
+            return
+        tab_data[tab_key]["photometry"][field_name].extend(matched)
 
-                for tab in matched_tabs:
-                    tab_contents[tab].append(dmc.Text(f"{label}: {value}"))
-            elif default_tab:
-                tab_contents[default_tab].append(dmc.Text(f"{label}: {entry}"))
+    def build_kv_table(rows):
+        # kv stands for "key-value" pairs, but we use "field-source-value" here to accommodate the data structure.
+        return dmc.Box(
+            dmc.Table(
+                [
+                    dmc.TableThead(
+                        dmc.TableTr(
+                            [
+                                dmc.TableTh("Field"),
+                                dmc.TableTh("Source"),
+                                dmc.TableTh("Value"),
+                            ]
+                        )
+                    ),
+                    dmc.TableTbody(
+                        [
+                            dmc.TableTr(
+                                [
+                                    dmc.TableTd(str(row["field"])),
+                                    dmc.TableTd(str(row["source"])),
+                                    dmc.TableTd(str(row["value"])),
+                                ]
+                            )
+                            for row in rows
+                        ]
+                    ),
+                ],
+                withTableBorder=True,
+                withColumnBorders=True,
+                striped=True,
+                highlightOnHover=True,
+                horizontalSpacing="xs",
+                verticalSpacing="xs",
+                style={
+                    "width": "fit-content",
+                    # "maxWidth": "100%",
+                    # "fontSize": "0.95rem",
+                },
+            ),
+            # style={"overflowX": "auto", "maxWidth": "100%"},
+        )
 
-    # Create Tabs component
+    def build_photometry_table(entries):
+        return dmc.Box(
+            dmc.Table(
+                [
+                    dmc.TableThead(
+                        dmc.TableTr(
+                            [
+                                dmc.TableTh("Value"),
+                                dmc.TableTh("Date"),
+                                dmc.TableTh("Mag Rate"),
+                                dmc.TableTh("Source"),
+                            ]
+                        )
+                    ),
+                    dmc.TableTbody(
+                        [
+                            dmc.TableTr(
+                                [
+                                    dmc.TableTd(str(entry.get("value", "-"))),
+                                    dmc.TableTd(str(entry.get("date", "-"))),
+                                    dmc.TableTd(str(entry.get("mag_rate", "-"))),
+                                    dmc.TableTd(str(entry.get("source", "-"))),
+                                ]
+                            )
+                            for entry in entries
+                        ]
+                    ),
+                ],
+                withTableBorder=True,
+                withColumnBorders=True,
+                striped=True,
+                highlightOnHover=True,
+                horizontalSpacing="xs",
+                verticalSpacing="xs",
+                style={
+                    "width": "fit-content",
+                    # "maxWidth": "100%",
+                    # "fontSize": "0.9rem",
+                },
+            ),
+            # style={"overflowX": "auto", "maxWidth": "100%", "marginBottom": "12px"},
+        )
+
+    def build_filter_sections(tab_key, field_name):
+        entries = tab_data[tab_key]["photometry"][field_name]
+        if not entries:
+            return []
+
+        grouped = {}
+        # Group entries by filter, using "unknown" for entries without a filter specified
+        for entry in entries:
+            filter_name = str(entry.get("filter", "unknown"))
+            grouped.setdefault(filter_name, []).append(entry)
+
+        sections = []
+        sections.append(dmc.Text(f"{field_labels[field_name]} by Filter", fw=600))
+        for filter_name in sorted(grouped.keys()):
+            sorted_entries = sorted(
+                grouped[filter_name], key=lambda item: str(item.get("date", ""))
+            )
+            sections.append(dmc.Text(f"Filter {filter_name}", fw=500, mt="xs"))
+            sections.append(build_photometry_table(sorted_entries))
+        return sections
+
+    # ALL SOURCES tab: RA, Dec, identifiers.
+    for field in ["ra_deg", "dec_deg", "identifiers"]:
+        if field not in meta:
+            continue
+        entries = meta[field] if isinstance(meta[field], list) else [meta[field]]
+        for entry in entries:
+            add_text("all", field_labels[field], field, entry)
+
+    # Every source tab includes its own RA, Dec, identifiers.
+    add_field_for_sources("tns", "ra_deg", associated_sources["tns"])
+    add_field_for_sources("tns", "dec_deg", associated_sources["tns"])
+    add_field_for_sources("tns", "identifiers", associated_sources["tns"])
+
+    add_field_for_sources("ztf", "ra_deg", associated_sources["ztf"])
+    add_field_for_sources("ztf", "dec_deg", associated_sources["ztf"])
+    add_field_for_sources("ztf", "identifiers", associated_sources["ztf"])
+
+    add_field_for_sources("atlas", "ra_deg", associated_sources["atlas"])
+    add_field_for_sources("atlas", "dec_deg", associated_sources["atlas"])
+    add_field_for_sources("atlas", "identifiers", associated_sources["atlas"])
+
+    add_field_for_sources("asas-sn", "ra_deg", associated_sources["asas-sn"])
+    add_field_for_sources("asas-sn", "dec_deg", associated_sources["asas-sn"])
+    add_field_for_sources("asas-sn", "identifiers", associated_sources["asas-sn"])
+
+    # TNS tab: object_type, discovery_date, reporting_group, discovery_data_source, redshift.
+    for field in [
+        "object_type",
+        "discovery_date",
+        "reporting_group",
+        "discovery_data_source",
+        "redshift",
+    ]:
+        add_field_for_sources("tns", field, associated_sources["tns"])
+
+    # ZTF tab: redshift, host_name.
+    for field in ["redshift", "host_name"]:
+        add_field_for_sources("ztf", field, associated_sources["ztf"])
+
+    # ATLAS tab: redshift.
+    add_field_for_sources("atlas", "redshift", associated_sources["atlas"])
+
+    # Survey tabs include grouped peak_mag and latest_detection by filter.
+    add_grouped_by_filter("ztf", "peak_mag", associated_sources["ztf"])
+    add_grouped_by_filter("ztf", "latest_detection", associated_sources["ztf"])
+    add_grouped_by_filter("atlas", "peak_mag", associated_sources["atlas"])
+    add_grouped_by_filter("atlas", "latest_detection", associated_sources["atlas"])
+    add_grouped_by_filter("asas-sn", "peak_mag", associated_sources["asas-sn"])
+    add_grouped_by_filter("asas-sn", "latest_detection", associated_sources["asas-sn"])
+
     tabs_list = []
     tabs_panels = []
+    for tab_key, tab_label in tab_order:
+        tabs_list.append(dmc.TabsTab(tab_label, value=tab_key))
+        kv_rows = tab_data[tab_key]["kv_rows"]
+        phot_sections = []
+        if tab_key in {"ztf", "atlas", "asas-sn"}:
+            phot_sections.extend(build_filter_sections(tab_key, "peak_mag"))
+            phot_sections.extend(build_filter_sections(tab_key, "latest_detection"))
 
-    for name in source_names:
-        display_label = name.upper()
-        tabs_list.append(dmc.TabsTab(display_label, value=name))
+        panel_blocks = []
+        if kv_rows:
+            panel_blocks.append(build_kv_table(kv_rows))
+        panel_blocks.extend(phot_sections)
+
         panel_children = (
-            dmc.Stack(tab_contents[name], py="md")
-            if tab_contents[name]
+            dmc.Stack(panel_blocks, py="md", gap="sm")
+            if panel_blocks
             else dmc.Text("No source-specific metadata available.")
         )
         tabs_panels.append(
             dmc.TabsPanel(
                 panel_children,
-                value=name,
+                value=tab_key,
             )
         )
 
@@ -362,7 +544,7 @@ def format_object_metadata(object_id, meta, logger=None):
             )
         ]
         + tabs_panels,
-        value=default_tab,
+        value="all",
     )
 
     return dmc.Stack(
