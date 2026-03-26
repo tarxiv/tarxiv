@@ -157,19 +157,19 @@ class TarxivDB(TarxivModule):
         # Using LET to compute distance, then filter with WHERE
         query = f"""
             SELECT meta().id as obj_name,
-                   obj.ra_deg[0].`value` as ra,
-                   obj.dec_deg[0].`value` as dec,
+                   obj.internal.tns_ra as ra,
+                   obj.internal.tns_dec as dec,
                    distance_deg
             FROM tarxiv.{self.scope}.objects obj
             LET distance_deg = ACOS(
-                       SIN(RADIANS({dec_deg})) * SIN(RADIANS(obj.dec_deg[0].`value`)) +
-                       COS(RADIANS({dec_deg})) * COS(RADIANS(obj.dec_deg[0].`value`)) *
-                       COS(RADIANS({ra_deg} - obj.ra_deg[0].`value`))
+                       SIN(RADIANS({dec_deg})) * SIN(RADIANS(obj.internal.tns_dec)) +
+                       COS(RADIANS({dec_deg})) * COS(RADIANS(obj.internal.tns_dec)) *
+                       COS(RADIANS({ra_deg} - obj.internal.tns_ra))
                    ) * 180 / PI()
             WHERE 1=1
               AND obj.ra_deg IS NOT NULL
               AND obj.dec_deg IS NOT NULL
-              AND ABS(obj.dec_deg[0].`value` - {dec_deg}) <= {radius_deg}
+              AND ABS(obj.internal.tns_dec - {dec_deg}) <= {radius_deg}
               AND distance_deg <= {radius_deg}
             ORDER BY distance_deg
         """

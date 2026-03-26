@@ -338,7 +338,7 @@ class TNSPipeline(TarxivModule):
                     timestamp = datetime.datetime.now().isoformat()
                     update_meta["timestamp"] = timestamp
                     # Add insertion date to internal meta as well
-                    obj_meta["internal"]["insertion_date"] = timestamp
+                    obj_meta["internal"]["insert_date"] = timestamp
 
                     # Upsert to database
                     self.upsert_object(obj_name, obj_meta, obj_lc)
