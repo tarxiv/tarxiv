@@ -123,6 +123,8 @@ class TarxivDB(TarxivModule):
                 "obj_name": object_name,
                 "collection": collection,
             }
+            if type(result) == dict and "internal" in result.keys():
+                del result["internal"]
             self.logger.info(status, extra=status)
         except DocumentNotFoundException:
             status = {
