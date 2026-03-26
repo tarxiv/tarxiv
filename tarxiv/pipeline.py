@@ -282,13 +282,14 @@ class TNSPipeline(TarxivModule):
                               "obj_name": obj_name,}
                     self.logger.error(status, extra=status)
 
-                # Upsert to database
-                self.upsert_object(obj_name, obj_meta, obj_lc)
                 # Get timestamp
                 timestamp = datetime.datetime.now().isoformat()
                 update_meta["timestamp"] = timestamp
                 # Add insertion date to internal meta as well
                 obj_meta["internal"]["update_date"] = timestamp
+
+                # Upsert to database
+                self.upsert_object(obj_name, obj_meta, obj_lc)
                 # We don't need to send hopskotch alert for objects with no updates
                 if len(update_meta.keys()) <= 3:
                     continue
@@ -333,13 +334,15 @@ class TNSPipeline(TarxivModule):
                     # Get survey information
                     obj_meta, obj_lc, update_meta = self.get_object(obj_name)
 
-                    # Upsert to database
-                    self.upsert_object(obj_name, obj_meta, obj_lc)
                     # Get timestamp
                     timestamp = datetime.datetime.now().isoformat()
                     update_meta["timestamp"] = timestamp
                     # Add insertion date to internal meta as well
                     obj_meta["internal"]["insertion_date"] = timestamp
+
+                    # Upsert to database
+                    self.upsert_object(obj_name, obj_meta, obj_lc)
+
                     stream = Stream(self.hop_auth)
                     # Submit to hopskotch
                     with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
