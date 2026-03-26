@@ -164,8 +164,10 @@ class TarxivDB(TarxivModule):
                        COS(RADIANS({dec_deg})) * COS(RADIANS(obj.dec_deg[0].`value`)) *
                        COS(RADIANS({ra_deg} - obj.ra_deg[0].`value`))
                    ) * 180 / PI()
-            WHERE obj.ra_deg IS NOT NULL
+            WHERE 1=1
+              AND obj.ra_deg IS NOT NULL
               AND obj.dec_deg IS NOT NULL
+              AND ABS(obj.dec_deg - {dec_deg}) <= {radius_deg}
               AND distance_deg <= {radius_deg}
             ORDER BY distance_deg
         """
