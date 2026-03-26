@@ -257,6 +257,8 @@ class TNSPipeline(TarxivModule):
         daily_objects = self.db.get_all_active_objects(
             active_days=self.config["tns"]["obj_active_days"]
         )
+        # First get whole dataframe
+        tns_df = self.get_tns_bulk_df()
         # Pull TNS info and update
         for obj_name in daily_objects:
             try:
@@ -264,6 +266,17 @@ class TNSPipeline(TarxivModule):
                     break
                 # Get survey information
                 obj_meta, obj_lc, update_meta = self.get_object(obj_name)
+                # Add reporting date
+                try:
+                    obj = tns_df[tns_df["name"] == obj_name].iloc[0].to_dict()
+                    obj_meta["reporting_date"] = [
+                        {"value": obj["time_received"], "source": "tns"}
+                    ]
+                except:
+                    status = {"status": "no cooresponding reporting date",
+                              "obj_name": obj_name,}
+                    self.logger.error(status, extra=status)
+
                 # Upsert to database
                 self.upsert_object(obj_name, obj_meta, obj_lc)
                 # Get timestamp
