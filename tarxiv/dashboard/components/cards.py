@@ -471,6 +471,10 @@ def format_object_metadata(object_id, meta, logger=None):
             return candidates[0]
 
         rows = []
+
+        def display_or_dash(value):
+            return "-" if value is None else str(value)
+
         for filter_name in sorted(filters):
             latest_entry = latest_for_filter(filter_name)
             peak_entry = peak_for_filter(filter_name)
@@ -479,19 +483,33 @@ def format_object_metadata(object_id, meta, logger=None):
                     [
                         dmc.TableTd(f"{filter_name} Band"),
                         dmc.TableTd(
-                            str(latest_entry.get("date", "-") if latest_entry else "-")
+                            display_or_dash(
+                                latest_entry.get("date") if latest_entry else None
+                            )
                         ),
                         dmc.TableTd(
-                            str(latest_entry.get("value", "-") if latest_entry else "-")
+                            display_or_dash(
+                                latest_entry.get("value") if latest_entry else None
+                            )
                         ),
                         dmc.TableTd(
-                            str(peak_entry.get("value", "-") if peak_entry else "-")
+                            display_or_dash(
+                                latest_entry.get("mag_rate") if latest_entry else None
+                            )
                         ),
                         dmc.TableTd(
-                            str(
-                                latest_entry.get("mag_rate", "-")
-                                if latest_entry
-                                else "-"
+                            display_or_dash(
+                                peak_entry.get("date") if peak_entry else None
+                            )
+                        ),
+                        dmc.TableTd(
+                            display_or_dash(
+                                peak_entry.get("value") if peak_entry else None
+                            )
+                        ),
+                        dmc.TableTd(
+                            display_or_dash(
+                                peak_entry.get("mag_rate") if peak_entry else None
                             )
                         ),
                     ]
@@ -509,8 +527,10 @@ def format_object_metadata(object_id, meta, logger=None):
                                     dmc.TableTh("Filter"),
                                     dmc.TableTh("Latest Date"),
                                     dmc.TableTh("Latest Mag"),
+                                    dmc.TableTh("Latest Mag Rate"),
+                                    dmc.TableTh("Peak Date"),
                                     dmc.TableTh("Peak Mag"),
-                                    dmc.TableTh("Mag Rate"),
+                                    dmc.TableTh("Peak Mag Rate"),
                                 ]
                             )
                         ),
