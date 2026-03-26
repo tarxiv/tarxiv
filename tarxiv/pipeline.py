@@ -172,7 +172,11 @@ class TNSPipeline(TarxivModule):
         else:
             update_meta = obj_meta
             update_meta["status"] = "new_entry"
-
+        # Add TNS RA and DEC to internal meta
+        obj_meta["internal"] = {
+            "tns_ra": tns_meta["ra_deg"]["value"],
+            "tns_dec": tns_meta["dec_deg"]["value"],
+        }
         return obj_meta, obj_lc, update_meta
 
     def upsert_object(self, obj_name, obj_meta, obj_lc):
@@ -184,6 +188,7 @@ class TNSPipeline(TarxivModule):
         :param obj_lc: tarxiv obj light curve data; dict
         :return: void
         """
+        # Before we upsert, we will add a couple lookup fields
         self.db.upsert(obj_name, obj_meta, collection="objects")
         self.db.upsert(obj_name, obj_lc, collection="lightcurves")
 
@@ -257,6 +262,8 @@ class TNSPipeline(TarxivModule):
         daily_objects = self.db.get_all_active_objects(
             active_days=self.config["tns"]["obj_active_days"]
         )
+        # First get whole dataframe
+        tns_df = self.get_tns_bulk_df()
         # Pull TNS info and update
         for obj_name in daily_objects:
             try:
@@ -264,17 +271,33 @@ class TNSPipeline(TarxivModule):
                     break
                 # Get survey information
                 obj_meta, obj_lc, update_meta = self.get_object(obj_name)
-                # Upsert to database
-                self.upsert_object(obj_name, obj_meta, obj_lc)
+                # Add reporting date
+                try:
+                    obj = tns_df[tns_df["name"] == obj_name].iloc[0].to_dict()
+                    obj_meta["reporting_date"] = [
+                        {"value": obj["time_received"], "source": "tns"}
+                    ]
+                except:
+                    status = {"status": "no cooresponding reporting date",
+                              "obj_name": obj_name,}
+                    self.logger.error(status, extra=status)
+
                 # Get timestamp
                 timestamp = datetime.datetime.now().isoformat()
                 update_meta["timestamp"] = timestamp
+                # Add insertion date to internal meta as well
+                obj_meta["internal"]["update_date"] = timestamp
+
+                # Upsert to database
+                self.upsert_object(obj_name, obj_meta, obj_lc)
                 # We don't need to send hopskotch alert for objects with no updates
                 if len(update_meta.keys()) <= 3:
                     continue
                 stream = Stream(auth=self.hop_auth)
                 # Submit to hopskotch
                 with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
+                    # Add fields for hopskotch alert
+
                     s.write(update_meta)
                     status = {
                         "status": "submitted hopskotch alert",
@@ -310,14 +333,22 @@ class TNSPipeline(TarxivModule):
                 try:
                     # Get survey information
                     obj_meta, obj_lc, update_meta = self.get_object(obj_name)
-                    # Upsert to database
-                    self.upsert_object(obj_name, obj_meta, obj_lc)
+
                     # Get timestamp
                     timestamp = datetime.datetime.now().isoformat()
                     update_meta["timestamp"] = timestamp
+                    # Add insertion date to internal meta as well
+                    obj_meta["internal"]["insert_date"] = timestamp
+
+                    # Upsert to database
+                    self.upsert_object(obj_name, obj_meta, obj_lc)
+
                     stream = Stream(self.hop_auth)
                     # Submit to hopskotch
                     with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
+                        # Additional information for hopskotch
+                        # hop_msg = {}
+                        # update_meta | {"title": "TNS Public Alert"}
                         s.write(update_meta)
                         status = {
                             "status": "submitted hopskotch alert",
