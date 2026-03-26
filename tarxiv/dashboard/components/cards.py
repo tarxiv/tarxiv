@@ -426,7 +426,7 @@ def format_object_metadata(object_id, meta, logger=None):
         """Build a condensed detection summary table grouped by filter.
 
         Columns are:
-        Filter | latest_date | latest_mag | peak_mag | mag_rate
+        Filter | latest_date | latest_mag | latest_mag_rate | peak_date | peak_mag
         """
         peak_entries = tab_data[tab_key]["photometry"]["peak_mag"]
         latest_entries = tab_data[tab_key]["photometry"]["latest_detection"]
@@ -507,11 +507,6 @@ def format_object_metadata(object_id, meta, logger=None):
                                 peak_entry.get("value") if peak_entry else None
                             )
                         ),
-                        dmc.TableTd(
-                            display_or_dash(
-                                peak_entry.get("mag_rate") if peak_entry else None
-                            )
-                        ),
                     ]
                 )
             )
@@ -530,7 +525,6 @@ def format_object_metadata(object_id, meta, logger=None):
                                     dmc.TableTh("Latest Mag Rate"),
                                     dmc.TableTh("Peak Date"),
                                     dmc.TableTh("Peak Mag"),
-                                    dmc.TableTh("Peak Mag Rate"),
                                 ]
                             )
                         ),
