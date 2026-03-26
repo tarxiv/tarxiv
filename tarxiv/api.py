@@ -244,6 +244,66 @@ class API(TarxivModule):
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
 
+        @self.app.route("/tns_alerts", methods=["POST"])
+        def tns_alerts():
+            request_json = request.get_json()
+            token = request.headers.get("Authorization")
+            # Start log
+            log = {
+                "query_type": "tns_alerts",
+                "query_ip": request.remote_addr,
+                "token": token,
+                "n_rows": request_json["n_rows"],
+                "offset": request_json["offset"],
+            }
+            try:
+                # Return error if bad token
+                validation = self.validate_token_request(token)
+                if not validation["is_valid"]:
+                    if validation["status"] == "expired":
+                        raise PermissionError("Session expired — please log in again.")
+                    else:
+                        raise PermissionError("Invalid or missing token.")
+                if type(request_json["n_rows"]) != int or type(request_json["offset"]) != int:
+                    raise ValueError("n_rows/offset must be an integer")
+
+                query = f"""SELECT 
+                              `objects`.`internal`.`insert_date` AS date_received,
+                              META().id AS obj_name,
+                              `objects`.`object_type`[0].`value` AS object_type,
+                              `objects`.`ra_hms`[0].`value` AS ra,
+                              `objects`.`dec_dms`[0].`value` AS dec,
+                              `objects`.`discovery_data_source`[0].`value` AS discovery_source,
+                              `objects`.`reporting_group`[0].`value` AS reporting_group,
+                              IFMISSING(`objects`.`redshift`[0].`value`, "") AS redshift
+                            FROM tarxiv.tns.objects
+                            WHERE `objects`.`internal`.`insert_date` IS NOT MISSING
+                            ORDER BY `objects`.`internal`.`insert_date` DESC
+                            LIMIT {request_json["n_rows"]} OFFSET {request_json["offset"]}"""
+                result = self.txv_db.query(query)
+
+                if result is None:
+                    raise LookupError("bad lookup")
+
+                # Normal return
+                status_code = 200
+                log["status"] = "Success"
+            except PermissionError as e:
+                result = {"error": str(e), "type": "token"}
+                status_code = 401
+                log["status"] = "PermissionError"
+            except LookupError as e:
+                result = {"error": str(e), "type": "lookup"}
+                status_code = 404
+                log["status"] = "LookupError"
+            except Exception as e:
+                result = {"error": str(e), "type": "server"}
+                status_code = 500
+                log["status"] = "ServerError"
+
+            self.logger.info(log, extra=log)
+            return server_response(result, status_code)
+
         # @self.app.route("/search_objects", methods=["POST"])
         # def search_objects():
         #     # Get request json
