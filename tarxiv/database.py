@@ -167,7 +167,7 @@ class TarxivDB(TarxivModule):
             WHERE 1=1
               AND obj.ra_deg IS NOT NULL
               AND obj.dec_deg IS NOT NULL
-              AND ABS(obj.dec_deg - {dec_deg}) <= {radius_deg}
+              AND ABS(obj.dec_deg[0].`value` - {dec_deg}) <= {radius_deg}
               AND distance_deg <= {radius_deg}
             ORDER BY distance_deg
         """
