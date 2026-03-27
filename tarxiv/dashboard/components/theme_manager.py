@@ -30,6 +30,13 @@ THEME = {
         "TextInput": {
             "defaultProps": {
                 "size": "md",
+                "labelProps": {"fz": "sm"},
+            }
+        },
+        "NumberInput": {
+            "defaultProps": {
+                "size": "md",
+                "labelProps": {"fz": "sm"},
             }
         },
         "PasswordInput": {
@@ -117,12 +124,13 @@ def generate_css():
 """
     os.makedirs(
         # TODO JL: Two things
-        # 1) Hardcoded path is not ideal - probably should be a config or 
+        # 1) Hardcoded path is not ideal - probably should be a config or
         #    environment variable
-        # 2) We should probably commit this file to the repo and only regenerate 
-        #    it when styles.py changes, instead of regenerating on every app 
+        # 2) We should probably commit this file to the repo and only regenerate
+        #    it when styles.py changes, instead of regenerating on every app
         #    start
-        "tarxiv/dashboard/assets", exist_ok=True
+        "tarxiv/dashboard/assets",
+        exist_ok=True,
     )  # TODO: Update if dashboard moves to another repo
     with open("tarxiv/dashboard/assets/theme.css", "w") as f:
         f.write(light_css)
