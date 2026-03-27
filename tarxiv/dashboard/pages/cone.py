@@ -1,7 +1,17 @@
+import os
+from typing import cast
+
 import dash
-from dash import html, Input, Output, State, no_update, callback, dcc
+from dash import html, Input, Output, State, no_update, callback, dcc, ctx
 import dash_mantine_components as dmc
 from dash_extensions import Keyboard
+from astropy.coordinates import Angle
+import astropy.units as u
+import requests
+from pydantic import ValidationError
+from flask import current_app, request
+from werkzeug.exceptions import Unauthorized
+
 from ...auth import get_jwt_from_request, validate_token, TokenStatus
 from ..components import (
     title_card,
@@ -10,11 +20,6 @@ from ..components import (
     create_message_banner,
 )
 from ..schemas import ConeSearchResponseModel
-import requests
-from pydantic import ValidationError
-from flask import current_app, request
-from werkzeug.exceptions import Unauthorized
-import os
 
 dash.register_page(
     __name__,
@@ -45,6 +50,9 @@ def layout(**kwargs):
                         [
                             dmc.Text(
                                 "Search for objects within a specified radius of sky coordinates",
+                            ),
+                            dmc.Text(
+                                "Option 1: Enter RA (degrees), Dec (degrees) and radius (arcsec)"
                             ),
                             dmc.Group(
                                 [
@@ -95,6 +103,54 @@ def layout(**kwargs):
                                     ),
                                 ]
                             ),
+                            dmc.Divider(label="OR", labelPosition="center"),
+                            dmc.Text(
+                                "Option 2: Enter RA (HMS), Dec (DMS) and radius (arcsec)"
+                            ),
+                            dmc.Group(
+                                [
+                                    Keyboard(
+                                        children=dmc.Group(
+                                            [
+                                                dmc.TextInput(
+                                                    id="ra-hms-input",
+                                                    placeholder="21:01:36.90",
+                                                    label="RA (HMS):",
+                                                    style={
+                                                        "width": "150px",
+                                                    },
+                                                ),
+                                                dmc.TextInput(
+                                                    id="dec-dms-input",
+                                                    placeholder="+68:09:48.0",
+                                                    label="Dec (DMS):",
+                                                    style={
+                                                        "width": "150px",
+                                                    },
+                                                ),
+                                                dmc.NumberInput(
+                                                    id="radius-hmsdms-input",
+                                                    placeholder=">0",
+                                                    min=0,
+                                                    label="Radius (arcsec):",
+                                                    style={
+                                                        "width": "150px",
+                                                    },
+                                                ),
+                                            ]
+                                        ),
+                                        captureKeys=["Enter"],
+                                        n_keydowns=0,
+                                        id="cone-search-hmsdms-keyboard",
+                                    ),
+                                    dmc.Button(
+                                        "Search",
+                                        id="cone-search-hmsdms-button",
+                                        n_clicks=0,
+                                        style={"marginTop": "21px"},
+                                    ),
+                                ]
+                            ),
                         ]
                     ),
                 ],
@@ -125,6 +181,32 @@ def layout(**kwargs):
     )
 
 
+def parse_hms_dms_coordinates(ra_hms: str, dec_dms: str) -> tuple[float, float]:
+    """Parse RA (HMS) and Dec (DMS) strings into degrees.
+
+    Supported inputs include RA values like '21 01 36.90' or '21:01:36.90',
+    and Dec values like '+68 09 48.0' or '+68:09:48.0'.
+    """
+    cleaned_ra = " ".join(ra_hms.strip().split())
+    cleaned_dec = " ".join(dec_dms.strip().split())
+    if not cleaned_ra or not cleaned_dec:
+        raise ValueError("Please provide both RA (HMS) and Dec (DMS) coordinates.")
+
+    try:
+        ra_angle = Angle(cleaned_ra, unit=u.hourangle)
+        dec_angle = Angle(cleaned_dec, unit=u.deg)
+    except Exception as exc:
+        raise ValueError(
+            "Could not parse RA/Dec. Use formats like "
+            "RA='21 01 36.90' or '21:01:36.90' and "
+            "Dec='+68 09 48.0' or '+68:09:48.0'."
+        ) from exc
+
+    # cast to float to satisfy type checker, as Angle.degree is a Quantity
+    # return float(cast(Any, ra_angle.degree)), float(cast(Any, dec_angle.degree))
+    return cast(float, ra_angle.degree), cast(float, dec_angle.degree)
+
+
 @callback(
     [
         Output("results-container", "children", allow_duplicate=True),
@@ -136,16 +218,33 @@ def layout(**kwargs):
     [
         Input("cone-search-button", "n_clicks"),
         Input("cone-search-keyboard", "n_keydowns"),
+        Input("cone-search-hmsdms-button", "n_clicks"),
+        Input("cone-search-hmsdms-keyboard", "n_keydowns"),
     ],
     [
         State("ra-input", "value"),
         State("dec-input", "value"),
         State("radius-input", "value"),
+        State("ra-hms-input", "value"),
+        State("dec-dms-input", "value"),
+        State("radius-hmsdms-input", "value"),
         State("active-settings-store", "data"),
     ],
     prevent_initial_call=True,
 )
-def handle_cone_search(n_clicks, n_keydowns, ra, dec, radius, settings):
+def handle_cone_search(
+    n_clicks,
+    n_keydowns,
+    n_hmsdms_clicks,
+    n_hmsdms_keydowns,
+    ra,
+    dec,
+    radius,
+    ra_hms,
+    dec_dms,
+    radius_hmsdms,
+    settings,
+):
     """Handle cone search button clicks."""
     logger = current_app.config["TXV_LOGGER"]
 
@@ -168,13 +267,52 @@ def handle_cone_search(n_clicks, n_keydowns, ra, dec, radius, settings):
         )
         return html.Div(), "", warning_banner, no_update, no_update
 
+    if not isinstance(settings, dict):
+        settings = {}
+
     settings.update({"tarxiv_user_token": token})  # Save token to active settings
 
-    if not ra or not dec or not radius:
-        warning_banner = create_message_banner(
-            "Please provide valid RA, Dec and radius coordinates.", "warning"
-        )
-        return html.Div(), "", warning_banner, no_update, no_update
+    trigger_id = ctx.triggered_id
+    use_hmsdms_input = trigger_id in {
+        "cone-search-hmsdms-button",
+        "cone-search-hmsdms-keyboard",
+    }
+
+    if use_hmsdms_input:
+        if (
+            not ra_hms
+            or not str(ra_hms).strip()
+            or not dec_dms
+            or not str(dec_dms).strip()
+        ):
+            warning_banner = create_message_banner(
+                "Please provide both RA (HMS) and Dec (DMS) coordinates.", "warning"
+            )
+            return html.Div(), "", warning_banner, no_update, no_update
+        if radius_hmsdms is None or radius_hmsdms <= 0:
+            warning_banner = create_message_banner(
+                "Please provide a radius greater than zero.", "warning"
+            )
+            return html.Div(), "", warning_banner, no_update, no_update
+
+        try:
+            ra, dec = parse_hms_dms_coordinates(ra_hms, dec_dms)
+        except ValueError as exc:
+            warning_banner = create_message_banner(str(exc), "warning")
+            return html.Div(), "", warning_banner, no_update, no_update
+
+        radius = float(radius_hmsdms)
+    else:
+        if ra is None or dec is None or radius is None:
+            warning_banner = create_message_banner(
+                "Please provide valid RA, Dec and radius coordinates.", "warning"
+            )
+            return html.Div(), "", warning_banner, no_update, no_update
+        if radius <= 0:
+            warning_banner = create_message_banner(
+                "Please provide a radius greater than zero.", "warning"
+            )
+            return html.Div(), "", warning_banner, no_update, no_update
 
     status_msg = f"Cone search: RA={ra}, Dec={dec}, radius={radius} arcsec"
     logger.info(
@@ -260,7 +398,7 @@ def get_cone_search_results(ra, dec, radius, token, logger) -> list:
             )
         except ValidationError as e:
             logger.error({"error": f"Failed to parse cone search results: {str(e)}"})
-    if response_cone.status_code == 401:
+    elif response_cone.status_code == 401:
         logger.warning(
             {"warning": "Unauthorized cone search attempt. Check API token validity."}
         )
