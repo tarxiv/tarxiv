@@ -1,13 +1,19 @@
+import os
+
 import dash
-
-from dash import html, callback, no_update, dcc, clientside_callback
-
-# from dash.dependencies import Input, Output, State
-# from dash_extensions import Keyboard
+from dash import (
+    html,
+    callback,
+    no_update,
+    dcc,
+    clientside_callback,
+    Input,
+    Output,
+    State,
+)
+import dash_mantine_components as dmc
 from flask import current_app, request
 
-# from werkzeug.exceptions import Unauthorized
-import dash_mantine_components as dmc
 from ..components import (
     title_card,
     expressive_card,
@@ -15,19 +21,14 @@ from ..components import (
     create_message_banner,
 )
 
-# from ..schemas import (
-#     MetadataResponseModel,
-#     LightcurveResponseModel,
-# )
 from ...auth import (
     get_authenticated_user,
     get_jwt_from_request,
     validate_token,
     TokenStatus,
 )
-# import requests
+import requests
 # from pydantic import ValidationError
-# import os
 
 dash.register_page(
     __name__,
@@ -40,67 +41,115 @@ dash.register_page(
 )
 
 
-def layout(id=None, **kwargs):
+def layout(**kwargs):
     # perform search if id is provided in URL, otherwise show empty search page
-    # logger = current_app.config["TXV_LOGGER"]
+    logger = current_app.config["TXV_LOGGER"]
 
-    # token = get_jwt_from_request(request)
-    # user = get_authenticated_user(jwt_token=token)
+    token = get_jwt_from_request(request)
+    user = get_authenticated_user(jwt_token=token)
 
-    # if id and user:
-    #     # User came via deep link and has a saved session
-    #     results, status, banner, lc_store, meta_store = perform_search(
-    #         id, token, logger
-    #     )
-    # elif id and not user:
-    #     validation = validate_token(token)
+    print(f"User: {user}")
 
-    #     # Deep link but no token: Show the search bar pre-filled with ID
-    #     # but warn the user that a token is missing.
-    #     results = html.Div()
-    #     status = "Authentication required"
+    page_contents = create_message_banner("Please log in to view alerts.", "warning")
+    if user:
+        # User came via deep link and has a saved session
+        page_contents = (
+            expressive_card(
+                title="Alerts",
+                children=[
+                    # dmc.Table([head, body, caption]),
+                    dmc.Box(
+                        id="alerts-table-container",
+                    ),
+                    dmc.Center(
+                        dmc.Pagination(
+                            id="alerts-pagination",
+                            total=20,
+                            siblings=2,
+                            value=1,
+                        ),
+                    ),
+                ],
+            ),
+        )
 
-    #     if validation["status"] == TokenStatus.EXPIRED:
-    #         banner = create_message_banner(
-    #             "Your session has expired. Please log in again.", "warning"
-    #         )
-    #     elif validation["status"] == TokenStatus.INVALID and token:
-    #         banner = create_message_banner(
-    #             "Invalid authentication token. Please log in again.", "error"
-    #         )
-    #     else:
-    #         banner = create_message_banner("Please log in to view data.", "warning")
+    return dmc.Stack(
+        children=[
+            title_card(
+                title_text="TarXiv Database Explorer",
+                subtitle_text="Explore astronomical transients and their lightcurves",
+            ),
+            dmc.Box(
+                id="alerts-table-container",
+                children=page_contents,
+            ),
+        ],
+    )
 
-    #     lc_store = None
-    #     meta_store = None
-    # else:
-    #     # Default empty search page
-    #     results, status, banner, lc_store, meta_store = (
-    #         html.Div(),
-    #         "",
-    #         html.Div(),
-    #         None,
-    #         None,
-    #     )
+
+# callback for table search and results display
+@callback(
+    Output("alerts-table-container", "children"),
+    Input("alerts-pagination", "value"),
+)
+def update_alerts_table(page_number):
+    if page_number is None:
+        i = 0
+    else:
+        i = page_number - 1
+
+    items_per_page = 25
+    response = fetch_api_data(
+        "tns_alerts",
+        n_rows=items_per_page,
+        offset=max(i * items_per_page - 1, 0),
+        token=get_jwt_from_request(request),
+        logger=current_app.config["TXV_LOGGER"],
+    )
 
     # --------- Table Content ---------
     # TODO: Update the table contents here
     # See DMC link below for dmc.Table docs
     # https://www.dash-mantine-components.com/components/table
     elements = [
-        {"position": 6, "mass": 12.011, "symbol": "C", "name": "Carbon"},
-        {"position": 7, "mass": 14.007, "symbol": "N", "name": "Nitrogen"},
-        {"position": 39, "mass": 88.906, "symbol": "Y", "name": "Yttrium"},
-        {"position": 56, "mass": 137.33, "symbol": "Ba", "name": "Barium"},
-        {"position": 58, "mass": 140.12, "symbol": "Ce", "name": "Cerium"},
+        {"page": i + 1, "position": 6, "mass": 12.011, "symbol": "C", "name": "Carbon"},
+        {
+            "page": i + 1,
+            "position": 7,
+            "mass": 14.007,
+            "symbol": "N",
+            "name": "Nitrogen",
+        },
+        {
+            "page": i + 1,
+            "position": 39,
+            "mass": 88.906,
+            "symbol": "Y",
+            "name": "Yttrium",
+        },
+        {
+            "page": i + 1,
+            "position": 56,
+            "mass": 137.33,
+            "symbol": "Ba",
+            "name": "Barium",
+        },
+        {
+            "page": i + 1,
+            "position": 58,
+            "mass": 140.12,
+            "symbol": "Ce",
+            "name": "Cerium",
+        },
     ]
 
     rows = [
         dmc.TableTr(
             [
+                dmc.TableTd(element["page"]),
                 dmc.TableTd(element["position"]),
                 dmc.TableTd(element["name"]),
-                dmc.TableTd(element["symbol"]),
+                # dmc.TableTd(element["symbol"]),
                 dmc.TableTd(element["mass"]),
             ]
         )
@@ -110,42 +159,34 @@ def layout(id=None, **kwargs):
     head = dmc.TableThead(
         dmc.TableTr(
             [
+                dmc.TableTh("Page Number"),
                 dmc.TableTh("Element Position"),
                 dmc.TableTh("Element Name"),
-                dmc.TableTh("Symbol"),
+                # dmc.TableTh("Symbol"),
                 dmc.TableTh("Atomic Mass"),
             ]
         )
     )
     body = dmc.TableTbody(rows)
     caption = dmc.TableCaption("Some elements from periodic table")
+    return dmc.Table([head, body, caption])
 
-    return dmc.Stack(
-        children=[
-            title_card(
-                title_text="TarXiv Database Explorer",
-                subtitle_text="Explore astronomical transients and their lightcurves",
-            ),
-            expressive_card(
-                title="Alerts",
-                children=[dmc.Table([head, body, caption])],
-            ),
-            # dmc.Stack(
-            #     [
-            #         dmc.Text(
-            #             id="search-status",
-            #             style={
-            #                 "padding": "10px",
-            #                 "fontStyle": "italic",
-            #                 "fontSize": "14px",
-            #             },
-            #             children=status,
-            #         ),
-            #         dmc.Stack(
-            #             id="results-container",
-            #             children=[results],
-            #         ),
-            #     ],
-            # ),
-        ],
+
+def fetch_api_data(endpoint: str, n_rows: int, offset: int, token, logger):
+    """Helper to perform API requests."""
+    # TODO: Refactor to use a shared API client module instead of hardcoding requests here
+    host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
+    port = os.getenv("TARXIV_API_PORT", "9001")
+    api_url = os.getenv("TARXIV_INTERNAL_API_URL", f"http://{host}:{port}")
+    response = requests.post(
+        url=f"{api_url}/{endpoint}",
+        timeout=10,
+        headers={
+            "accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        json={"n_rows": n_rows, "offset": offset},
     )
+    logger.info({"info": f"{endpoint} response status: {response.status_code}"})
+    return response
