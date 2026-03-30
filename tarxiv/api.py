@@ -246,16 +246,19 @@ class API(TarxivModule):
 
         @self.app.route("/tns_alerts", methods=["POST"])
         def tns_alerts():
-            request_json = request.get_json()
+            n_rows = request.json.get("n_rows")
+            offset = request.json.get("offset")
             token = request.headers.get("Authorization")
             # Start log
             log = {
                 "query_type": "tns_alerts",
                 "query_ip": request.remote_addr,
                 "token": token,
-                "n_rows": request_json["n_rows"],
-                "offset": request_json["offset"],
+                "n_rows": n_rows,
+                "offset": offset,
             }
+            # self.logger.info(log, extra=log)
+
             try:
                 # Return error if bad token
                 validation = self.validate_token_request(token)
@@ -264,8 +267,18 @@ class API(TarxivModule):
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
-                if type(request_json["n_rows"]) != int or type(request_json["offset"]) != int:
-                    raise ValueError("n_rows/offset must be an integer")
+
+                if not isinstance(n_rows, int):
+                    raise ValueError(f"n_rows must be an integer, got {type(n_rows)}")
+                if n_rows < 1 or n_rows > 1000:
+                    raise ValueError(f"n_rows must be between 1 and 1000, got {n_rows}")
+
+                if not isinstance(offset, int):
+                    raise ValueError(f"offset must be an integer, got {type(offset)}")
+                elif offset < 0:
+                    raise ValueError(
+                        f"offset must be non-negative integer, got {offset}"
+                    )
 
                 query = f"""SELECT 
                               `objects`.`internal`.`insert_date` AS date_received,
@@ -279,8 +292,11 @@ class API(TarxivModule):
                             FROM tarxiv.tns.objects
                             WHERE `objects`.`internal`.`insert_date` IS NOT MISSING
                             ORDER BY `objects`.`internal`.`insert_date` DESC
-                            LIMIT {request_json["n_rows"]} OFFSET {request_json["offset"]}"""
-                result = self.txv_db.query(query)
+                            LIMIT {n_rows} OFFSET {offset}"""
+                result = self.txv_db.query(query)  # a couchbase response
+                for row in result.rows():
+                    print(row)
+                    # This is returning no rows but fails when serialised to JSON in server_response()
 
                 if result is None:
                     raise LookupError("bad lookup")
@@ -288,6 +304,10 @@ class API(TarxivModule):
                 # Normal return
                 status_code = 200
                 log["status"] = "Success"
+            except ValueError as e:
+                result = {"error": str(e), "type": "validation"}
+                status_code = 400
+                log["status"] = "ValidationError"
             except PermissionError as e:
                 result = {"error": str(e), "type": "token"}
                 status_code = 401
@@ -301,6 +321,7 @@ class API(TarxivModule):
                 status_code = 500
                 log["status"] = "ServerError"
 
+            log["satus_code"] = status_code
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
 
