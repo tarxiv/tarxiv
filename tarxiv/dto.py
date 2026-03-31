@@ -1,4 +1,6 @@
-from typing import List, Optional
+"""DTO - Data Transfer Objects for TarXiv."""
+
+from typing import Optional
 
 from pydantic import BaseModel, TypeAdapter, Field
 
@@ -105,7 +107,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
-class UserDTO(BaseModel):
+class User(BaseModel):
     id: UUID
     orcid_id: str
     provider_user_id: str | None = None
