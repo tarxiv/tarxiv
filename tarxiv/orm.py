@@ -1,3 +1,5 @@
+"""ORM - Object-Relational Mapping for TarXiv database models."""
+
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import declarative_base, relationship
