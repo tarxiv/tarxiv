@@ -9,7 +9,7 @@ from ..components import (
     format_cone_search_results,
     create_message_banner,
 )
-from ...schemas import ConeSearchResponseModel
+from ...dto import ConeSearchResponseModel
 import requests
 from pydantic import ValidationError
 from flask import current_app, request

@@ -10,16 +10,19 @@ To add a new provider, create ``providers/<name>.py`` implementing those
 two functions and register it here.
 """
 
-from . import orcid
-
 from dataclasses import dataclass
 from typing import Callable
+
+from ... import dto
+from . import orcid
+
+LoginDict = dict[str, str | dto.User]
 
 
 @dataclass(frozen=True)
 class AuthProvider:
     build_authorize_url: Callable[[str], str]
-    complete_login: Callable[[str], dict]
+    complete_login: Callable[[str], LoginDict]
 
 
 PROVIDERS = {
