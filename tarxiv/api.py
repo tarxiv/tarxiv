@@ -9,6 +9,7 @@ from paste.translogger import TransLogger
 from .utils import TarxivModule
 from .database import TarxivDB
 from .auth import sign_token, PROVIDERS, validate_token, TokenStatus
+from .database_user import UserDB
 
 
 class API(TarxivModule):
@@ -28,6 +29,7 @@ class API(TarxivModule):
         )
         # Get couchbase connection
         self.txv_db = TarxivDB("tns", "api", script_name, reporting_mode, debug)
+        self.user_db = UserDB()# TODO: implement user database and connect
 
         # Survey name/alias map (could write better, but fuck it)
         self.survey_source_map = {
@@ -143,6 +145,13 @@ class API(TarxivModule):
                     {"oauth_error": str(exc)}, extra={"oauth_error": str(exc)}
                 )
                 return server_response({"error": "Authentication failed"}, 502)
+            
+            # --------------- login successful ---------------
+            # create or update user in database and generate token
+
+            try:
+                user_dto = self.txv_db.
+
             token = sign_token(
                 sub=result["sub"],
                 provider=result["provider"],
