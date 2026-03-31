@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from .models import Base, User
+from .orm_models import Base, User
 from .schemas import UserDTO
 
 logger = logging.getLogger(__name__)
@@ -127,3 +127,58 @@ class PostgresDB:
                 raise UserRetrievalError(
                     "A system error occurred while accessing the user database."
                 ) from e
+
+    # Insert a new user into the database, I have a few questions:
+    # 1. Should this check for existing users or do that logic externally?
+    # A: Check here to prevent duplicates
+    # 2. Should this return the new user or just a success/failure status?
+    # A: Return the new user for confirmation and potential use in the UI
+    # 3. Should this raise exceptions on failure or return a status code/message?
+    # A: Raise exceptions to allow the UI to handle them appropriately
+    def insert_new_user(self, user: UserDTO):
+        """Insert a new user into the database.
+
+        Parameters
+        ----------
+        user (UserDTO): The user data to insert.
+
+        Returns
+        -------
+        UserDTO: The newly created user object.
+
+        Raises
+        ------
+        DataLayerError: If there is an error during insertion.
+        """
+        session = self.get_session()
+        try:
+            # Check for existing user with the same ORCID ID
+            existing_user = (
+                session.query(User).filter(User.orcid_id == user.orcid_id).first()
+            )
+            if existing_user:
+                # TODO: Should this change to an update instead of raising an error?
+                # Depends on how we want to handle duplicates.
+                raise DataLayerError(f"User with ORCID {user.orcid_id} already exists.")
+
+            new_user = User(
+                orcid_id=user.orcid_id,
+                email=user.email,
+                forename=user.forename,
+                surname=user.surname,
+                username=user.username,
+                nickname=user.nickname,
+                bio=user.bio,
+                picture_url=user.picture_url,
+                provider_user_id=user.provider_user_id,
+            )
+            session.add(new_user)
+            session.commit()
+            session.refresh(new_user)
+            return UserDTO.model_validate(new_user)
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Database error while inserting user {user.orcid_id}: {e}")
+            raise DataLayerError(
+                "A system error occurred while inserting the user into the database."
+            ) from e
