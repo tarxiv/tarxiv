@@ -1,14 +1,11 @@
 import os
 import logging
 
-from pydantic import BaseModel, ConfigDict
-from typing import Optional
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from .orm_models import Base, User
-from .schemas import UserDTO
+from . import dto, orm
 
 logger = logging.getLogger(__name__)
 
@@ -23,20 +20,6 @@ class UserRetrievalError(DataLayerError):
     """Raised when there is a system failure retrieving a user."""
 
     pass
-
-
-class UserSchema(BaseModel):
-    """A static, safe representation of a User for the Dash UI."""
-
-    model_config = ConfigDict(
-        from_attributes=True
-    )  # Essential for SQLAlchemy integration
-
-    id: int
-    orcid_id: str
-    name: str
-    email: Optional[str] = None
-    # Note: Only include fields the UI actually needs!
 
 
 class PostgresDB:
@@ -57,7 +40,7 @@ class PostgresDB:
         """Provide a session for database operations."""
         return self.SessionLocal()
 
-    def sync_user_profile(self, orcid_id: str, profile_data: dict) -> UserDTO:
+    def sync_user_profile(self, orcid_id: str, profile_data: dict) -> dto.User:
         """
         Create or update a user based on their ORCID profile.
 
@@ -67,16 +50,17 @@ class PostgresDB:
         """
         session = self.get_session()
         try:
-            user = session.query(User).filter(User.orcid_id == orcid_id).first()
+            user = session.query(orm.User).filter(orm.User.orcid_id == orcid_id).first()
 
             if not user:
                 logger.info(f"Creating new user for ORCID: {orcid_id}")
-                user = User(orcid_id=orcid_id)
+                user = orm.User(orcid_id=orcid_id)
                 session.add(user)
             else:
                 logger.info(f"Updating existing user for ORCID: {orcid_id}")
 
             # Map profile data to User model fields
+            # TODO: Use dto.User and orm.User as required here
             user.email = profile_data.get("email")
             user.forename = profile_data.get("forename")
             user.surname = profile_data.get("surname")
@@ -88,7 +72,7 @@ class PostgresDB:
 
             session.commit()
             session.refresh(user)
-            return UserDTO.model_validate(user)
+            return dto.User.model_validate(user)
         except Exception as e:
             session.rollback()
             logger.error(f"Error syncing user {orcid_id}: {str(e)}")
@@ -96,7 +80,7 @@ class PostgresDB:
         finally:
             session.close()
 
-    def get_user_by_orcid_id(self, orcid_id: str) -> UserDTO | None:
+    def get_user_by_orcid_id(self, orcid_id: str) -> dto.User | None:
         """Retrieve a user by their ORCID ID.
 
         Parameters
@@ -105,14 +89,18 @@ class PostgresDB:
 
         Returns
         -------
-        UserDTO: The UserDTO object corresponding to the provided ORCID iD, or None if not found.
+        dto.User: The dto.User object corresponding to the provided ORCID iD, or None if not found.
         """
         with Session(self.engine) as session:
             try:
-                user = session.query(User).filter(User.orcid_id == orcid_id).first()
+                user = (
+                    session.query(orm.User)
+                    .filter(orm.User.orcid_id == orcid_id)
+                    .first()
+                )
                 if user:
                     logger.info(f"User found for ORCID: {orcid_id}")
-                    return UserDTO.model_validate(user)
+                    return dto.User.model_validate(user)
                 else:
                     logger.info(f"No user found for ORCID: {orcid_id}")
                     return None
@@ -135,16 +123,16 @@ class PostgresDB:
     # A: Return the new user for confirmation and potential use in the UI
     # 3. Should this raise exceptions on failure or return a status code/message?
     # A: Raise exceptions to allow the UI to handle them appropriately
-    def insert_new_user(self, user: UserDTO):
+    def insert_new_user(self, user: dto.User) -> dto.User:
         """Insert a new user into the database.
 
         Parameters
         ----------
-        user (UserDTO): The user data to insert.
+        user (dto.User): The user data to insert.
 
         Returns
         -------
-        UserDTO: The newly created user object.
+        dto.User: The newly created user object.
 
         Raises
         ------
@@ -153,15 +141,19 @@ class PostgresDB:
         session = self.get_session()
         try:
             # Check for existing user with the same ORCID ID
+            # TODO: This should be wrapped in a `with` block to ensure the session is properly closed
             existing_user = (
-                session.query(User).filter(User.orcid_id == user.orcid_id).first()
+                session.query(orm.User)
+                .filter(orm.User.orcid_id == user.orcid_id)
+                .first()
             )
             if existing_user:
                 # TODO: Should this change to an update instead of raising an error?
                 # Depends on how we want to handle duplicates.
                 raise DataLayerError(f"User with ORCID {user.orcid_id} already exists.")
 
-            new_user = User(
+            payload = user.model_dump(exclude_unset=True, exclude_none=True)
+            new_user = orm.User(
                 orcid_id=user.orcid_id,
                 email=user.email,
                 forename=user.forename,
@@ -172,13 +164,17 @@ class PostgresDB:
                 picture_url=user.picture_url,
                 provider_user_id=user.provider_user_id,
             )
+            if payload.get("id") is not None:
+                new_user.id = payload["id"]
             session.add(new_user)
             session.commit()
             session.refresh(new_user)
-            return UserDTO.model_validate(new_user)
+            return dto.User.model_validate(new_user)
         except SQLAlchemyError as e:
             session.rollback()
             logger.error(f"Database error while inserting user {user.orcid_id}: {e}")
             raise DataLayerError(
                 "A system error occurred while inserting the user into the database."
             ) from e
+        finally:
+            session.close()
