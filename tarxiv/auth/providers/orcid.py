@@ -3,7 +3,7 @@
 Implements the AuthProvider protocol used by ``tarxiv/api.py``::
 
     build_authorize_url(state) -> str
-    complete_login(code)       -> dict   (normalised profile)
+    complete_login(code)       -> LoginDict (dict with keys "sub", "provider", and "profile")
 
 Environment variables required on the API service:
     ORCID_CLIENT_ID
@@ -19,9 +19,10 @@ import logging
 import os
 from typing import Any, Dict, Optional
 from urllib.parse import urlencode
-
 import requests
-from pydantic import BaseModel, ConfigDict
+
+from ... import dto
+from . import LoginDict
 
 logger = logging.getLogger(__name__)
 
@@ -33,21 +34,6 @@ ORCID_TOKEN_URL = os.environ.get(
 )
 ORCID_API_BASE = os.environ.get("ORCID_API_BASE", "https://pub.sandbox.orcid.org/v3.0")
 ORCID_SCOPE = os.environ.get("ORCID_SCOPE", "/authenticate")
-
-
-class _ProfileRow(BaseModel):
-    id: Optional[str] = None
-    provider_user_id: Optional[str] = None
-    email: Optional[str] = None
-    username: Optional[str] = None
-    nickname: Optional[str] = None
-    picture_url: Optional[str] = None
-    forename: Optional[str] = None
-    surname: Optional[str] = None
-    institution: Optional[str] = None
-    bio: Optional[str] = None
-
-    model_config = ConfigDict(extra="ignore")
 
 
 def _require_env(name: str) -> str:
@@ -144,14 +130,24 @@ def _extract_name(person: Dict[str, Any]) -> Dict[str, Optional[str]]:
     }
 
 
-def complete_login(code: str) -> Dict[str, Any]:
+# 1. exchange code for token,
+# 2. fetch profile,
+# 3. normalise to DTO,
+# 4. return dict with keys "sub", "provider", and "profile" (the DTO).
+def complete_login(code: str) -> LoginDict:
     """Exchange an authorization code for a normalised user profile.
+
+    Args
+    ----
+    code (str): The authorization code received from the ORCID OAuth callback.
 
     Returns
     -------
-    dict
-        Keys: ``sub`` (ORCID iD), ``provider`` (``"orcid"``), ``profile``
-        (normalised ProfileRow dict).
+    LoginDict
+        A dictionary containing:
+        - "sub": The ORCID iD (unique user identifier).
+        - "provider": The string "orcid".
+        - "profile": A dto.User object constructed from the ORCID profile data.
     """
     token_data = _exchange_code(code)
     orcid_id = token_data.get("orcid")
@@ -170,22 +166,22 @@ def complete_login(code: str) -> Dict[str, Any]:
     email = _extract_email(person)
     display_name = name["credit"] or token_data.get("name") or ""
 
-    profile = _ProfileRow(
-        id=orcid_id,
-        provider_user_id=orcid_id,
-        email=email,
-        username=display_name or None,
-        nickname=display_name or None,
-        forename=name["given"],
-        surname=name["family"],
-        bio=(person.get("biography") or {}).get("content"),
-    ).model_dump(exclude_none=True)
+    profile_data = {
+        "orcid_id": orcid_id,
+        "provider_user_id": orcid_id,
+        "email": email,
+        "username": display_name or None,
+        "nickname": display_name or None,
+        "forename": name["given"],
+        "surname": name["family"],
+        "bio": (person.get("biography") or {}).get("content"),
+    }
 
-    status = {"status": "constructed normalised ORCID profile", "profile": profile}
+    status = {"status": "constructed normalised ORCID profile", "profile": profile_data}
     logger.info(status, extra=status)
 
     return {
         "sub": orcid_id,
         "provider": "orcid",
-        "profile": profile,
+        "profile": dto.User.model_validate(profile_data),
     }

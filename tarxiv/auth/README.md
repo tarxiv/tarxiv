@@ -208,9 +208,7 @@ def complete_login(code: str) -> dict:
     dict with keys:
         sub      — stable, provider-issued unique user identifier (str)
         provider — name of this provider, e.g. "google" (str)
-        profile  — normalised dict compatible with ProfileRow fields:
-                   id, provider_user_id, email, username, nickname,
-                   picture_url, forename, surname, institution, bio
+        profile  — dto.User object
     """
     ...
 ```
