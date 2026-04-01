@@ -31,6 +31,9 @@ def mock_api(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "tarxiv.database.TarxivDB.__init__", lambda self, *args, **kwargs: None
     )
+    monkeypatch.setattr(
+        "tarxiv.database_user.UserDB.__init__", lambda self, *args, **kwargs: None
+    )
 
     # JL - 2025-06-05: Mock the TarxivModule to avoid file I/O and logging setup
     # during tests. Previous incarnation of this mock class was too tightly
@@ -47,6 +50,7 @@ def mock_api(monkeypatch, tmp_path):
     # HFS - 2025-05-28: We now  replace the instance with a MagicMock so we don’t have to define every method
     # ourselves (e.g. get).
     api.txv_db = MagicMock()
+    api.user_db = MagicMock()
     return api
 
 

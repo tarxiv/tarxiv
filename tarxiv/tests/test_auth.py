@@ -14,11 +14,15 @@ TestCheckToken      — API.is_token_valid() boolean gate used by protected endp
 import base64
 import json
 import time
+import uuid
 from urllib.parse import parse_qs, urlparse
 
 import jwt as pyjwt
 import pytest
 from unittest.mock import MagicMock
+
+import tarxiv.dto as tarxiv_dto
+# import tarxiv.orm as tarxiv_orm
 
 import tarxiv.auth.providers.orcid as orcid_provider
 from tarxiv.api import API
@@ -115,20 +119,43 @@ def valid_profile():
 
 
 @pytest.fixture
-def mock_api(monkeypatch, tmp_path, jwt_secret):
+def valid_user_dto(valid_profile):
+    return tarxiv_dto.User.model_validate(
+        {
+            "id": uuid.uuid4(),
+            "orcid_id": valid_profile["id"],
+            "provider_user_id": valid_profile["provider_user_id"],
+            "email": valid_profile["email"],
+            "username": valid_profile["username"],
+            "forename": valid_profile["forename"],
+            "surname": valid_profile["surname"],
+        }
+    )
+
+
+@pytest.fixture
+def mock_api(monkeypatch, tmp_path, jwt_secret, valid_profile, valid_user_dto):
     """API instance with mocked DB, TarxivModule, JWT secret and dashboard URL."""
+    if API is None:
+        pytest.skip(f"API unavailable for auth route tests: {_API_IMPORT_ERROR}")
+
     monkeypatch.setenv("TARXIV_DASHBOARD_URL", _TEST_DASHBOARD_URL)
     monkeypatch.setattr(
         "tarxiv.database.TarxivDB.__init__", lambda self, *args, **kwargs: None
     )
+    monkeypatch.setattr(
+        "tarxiv.database_user.UserDB.__init__", lambda self, *args, **kwargs: None
+    )
     monkeypatch.setattr("tarxiv.utils.TarxivModule.__init__", MockTarxivModule.__init__)
     api = API("mock", str(tmp_path))
     api.txv_db = MagicMock()
+    api.user_db = MagicMock()
+    api.user_db.insert_new_user.return_value = valid_user_dto
     return api
 
 
 @pytest.fixture
-def mock_orcid_provider(monkeypatch, valid_profile):
+def mock_orcid_provider(monkeypatch, valid_user_dto):
     """Replace tarxiv.api.PROVIDERS with a controllable mock ORCID provider."""
     provider = MagicMock()
     provider.build_authorize_url.return_value = (
@@ -137,7 +164,7 @@ def mock_orcid_provider(monkeypatch, valid_profile):
     provider.complete_login.return_value = {
         "sub": "0000-0002-1825-0097",
         "provider": "orcid",
-        "profile": valid_profile,
+        "profile": valid_user_dto,
     }
     monkeypatch.setattr("tarxiv.api.PROVIDERS", {"orcid": provider})
     return provider
@@ -396,9 +423,10 @@ class TestCompleteLogin:
         self._setup_mocks(monkeypatch)
         result = orcid_provider.complete_login("test-code")
         profile = result["profile"]
-        assert profile["forename"] == "Ada"
-        assert profile["surname"] == "Lovelace"
-        assert profile["email"] == "ada@example.com"
+        assert isinstance(profile, tarxiv_dto.User)
+        assert profile.forename == "Ada"
+        assert profile.surname == "Lovelace"
+        assert profile.email == "ada@example.com"
 
     def test_token_endpoint_receives_code_and_credentials(self, monkeypatch, orcid_env):
         mock_post, _ = self._setup_mocks(monkeypatch)
