@@ -1,6 +1,7 @@
 import os
 import json
 import secrets
+from typing import cast
 
 from flask import Flask, Blueprint, request, make_response, redirect, session
 import cherrypy
@@ -9,7 +10,8 @@ from paste.translogger import TransLogger
 from .utils import TarxivModule
 from .database import TarxivDB
 from .auth import sign_token, PROVIDERS, validate_token, TokenStatus
-from .database_user import UserDB
+from .database_user import UserDB, DataLayerError
+from . import dto
 
 
 class API(TarxivModule):
@@ -29,7 +31,11 @@ class API(TarxivModule):
         )
         # Get couchbase connection
         self.txv_db = TarxivDB("tns", "api", script_name, reporting_mode, debug)
-        self.user_db = UserDB()# TODO: implement user database and connect
+        self.user_db = UserDB(
+            script_name="user_db",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
 
         # Survey name/alias map (could write better, but fuck it)
         self.survey_source_map = {
@@ -139,25 +145,69 @@ class API(TarxivModule):
             self.logger.info(status, extra=status)
 
             try:
-                result = PROVIDERS[provider].complete_login(code)
+                login_result = PROVIDERS[provider].complete_login(code)
             except Exception as exc:
                 self.logger.error(
                     {"oauth_error": str(exc)}, extra={"oauth_error": str(exc)}
                 )
                 return server_response({"error": "Authentication failed"}, 502)
-            
-            # --------------- login successful ---------------
-            # create or update user in database and generate token
+
+            dashboard_url = os.environ.get("TARXIV_DASHBOARD_URL", "/")
+            provider_profile = cast(dto.User, login_result.get("profile"))
+            sub = cast(str, login_result.get("sub"))
+            provider_name = cast(str, login_result.get("provider"))
+
+            if not provider_profile or not sub or not provider_name:
+                self.logger.error(
+                    {
+                        "oauth_error": "Provider did not return expected login payload",
+                        "provider": provider,
+                        "login_result": str(login_result),
+                    },
+                    extra={
+                        "oauth_error": "Provider did not return expected login payload",
+                        "provider": provider,
+                    },
+                )
+                return server_response({"error": "Authentication failed"}, 502)
 
             try:
-                user_dto = self.txv_db.
+                user_dto = self.user_db.insert_new_user(user=provider_profile)
+            except DataLayerError:
+                log = {
+                    "dashboard_url": dashboard_url,
+                    "status": "insert failed, attempting existing user lookup",
+                    "orcid_id": sub,
+                }
+                self.logger.info(log, extra=log)
+
+                try:
+                    user_dto = self.user_db.get_user_by_orcid_id(sub)
+                except DataLayerError:
+                    fail_log = {
+                        "dashboard_url": dashboard_url,
+                        "status": "login failed",
+                        "orcid_id": sub,
+                    }
+                    self.logger.info(fail_log, extra=fail_log)
+                    return redirect(f"{dashboard_url.rstrip('/')}")
+
+                if user_dto is None:
+                    fail_log = {
+                        "dashboard_url": dashboard_url,
+                        "status": "login failed",
+                        "orcid_id": sub,
+                    }
+                    self.logger.info(fail_log, extra=fail_log)
+                    return redirect(f"{dashboard_url.rstrip('/')}")
+
+            token_profile = user_dto.model_dump(mode="json", exclude_none=True)
 
             token = sign_token(
-                sub=result["sub"],
-                provider=result["provider"],
-                profile=result["profile"],
+                sub=sub,
+                provider=provider_name,
+                profile=token_profile,
             )
-            dashboard_url = os.environ.get("TARXIV_DASHBOARD_URL", "/")
             status = {
                 "status": "authentication successful, redirecting to dashboard with token",
                 "dashboard_url": dashboard_url,
