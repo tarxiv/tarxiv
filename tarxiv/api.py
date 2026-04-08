@@ -304,65 +304,59 @@ class API(TarxivModule):
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
 
-        # @self.app.route("/search_objects", methods=["POST"])
-        # def search_objects():
-        #     # Get request json
-        #     request_json = request.get_json()
-        #     self.logger.info(f"search_objects request: {request_json}")
-        #     token = request.headers.get("Authorization")
-        #     self.logger.info(f"search_objects token: {token}")
-        #     # search = request_json["search"]
-        #     # resquest_json = request.
-        #     # self.logger.info(f"search_objects search: {search}")
-        #     self.logger.info(f"search_objects request: {request}")
-        #     self.logger.info(f"search_objects request json: {request_json}")
-        #     search = request_json.get("search", {})
-        #     # Start log
-        #     log = {
-        #         "query_type": "search",
-        #         "query_ip": request.remote_addr,
-        #         "token": token,
-        #         "search": search,
-        #     }
-        #     try:
-        #         # Return error if bad token
-        #         validation = self.validate_token_request(token)
-        #         if not validation["is_valid"]:
-        #             raise PermissionError("bad token")
-        #         # Build query
-        #         query_str = (
-        #             "SELECT meta().id AS `obj_name` "
-        #             "FROM tarxiv.tns.objects "
-        #             "WHERE 1=1 AND "
-        #         )
-        #         # Add restrictions from search fields, then append search params to query
-        #         condition_list = []
-        #         for field, condition in search.items():
-        #             condition_str = self.build_condition(field, condition)
-        #             condition_list.append(condition_str)
-        #         # Append full condition string to query string
-        #         full_condition_string = " AND ".join(condition_list)
-        #         query_str += full_condition_string
-        #         # Return results
-        #         result = self.txv_db.query(query_str)
-        #         result = [r["obj_name"] for r in result]
-        #         status_code = 200
-        #         log["status"] = "Success"
-        #     except PermissionError as e:
-        #         result = {"error": str(e), "type": "token"}
-        #         status_code = 401
-        #         log["status"] = "PermissionError"
-        #     except LookupError as e:
-        #         result = {"error": str(e), "type": "lookup"}
-        #         status_code = 404
-        #         log["status"] = "LookupError"
-        #     except Exception as e:
-        #         result = {"error": str(e), "type": "server"}
-        #         status_code = 500
-        #         log["status"] = "ServerError"
+        @self.app.route("/search_objects", methods=["POST"])
+        def search_objects():
+            # Get request json
+            request_json = request.get_json()
+            self.logger.info(f"search_objects request: {request_json}")
+            token = request.headers.get("Authorization")
+            search = request_json.get("search", {})
+            # Start log
+            log = {
+                "query_type": "search",
+                "query_ip": request.remote_addr,
+                "token": token,
+                "search": search,
+            }
+            try:
+                # Return error if bad token
+                validation = self.validate_token_request(token)
+                if not validation["is_valid"]:
+                    raise PermissionError("bad token")
+                # Build query
+                query_str = (
+                    "SELECT meta().id AS `obj_name` "
+                    "FROM tarxiv.tns.objects "
+                    "WHERE 1=1 AND "
+                )
+                # Add restrictions from search fields, then append search params to query
+                condition_list = []
+                for field, condition in search.items():
+                    condition_str = self.build_condition(field, condition)
+                    condition_list.append(condition_str)
+                # Append full condition string to query string
+                full_condition_string = " AND ".join(condition_list)
+                query_str += full_condition_string
+                # Return results
+                result = self.txv_db.query(query_str)
+                result = [r["obj_name"] for r in result]
+                status_code = 200
+                log["status"] = "Success"
+            except PermissionError as e:
+                result = {"error": str(e), "type": "token"}
+                status_code = 401
+                log["status"] = "PermissionError"
+            except LookupError as e:
+                result = {"error": str(e), "type": "lookup"}
+                status_code = 404
+                log["status"] = "LookupError"
+            except Exception as e:
+                result = {"error": str(e), "type": "server"}
+                status_code = 500
+                log["status"] = "ServerError"
 
-        #     self.logger.info(log, extra=log)
-        #     return server_response(result, status_code)
+            self.logger.info(log, extra=log)
+            return server_response(result, status_code)
 
         @self.app.route("/cone_search", methods=["POST"])
         def cone_search():
