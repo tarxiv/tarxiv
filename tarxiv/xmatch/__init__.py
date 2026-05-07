@@ -1,16 +1,9 @@
-from .finders import (
-    TarxivXMatchProcessing,
-    TarxivXmatchFinder,
-)
-
-from .listeners import (
-    LSSTListener,
-    ZTFListener,
-)
+from .finders import TarxivXMatchProcessing, TarxivXmatchFinder
+from .listeners import LSSTListener, ZTFListener
 
 __all__ = [
+    "LSSTListener",
     "TarxivXMatchProcessing",
     "TarxivXmatchFinder",
-    "LSSTListener",
     "ZTFListener",
 ]

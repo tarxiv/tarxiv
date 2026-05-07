@@ -8,6 +8,8 @@ import os
 
 
 class LSSTListener(TarxivModule):
+    """Forward LSST alerts from Kafka into the crossmatch ingest topic."""
+
     def __init__(self, script_name, reporting_mode, debug=False):
         """Read in data for survey sources from config directory"""
         super().__init__(
@@ -108,6 +110,8 @@ class LSSTListener(TarxivModule):
 
 
 class ZTFListener(TarxivModule):
+    """Forward ZTF alerts from Fink into the crossmatch ingest topic."""
+
     def __init__(self, script_name, reporting_mode, debug=False):
         """Read in data for survey sources from config directory"""
         super().__init__(

@@ -787,6 +787,8 @@ class TNS(Survey):
 
 
 class LSST(Survey):
+    """Survey adapter for LSST alerts pulled through Lasair."""
+
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
@@ -818,6 +820,8 @@ class LSST(Survey):
 
 
 class DummySurvey(Survey):
+    """Minimal survey implementation used for testing and dry runs."""
+
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,

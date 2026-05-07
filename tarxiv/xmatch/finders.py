@@ -16,6 +16,8 @@ import os
 
 
 class TarxivXMatchProcessing(TarxivModule):
+    """Consume crossmatch results and publish enriched alerts."""
+
     def __init__(self, worker_id, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
@@ -490,6 +492,8 @@ class TarxivXMatchProcessing(TarxivModule):
 
 
 class TarxivXmatchFinder(TarxivModule):
+    """Run the Spark streaming crossmatch query over incoming alerts."""
+
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
@@ -560,7 +564,10 @@ class TarxivXmatchFinder(TarxivModule):
         # NOTE (JL): This variable was assigned but not used.
         # window = self.config["xmatch_window_len"]
         # Reduce by days
-        # filtered_df = sdf.filter(col("timestamp") >= expr(f"current_timestamp() - INTERVAL {window} HOURS"))
+        # filtered_df = sdf.filter(
+        #     col("timestamp")
+        #     >= expr(f"current_timestamp() - INTERVAL {self.config['xmatch_window_len']} HOURS")
+        # )
         # Partition on declination
         sdf = sdf.repartitionByRange(180, "dec_deg")
         # Register table for crazy query
