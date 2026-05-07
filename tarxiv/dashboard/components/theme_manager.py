@@ -30,6 +30,13 @@ THEME = {
         "TextInput": {
             "defaultProps": {
                 "size": "md",
+                "labelProps": {"fz": "sm"},
+            }
+        },
+        "NumberInput": {
+            "defaultProps": {
+                "size": "md",
+                "labelProps": {"fz": "sm"},
             }
         },
         "PasswordInput": {
