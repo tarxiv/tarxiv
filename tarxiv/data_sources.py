@@ -102,10 +102,10 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                         .diff()
                         .rename("mag_diff")
                     )
-                    diffs = pd.merge(mag_diffs, mjd_diff, on="night")
+                    diffs = mag_diffs.merge(mjd_diff, on="night")
                     # Then merge to sorted and get full diffs
-                    sorted_detections = pd.merge(
-                        sorted_detections, diffs, on="night", how="left"
+                    sorted_detections = sorted_detections.merge(
+                        diffs, on="night", how="left"
                     )
                     sorted_detections["mag_rate"] = -(
                         sorted_detections["mag_diff"] / sorted_detections["mjd_diff"]

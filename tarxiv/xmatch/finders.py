@@ -1,10 +1,10 @@
 from tarxiv.utils import TarxivModule, int_to_alphanumeric, deg2sex, TarxivPipelineError
-from tarxiv.data_sources import ATLAS, ASAS_SN, ZTF, LSST, DummySurvey
+from tarxiv.data_sources import ZTF, LSST, DummySurvey
 from tarxiv.database import TarxivDB
 
 from couchbase.exceptions import TransactionCommitAmbiguous, TransactionFailed
 from pyspark.sql.types import StructType, StringType, FloatType, TimestampType
-from pyspark.sql.functions import col, from_json, expr
+from pyspark.sql.functions import col, from_json
 from pyspark.sql import SparkSession
 from confluent_kafka import Consumer, KafkaException, KafkaError
 from hop.auth import Auth
@@ -523,7 +523,8 @@ class TarxivXmatchFinder(TarxivModule):
         shutil.rmtree("/tmp/spark-checkpoints", ignore_errors=True)
 
         # Create Kafka DF
-        kafka_host = os.environ["TARXIV_KAFKA_HOST"]
+        # NOTE (JL): This variable is assigned but not used. Please delete if not needed.
+        # kafka_host = os.environ["TARXIV_KAFKA_HOST"]
         """
         .option("kafka.consumer.timeout.ms", "10000") \
             .option("kafka.consumer.max.poll.records", "50000") \
@@ -556,7 +557,8 @@ class TarxivXmatchFinder(TarxivModule):
         )
 
         # What is our comparison window
-        window = self.config["xmatch_window_len"]
+        # NOTE (JL): This variable was assigned but not used.
+        # window = self.config["xmatch_window_len"]
         # Reduce by days
         # filtered_df = sdf.filter(col("timestamp") >= expr(f"current_timestamp() - INTERVAL {window} HOURS"))
         # Partition on declination
@@ -577,15 +579,15 @@ class TarxivXmatchFinder(TarxivModule):
             t2.dec_deg AS dec_deg_2,
             t2.timestamp AS timestamp_2
         FROM targets t1
-        JOIN targets t2 
-        ON 1=1 
+        JOIN targets t2
+        ON 1=1
           AND t1.obj_id != t2.obj_id                                                 -- Ensures you don't match a row with itself
           AND t1.obj_id < t2.obj_id
-          AND t1.source != t2.source 
+          AND t1.source != t2.source
           AND CAST(t1.dec_deg AS DECIMAL(10, 3)) = CAST(t2.dec_deg AS DECIMAL(10, 3))  -- Shortcut to throwout comparison rows
-          AND DEGREES(ACOS(SIN(RADIANS(t1.dec_deg)) * SIN(RADIANS(t2.dec_deg)) 
+          AND DEGREES(ACOS(SIN(RADIANS(t1.dec_deg)) * SIN(RADIANS(t2.dec_deg))
                        + COS(RADIANS(t1.dec_deg)) * COS(RADIANS(t2.dec_deg))           -- Actual Join
-                       * COS(RADIANS(t1.ra_deg - t2.ra_deg)))) * 3600 <= 
+                       * COS(RADIANS(t1.ra_deg - t2.ra_deg)))) * 3600 <=
         """
         # Add crossmatch radius
         query += self.config["xmatch_radius"]

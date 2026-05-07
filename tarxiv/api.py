@@ -76,7 +76,6 @@ class API(TarxivModule):
 
     def validate_token_request(self, token: str) -> dict:
         """Validate a JWT and return structured status for error handling."""
-
         result = validate_token(token)
         return {
             "is_valid": result["status"] == TokenStatus.VALID,
@@ -264,13 +263,12 @@ class API(TarxivModule):
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
-                if (
-                    type(request_json["n_rows"]) != int
-                    or type(request_json["offset"]) != int
+                if not isinstance(request_json["n_rows"], int) or not isinstance(
+                    request_json["offset"], int
                 ):
                     raise ValueError("n_rows/offset must be an integer")
 
-                query = f"""SELECT 
+                query = f"""SELECT
                               `objects`.`internal`.`insert_date` AS date_received,
                               META().id AS obj_name,
                               `objects`.`object_type`[0].`value` AS object_type,

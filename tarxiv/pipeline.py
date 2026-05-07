@@ -109,7 +109,7 @@ class TNSPipeline(TarxivModule):
         status, obj_meta = append_dynamic_values(obj_meta, lc_df)
         # Drop night column from lc, was only necessary for mag_rates
         if len(lc_df) != 0:
-            lc_df.drop("night", axis=1, inplace=True)
+            lc_df = lc_df.drop("night", axis=1)
         status.update({"obj_name": obj_name})
         self.logger.info(status, extra=status)
         obj_meta = clean_meta(obj_meta)
@@ -247,7 +247,7 @@ class TNSPipeline(TarxivModule):
                 ]
                 # Upsert to database
                 self.upsert_object(obj_name, obj_meta, obj_lc)
-            except:
+            except Exception:
                 stack_trace = traceback.format_exc()
                 self.logger.error(
                     {
@@ -277,7 +277,7 @@ class TNSPipeline(TarxivModule):
                     obj_meta["reporting_date"] = [
                         {"value": obj["time_received"], "source": "tns"}
                     ]
-                except:
+                except Exception:
                     status = {
                         "status": "no cooresponding reporting date",
                         "obj_name": obj_name,
@@ -306,7 +306,7 @@ class TNSPipeline(TarxivModule):
                         "obj_name": obj_name,
                     }
                     self.logger.info(status, extra=status)
-            except:
+            except Exception:
                 stack_trace = traceback.format_exc()
                 self.logger.error(
                     {
@@ -357,7 +357,7 @@ class TNSPipeline(TarxivModule):
                             "obj_name": obj_name,
                         }
                         self.logger.info(status, extra=status)
-                except:
+                except Exception:
                     stack_trace = traceback.format_exc()
                     self.logger.error(
                         {

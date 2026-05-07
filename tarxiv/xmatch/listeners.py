@@ -3,7 +3,6 @@ from confluent_kafka import Consumer, Producer
 from fink_client.consumer import AlertConsumer
 from astropy.time import Time
 import traceback
-import uuid
 import json
 import os
 

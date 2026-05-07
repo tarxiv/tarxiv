@@ -1,6 +1,6 @@
 import os
 
-from dash import dcc, html
+from dash import html
 import plotly.io as pio
 import plotly.graph_objects as go
 
