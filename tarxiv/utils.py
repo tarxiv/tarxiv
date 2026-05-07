@@ -77,12 +77,10 @@ class TarxivModule:
                 # certfile=self.config['logstash_cert'],
                 database_path=None,
             )
-            formatter = LogstashFormatter(
-                {
-                    "module": self.module,
-                    "script": script_name,
-                }
-            )
+            formatter = LogstashFormatter({
+                "module": self.module,
+                "script": script_name,
+            })
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
 

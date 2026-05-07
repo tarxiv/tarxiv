@@ -192,7 +192,8 @@ class TarxivXMatchProcessing(TarxivModule):
                         "source": detection_2["source"],
                     },
                 ],
-                "updated_at": datetime.datetime.now()
+                "updated_at": datetime.datetime
+                .now()
                 .replace(microsecond=0)
                 .isoformat()
                 .replace("+00:00", "Z")
@@ -263,33 +264,28 @@ class TarxivXMatchProcessing(TarxivModule):
                 )
 
             # Append values to documents
-            meta["identifiers"].append(
-                {
-                    "name": new_hit_det["obj_id"],
-                    "source": new_hit_det["source"],
-                }
-            )
-            meta["coords"].append(
-                {
-                    "ra_deg": new_hit_det["ra_deg"],
-                    "dec_deg": new_hit_det["dec_deg"],
-                    "ra_hms": new_hit_det["ra_hms"],
-                    "dec_dms": new_hit_det["dec_dms"],
-                    "source": new_hit_det["source"],
-                }
-            )
-            meta["timestamps"].append(
-                {
-                    "value": new_hit_det["timestamp"],
-                    "source": new_hit_det["source"],
-                }
-            )
+            meta["identifiers"].append({
+                "name": new_hit_det["obj_id"],
+                "source": new_hit_det["source"],
+            })
+            meta["coords"].append({
+                "ra_deg": new_hit_det["ra_deg"],
+                "dec_deg": new_hit_det["dec_deg"],
+                "ra_hms": new_hit_det["ra_hms"],
+                "dec_dms": new_hit_det["dec_dms"],
+                "source": new_hit_det["source"],
+            })
+            meta["timestamps"].append({
+                "value": new_hit_det["timestamp"],
+                "source": new_hit_det["source"],
+            })
             # Append source meta
             for source in self.config[new_hit_det["source"]]["associated_sources"]:
                 meta["sources"].append(self.schema_sources[source])
 
             meta["updated_at"] = (
-                datetime.datetime.now()
+                datetime.datetime
+                .now()
                 .replace(microsecond=0)
                 .isoformat()
                 .replace("+00:00", "Z")
@@ -375,7 +371,8 @@ class TarxivXMatchProcessing(TarxivModule):
                         "source": detection_2["source"],
                     },
                 ],
-                "updated_at": datetime.datetime.now()
+                "updated_at": datetime.datetime
+                .now()
                 .replace(microsecond=0)
                 .isoformat()
                 .replace("+00:00", "Z")
@@ -443,33 +440,28 @@ class TarxivXMatchProcessing(TarxivModule):
                 )
 
             # Append values to documents
-            meta["identifiers"].append(
-                {
-                    "name": new_hit_det["obj_id"],
-                    "source": new_hit_det["source"],
-                }
-            )
-            meta["coords"].append(
-                {
-                    "ra_deg": new_hit_det["ra_deg"],
-                    "dec_deg": new_hit_det["dec_deg"],
-                    "ra_hms": new_hit_det["ra_hms"],
-                    "dec_dms": new_hit_det["dec_dms"],
-                    "source": new_hit_det["source"],
-                }
-            )
-            meta["timestamps"].append(
-                {
-                    "value": new_hit_det["timestamp"],
-                    "source": new_hit_det["source"],
-                }
-            )
+            meta["identifiers"].append({
+                "name": new_hit_det["obj_id"],
+                "source": new_hit_det["source"],
+            })
+            meta["coords"].append({
+                "ra_deg": new_hit_det["ra_deg"],
+                "dec_deg": new_hit_det["dec_deg"],
+                "ra_hms": new_hit_det["ra_hms"],
+                "dec_dms": new_hit_det["dec_dms"],
+                "source": new_hit_det["source"],
+            })
+            meta["timestamps"].append({
+                "value": new_hit_det["timestamp"],
+                "source": new_hit_det["source"],
+            })
             # Append source meta
             for source in self.config[new_hit_det["source"]]["associated_sources"]:
                 meta["sources"].append(self.schema_sources[source])
 
             meta["updated_at"] = (
-                datetime.datetime.now()
+                datetime.datetime
+                .now()
                 .replace(microsecond=0)
                 .isoformat()
                 .replace("+00:00", "Z")
@@ -504,7 +496,8 @@ class TarxivXmatchFinder(TarxivModule):
 
         # Create spark app
         self.spark = (
-            SparkSession.builder.appName("spark-xmatch-finder")
+            SparkSession.builder
+            .appName("spark-xmatch-finder")
             .config(
                 "spark.jars.packages",
                 "org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1",
@@ -537,7 +530,8 @@ class TarxivXmatchFinder(TarxivModule):
             .option("kafka.heartbeat.interval.ms", "5000") \
             """
         kafka_df = (
-            self.spark.readStream.format("kafka")
+            self.spark.readStream
+            .format("kafka")
             .option("kafka.bootstrap.servers", "localhost:9092")
             .option("subscribe", self.config["xmatch_ingest_topic"])
             .load()
@@ -555,7 +549,8 @@ class TarxivXmatchFinder(TarxivModule):
 
         # Get data from json
         sdf = (
-            kafka_df.selectExpr("CAST(value AS STRING)")
+            kafka_df
+            .selectExpr("CAST(value AS STRING)")
             .select(from_json(col("value"), json_schema).alias("data"))
             .select("data.*")
         )
@@ -607,7 +602,8 @@ class TarxivXmatchFinder(TarxivModule):
         )
 
         query = (
-            kafka_df.writeStream.outputMode("append")
+            kafka_df.writeStream
+            .outputMode("append")
             .format("kafka")
             .option("kafka.bootstrap.servers", "localhost:9092")
             .option("topic", "spark-sink")

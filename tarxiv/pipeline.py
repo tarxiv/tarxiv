@@ -249,13 +249,11 @@ class TNSPipeline(TarxivModule):
                 self.upsert_object(obj_name, obj_meta, obj_lc)
             except Exception:
                 stack_trace = traceback.format_exc()
-                self.logger.error(
-                    {
-                        "status": "failed pipeline operation",
-                        "obj_name": obj_name,
-                        "exception": stack_trace,
-                    }
-                )
+                self.logger.error({
+                    "status": "failed pipeline operation",
+                    "obj_name": obj_name,
+                    "exception": stack_trace,
+                })
 
     def daily_update(self):
         # Get all targets still in "active" window for update
@@ -308,13 +306,11 @@ class TNSPipeline(TarxivModule):
                     self.logger.info(status, extra=status)
             except Exception:
                 stack_trace = traceback.format_exc()
-                self.logger.error(
-                    {
-                        "status": "failed pipeline operation",
-                        "obj_name": obj_name,
-                        "exception": stack_trace,
-                    }
-                )
+                self.logger.error({
+                    "status": "failed pipeline operation",
+                    "obj_name": obj_name,
+                    "exception": stack_trace,
+                })
 
     def run_pipeline(self):
 
@@ -359,10 +355,8 @@ class TNSPipeline(TarxivModule):
                         self.logger.info(status, extra=status)
                 except Exception:
                     stack_trace = traceback.format_exc()
-                    self.logger.error(
-                        {
-                            "status": "failed pipeline operation",
-                            "obj_name": obj_name,
-                            "exception": stack_trace,
-                        }
-                    )
+                    self.logger.error({
+                        "status": "failed pipeline operation",
+                        "obj_name": obj_name,
+                        "exception": stack_trace,
+                    })

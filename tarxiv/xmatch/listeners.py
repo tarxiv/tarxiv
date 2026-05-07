@@ -20,19 +20,17 @@ class LSSTListener(TarxivModule):
         )
 
         # Create consumer (24 hour timeout)
-        self.consumer = Consumer(
-            {
-                "bootstrap.servers": self.config["lasair"]["kafka_endpoint"],
-                "group.id": self.config["lasair"]["kafka_group_id"],
-                "auto.offset.reset": "smallest",
-                "enable.auto.commit": False,  # Manual commit
-                "enable.auto.offset.store": True,  # Manual store/commit
-                "max.poll.interval.ms": 3600000,
-                "session.timeout.ms": 1800000,
-                "heartbeat.interval.ms": 30000,
-                "enable.partition.eof": False,
-            }
-        )
+        self.consumer = Consumer({
+            "bootstrap.servers": self.config["lasair"]["kafka_endpoint"],
+            "group.id": self.config["lasair"]["kafka_group_id"],
+            "auto.offset.reset": "smallest",
+            "enable.auto.commit": False,  # Manual commit
+            "enable.auto.offset.store": True,  # Manual store/commit
+            "max.poll.interval.ms": 3600000,
+            "session.timeout.ms": 1800000,
+            "heartbeat.interval.ms": 30000,
+            "enable.partition.eof": False,
+        })
         self.consumer.subscribe([self.config["lasair"]["kafka_topic"]])
         # Producer for sending to xmatch service
         conf = {
