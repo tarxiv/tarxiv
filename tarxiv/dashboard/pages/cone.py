@@ -46,113 +46,103 @@ def layout(**kwargs):
             expressive_card(
                 title="Cone Search",
                 children=[
-                    dmc.Stack(
-                        [
-                            dmc.Text(
-                                "Search for objects within a specified radius of sky coordinates",
-                            ),
-                            dmc.Text(
-                                "Option 1: Enter RA (degrees), Dec (degrees) and radius (arcsec)"
-                            ),
-                            dmc.Group(
-                                [
-                                    Keyboard(
-                                        children=dmc.Group(
-                                            [
-                                                dmc.NumberInput(
-                                                    id="ra-input",
-                                                    placeholder="0-360",
-                                                    min=0,
-                                                    max=360,
-                                                    label="RA (degrees):",
-                                                    style={
-                                                        "width": "150px",
-                                                    },
-                                                ),
-                                                dmc.NumberInput(
-                                                    id="dec-input",
-                                                    placeholder="-90 to 90",
-                                                    min=-90,
-                                                    max=90,
-                                                    label="Dec (degrees):",
-                                                    style={
-                                                        "width": "150px",
-                                                    },
-                                                ),
-                                                dmc.NumberInput(
-                                                    id="radius-input",
-                                                    placeholder=">0",
-                                                    # value=30,
-                                                    min=0,
-                                                    label="Radius (arcsec):",
-                                                    style={
-                                                        "width": "150px",
-                                                    },
-                                                ),
-                                            ]
-                                        ),
-                                        captureKeys=["Enter"],
-                                        n_keydowns=0,
-                                        id="cone-search-keyboard",
+                    dmc.Stack([
+                        dmc.Text(
+                            "Search for objects within a specified radius of sky coordinates",
+                        ),
+                        dmc.Text(
+                            "Option 1: Enter RA (degrees), Dec (degrees) and radius (arcsec)"
+                        ),
+                        dmc.Group([
+                            Keyboard(
+                                children=dmc.Group([
+                                    dmc.NumberInput(
+                                        id="ra-input",
+                                        placeholder="0-360",
+                                        min=0,
+                                        max=360,
+                                        label="RA (degrees):",
+                                        style={
+                                            "width": "150px",
+                                        },
                                     ),
-                                    dmc.Button(
-                                        "Search",
-                                        id="cone-search-button",
-                                        n_clicks=0,
-                                        style={"marginTop": "21px"},
+                                    dmc.NumberInput(
+                                        id="dec-input",
+                                        placeholder="-90 to 90",
+                                        min=-90,
+                                        max=90,
+                                        label="Dec (degrees):",
+                                        style={
+                                            "width": "150px",
+                                        },
                                     ),
-                                ]
-                            ),
-                            dmc.Divider(label="OR", labelPosition="center"),
-                            dmc.Text(
-                                "Option 2: Enter RA (HMS), Dec (DMS) and radius (arcsec)"
-                            ),
-                            dmc.Group(
-                                [
-                                    Keyboard(
-                                        children=dmc.Group(
-                                            [
-                                                dmc.TextInput(
-                                                    id="ra-hms-input",
-                                                    placeholder="21:01:36.90",
-                                                    label="RA (HMS):",
-                                                    style={
-                                                        "width": "150px",
-                                                    },
-                                                ),
-                                                dmc.TextInput(
-                                                    id="dec-dms-input",
-                                                    placeholder="+68:09:48.0",
-                                                    label="Dec (DMS):",
-                                                    style={
-                                                        "width": "150px",
-                                                    },
-                                                ),
-                                                dmc.NumberInput(
-                                                    id="radius-hmsdms-input",
-                                                    placeholder=">0",
-                                                    min=0,
-                                                    label="Radius (arcsec):",
-                                                    style={
-                                                        "width": "150px",
-                                                    },
-                                                ),
-                                            ]
-                                        ),
-                                        captureKeys=["Enter"],
-                                        n_keydowns=0,
-                                        id="cone-search-hmsdms-keyboard",
+                                    dmc.NumberInput(
+                                        id="radius-input",
+                                        placeholder=">0",
+                                        # value=30,
+                                        min=0,
+                                        label="Radius (arcsec):",
+                                        style={
+                                            "width": "150px",
+                                        },
                                     ),
-                                    dmc.Button(
-                                        "Search",
-                                        id="cone-search-hmsdms-button",
-                                        n_clicks=0,
-                                        style={"marginTop": "21px"},
-                                    ),
-                                ]
+                                ]),
+                                captureKeys=["Enter"],
+                                n_keydowns=0,
+                                id="cone-search-keyboard",
                             ),
-                        ]
-                    ),
+                            dmc.Button(
+                                "Search",
+                                id="cone-search-button",
+                                n_clicks=0,
+                                style={"marginTop": "21px"},
+                            ),
+                        ]),
+                        dmc.Divider(label="OR", labelPosition="center"),
+                        dmc.Text(
+                            "Option 2: Enter RA (HMS), Dec (DMS) and radius (arcsec)"
+                        ),
+                        dmc.Group([
+                            Keyboard(
+                                children=dmc.Group([
+                                    dmc.TextInput(
+                                        id="ra-hms-input",
+                                        placeholder="21:01:36.90",
+                                        label="RA (HMS):",
+                                        style={
+                                            "width": "150px",
+                                        },
+                                    ),
+                                    dmc.TextInput(
+                                        id="dec-dms-input",
+                                        placeholder="+68:09:48.0",
+                                        label="Dec (DMS):",
+                                        style={
+                                            "width": "150px",
+                                        },
+                                    ),
+                                    dmc.NumberInput(
+                                        id="radius-hmsdms-input",
+                                        placeholder=">0",
+                                        min=0,
+                                        label="Radius (arcsec):",
+                                        style={
+                                            "width": "150px",
+                                        },
+                                    ),
+                                ]),
+                                captureKeys=["Enter"],
+                                n_keydowns=0,
+                                id="cone-search-hmsdms-keyboard",
+                            ),
+                            dmc.Button(
+                                "Search",
+                                id="cone-search-hmsdms-button",
+                                n_clicks=0,
+                                style={"marginTop": "21px"},
+                            ),
+                        ]),
+                    ]),
                 ],
             ),
             dmc.Box(
@@ -395,9 +385,9 @@ def get_cone_search_results(ra, dec, radius, token, logger) -> list:
         except ValidationError as e:
             logger.error({"error": f"Failed to parse cone search results: {str(e)}"})
     elif response_cone.status_code == 401:
-        logger.warning(
-            {"warning": "Unauthorized cone search attempt. Check API token validity."}
-        )
+        logger.warning({
+            "warning": "Unauthorized cone search attempt. Check API token validity."
+        })
         raise Unauthorized("Invalid API token. Check your token.")
     else:
         logger.error({
