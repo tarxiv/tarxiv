@@ -23,10 +23,10 @@ jobs:
 
     - name: tarxiv
       run: |
-        uv run ruff format --check --preview tarxiv/
-        uv run ruff check --statistics --preview tarxiv/
+        uv run ruff format --check tarxiv/
+        uv run ruff check --statistics tarxiv/
 
     - name: bin 
       run: |
-        uv run ruff format --check --preview bin/
-        uv run ruff check --statistics --preview bin/
+        uv run ruff format --check bin/
+        uv run ruff check --statistics bin/
