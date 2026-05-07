@@ -278,8 +278,10 @@ class TNSPipeline(TarxivModule):
                         {"value": obj["time_received"], "source": "tns"}
                     ]
                 except:
-                    status = {"status": "no cooresponding reporting date",
-                              "obj_name": obj_name,}
+                    status = {
+                        "status": "no cooresponding reporting date",
+                        "obj_name": obj_name,
+                    }
                     self.logger.error(status, extra=status)
 
                 # Get timestamp

@@ -264,7 +264,10 @@ class API(TarxivModule):
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
-                if type(request_json["n_rows"]) != int or type(request_json["offset"]) != int:
+                if (
+                    type(request_json["n_rows"]) != int
+                    or type(request_json["offset"]) != int
+                ):
                     raise ValueError("n_rows/offset must be an integer")
 
                 query = f"""SELECT 

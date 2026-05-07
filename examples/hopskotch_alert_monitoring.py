@@ -31,24 +31,30 @@ with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "r") as s:
 
         # Now we can filter
         filter_dict = {
-            "redshift": [
-                {"source": "any", "value": 0.01, "operator": "<"}
-            ],
-            "discovery_date": [
-                {"source": "tns", "date_limit": date_limit}
-            ],
+            "redshift": [{"source": "any", "value": 0.01, "operator": "<"}],
+            "discovery_date": [{"source": "tns", "date_limit": date_limit}],
             "discovery_source": [
-                {"source": "tns", "value": ["GOTO", "ASAS-SN", "ZTF", "LSST"], "operator": "IN"}
+                {
+                    "source": "tns",
+                    "value": ["GOTO", "ASAS-SN", "ZTF", "LSST"],
+                    "operator": "IN",
+                }
             ],
-            "latest_detection":[
-                {"source": "atlas", "date_limit": date_limit, "value": "18.5", "operator": "<", "filter": "c"},
-                {"source": "asas-sn", "date_limit": date_limit, "value": "17.5", "operator": "<", "filter": "g"},
-                {"source": "any", "mag_rate": 0.05}
-
+            "latest_detection": [
+                {
+                    "source": "atlas",
+                    "date_limit": date_limit,
+                    "value": "18.5",
+                    "operator": "<",
+                    "filter": "c",
+                },
+                {
+                    "source": "asas-sn",
+                    "date_limit": date_limit,
+                    "value": "17.5",
+                    "operator": "<",
+                    "filter": "g",
+                },
+                {"source": "any", "mag_rate": 0.05},
             ],
         }
-
-
-
-
-

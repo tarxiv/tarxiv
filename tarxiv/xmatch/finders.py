@@ -15,31 +15,36 @@ import json
 import os
 
 
-
 class TarxivXMatchProcessing(TarxivModule):
     def __init__(self, worker_id, script_name, reporting_mode, debug=False):
-        super().__init__(script_name=script_name,
-                         module="xmatch-alerts" + f"_worker_{worker_id:02d}",
-                         reporting_mode=reporting_mode,
-                         debug=debug)
+        super().__init__(
+            script_name=script_name,
+            module="xmatch-alerts" + f"_worker_{worker_id:02d}",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
         # Get database connection
         self.db = TarxivDB("xmatch", "pipeline", script_name, reporting_mode, debug)
         # Get kafka consumer
         kafka_host = os.environ["TARXIV_KAFKA_HOST"]
-        conf = {'bootstrap.servers': f"{kafka_host}:9092",
-                'group.id': 'xmatch_group_01',
-                'auto.offset.reset': 'smallest',
-                'enable.auto.commit': False,  # Manual commit
-                'enable.auto.offset.store': True,  # Manual store/commit
-                'max.poll.interval.ms': 10000,
-                'session.timeout.ms': 10000,
-                'heartbeat.interval.ms': 3000,
-                'enable.partition.eof': False}
+        conf = {
+            "bootstrap.servers": f"{kafka_host}:9092",
+            "group.id": "xmatch_group_01",
+            "auto.offset.reset": "smallest",
+            "enable.auto.commit": False,  # Manual commit
+            "enable.auto.offset.store": True,  # Manual store/commit
+            "max.poll.interval.ms": 10000,
+            "session.timeout.ms": 10000,
+            "heartbeat.interval.ms": 3000,
+            "enable.partition.eof": False,
+        }
         self.consumer = Consumer(conf)
 
         # Hopskotch authorization
-        self.hop_auth = Auth(user=os.environ["TARXIV_HOPSKOTCH_USERNAME"],
-                             password=os.environ["TARXIV_HOPSKOTCH_PASSWORD"])
+        self.hop_auth = Auth(
+            user=os.environ["TARXIV_HOPSKOTCH_USERNAME"],
+            password=os.environ["TARXIV_HOPSKOTCH_PASSWORD"],
+        )
 
         # Get data sources
         self.data_sources = {
@@ -69,39 +74,60 @@ class TarxivXMatchProcessing(TarxivModule):
 
             # Process message
             else:
-                cross_match = json.loads(msg.value().decode('utf-8'))
+                cross_match = json.loads(msg.value().decode("utf-8"))
                 # Split row
-                detection_1 = {k[:-2]: v for k, v in cross_match.items() if k.endswith('_1')}
-                detection_2 = {k[:-2]: v for k, v in cross_match.items() if k.endswith('_2')}
+                detection_1 = {
+                    k[:-2]: v for k, v in cross_match.items() if k.endswith("_1")
+                }
+                detection_2 = {
+                    k[:-2]: v for k, v in cross_match.items() if k.endswith("_2")
+                }
                 # Get sexigesimal coords for both
-                detection_1["ra_hms"], detection_1["dec_dms"] = deg2sex(detection_1["ra_deg"], detection_1["dec_deg"])
-                detection_2["ra_hms"], detection_2["dec_dms"] = deg2sex(detection_2["ra_deg"], detection_2["dec_deg"])
+                detection_1["ra_hms"], detection_1["dec_dms"] = deg2sex(
+                    detection_1["ra_deg"], detection_1["dec_deg"]
+                )
+                detection_2["ra_hms"], detection_2["dec_dms"] = deg2sex(
+                    detection_2["ra_deg"], detection_2["dec_deg"]
+                )
 
                 # Try
                 try:
                     # Now we need a transaction
-                    #xmatch_id, meta = self.db.cluster.transactions.run(
+                    # xmatch_id, meta = self.db.cluster.transactions.run(
                     #    lambda ctx: self.new_xmatch_transaction(ctx, detection_1, detection_2, alert_1, alert_2)
-                    #)
-                    xmatch_id, meta = self.new_xmatch_submission(detection_1, detection_2)
+                    # )
+                    xmatch_id, meta = self.new_xmatch_submission(
+                        detection_1, detection_2
+                    )
 
                     # Submit to hopskotch
                     stream = Stream(auth=self.hop_auth)
 
-                    with stream.open("kafka://kafka.scimma.org/tarxiv.xmatch", "w") as s:
+                    with stream.open(
+                        "kafka://kafka.scimma.org/tarxiv.xmatch", "w"
+                    ) as s:
                         s.write({"xmatch_id": xmatch_id} | meta)
-                        status = {"status": "submitted hopskotch alert", "xmatch_id": xmatch_id}
-                        self.logger.info(status, extra=status)                # Commit so we dont read multiples
+                        status = {
+                            "status": "submitted hopskotch alert",
+                            "xmatch_id": xmatch_id,
+                        }
+                        self.logger.info(
+                            status, extra=status
+                        )  # Commit so we dont read multiples
 
                 except TarxivPipelineError as e:
                     status = {"pipeline_error": str(e)}
                     self.logger.error(status, extra=status)
                 except (TransactionCommitAmbiguous, TransactionFailed) as e:
-                    status = {"transaction_error": str(e),
-                              "transaction_info": e._exc_info['inner_cause']}
+                    status = {
+                        "transaction_error": str(e),
+                        "transaction_info": e._exc_info["inner_cause"],
+                    }
                     self.logger.error(status, extra=status)
                 except (KafkaException, KafkaError) as e:
-                    status = {"hopskotch_error": str(e),}
+                    status = {
+                        "hopskotch_error": str(e),
+                    }
                     self.logger.error(status, extra=status)
                 finally:
                     # Commit consumpiton
@@ -109,9 +135,11 @@ class TarxivXMatchProcessing(TarxivModule):
 
     def new_xmatch_submission(self, detection_1, detection_2):
         # We need to see if either detection already has a crossmatch in our cache
-        query = (f"SELECT META().id AS xmatch_id FROM tarxiv.xmatch.hits "
-                 f"WHERE ANY id IN identifiers SATISFIES id.name IN "
-                 f"['{detection_1['obj_id']}', '{detection_2['obj_id']}'] END")
+        query = (
+            f"SELECT META().id AS xmatch_id FROM tarxiv.xmatch.hits "
+            f"WHERE ANY id IN identifiers SATISFIES id.name IN "
+            f"['{detection_1['obj_id']}', '{detection_2['obj_id']}'] END"
+        )
         result = list(self.db.query(query))
 
         # If nothing, then we have a new detection hit
@@ -124,61 +152,86 @@ class TarxivXMatchProcessing(TarxivModule):
             self.db.upsert(str(year), content, collection="idx")
 
             # Full detection id will be TXV-2025-xxxxxx
-            alpha_id = int_to_alphanumeric(content["current_idx"] , self.config["xmatch_id_len"])
+            alpha_id = int_to_alphanumeric(
+                content["current_idx"], self.config["xmatch_id_len"]
+            )
             xmatch_id = f"TXV-{year}-{alpha_id}"
 
             # Split our crossmatch into separate sub documents
             meta = {
                 "schema": "https://github.com/astrocatalogs/schema/README.md",
-                "identifiers": [{"name": detection_1['obj_id'], "source": detection_1['source']},
-                                {"name": detection_2['obj_id'], "source": detection_2['source']}],
-                "coords": [
-                    {"ra_deg": detection_1['ra_deg'],
-                     "dec_deg": detection_1['dec_deg'],
-                     "ra_hms": detection_1['ra_hms'],
-                     "dec_dms": detection_1['dec_dms'],
-                     "source": detection_1['source']
-                     },
-                    {"ra_deg": detection_2['ra_deg'],
-                     "dec_deg": detection_2['dec_deg'],
-                     "ra_hms": detection_2['ra_hms'],
-                     "dec_dms": detection_2['dec_dms'],
-                     "source": detection_2['source']}
+                "identifiers": [
+                    {"name": detection_1["obj_id"], "source": detection_1["source"]},
+                    {"name": detection_2["obj_id"], "source": detection_2["source"]},
                 ],
-                "timestamps": [{"value": detection_1['timestamp'], "source": detection_1['source']},
-                               {"value": detection_2['timestamp'], "source": detection_2['source']}],
-                "updated_at": datetime.datetime.now().replace(microsecond=0).isoformat()
-                                            .replace("+00:00", "Z")
-                                            .replace("T", " "),
-                "sources": []
+                "coords": [
+                    {
+                        "ra_deg": detection_1["ra_deg"],
+                        "dec_deg": detection_1["dec_deg"],
+                        "ra_hms": detection_1["ra_hms"],
+                        "dec_dms": detection_1["dec_dms"],
+                        "source": detection_1["source"],
+                    },
+                    {
+                        "ra_deg": detection_2["ra_deg"],
+                        "dec_deg": detection_2["dec_deg"],
+                        "ra_hms": detection_2["ra_hms"],
+                        "dec_dms": detection_2["dec_dms"],
+                        "source": detection_2["source"],
+                    },
+                ],
+                "timestamps": [
+                    {
+                        "value": detection_1["timestamp"],
+                        "source": detection_1["source"],
+                    },
+                    {
+                        "value": detection_2["timestamp"],
+                        "source": detection_2["source"],
+                    },
+                ],
+                "updated_at": datetime.datetime.now()
+                .replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z")
+                .replace("T", " "),
+                "sources": [],
             }
             # Append source meta (citations
-            for source in self.config[detection_1['source']]["associated_sources"]:
+            for source in self.config[detection_1["source"]]["associated_sources"]:
                 meta["sources"].append(self.schema_sources[source])
-            for source in self.config[detection_2['source']]["associated_sources"]:
+            for source in self.config[detection_2["source"]]["associated_sources"]:
                 meta["sources"].append(self.schema_sources[source])
 
             # Insert to database
             self.db.upsert(xmatch_id, meta, collection="hits")
             # Inset alert data to database
-            alert_1 = self.data_sources[detection_1["source"]].pull_alert(detection_1["obj_id"])
-            alert_2 = self.data_sources[detection_2["source"]].pull_alert(detection_2["obj_id"])
+            alert_1 = self.data_sources[detection_1["source"]].pull_alert(
+                detection_1["obj_id"]
+            )
+            alert_2 = self.data_sources[detection_2["source"]].pull_alert(
+                detection_2["obj_id"]
+            )
             self.db.upsert(detection_1["obj_id"], alert_1, collection="alerts")
             self.db.upsert(detection_2["obj_id"], alert_2, collection="alerts")
 
             # Log
-            status = {"status": "new crossmatched detection",
-                      "xmatch_id": xmatch_id,
-                      "surveys": [detection_1["source"], detection_2["source"]],
-                      "identifiers": [detection_1["obj_id"], detection_2["obj_id"]]}
+            status = {
+                "status": "new crossmatched detection",
+                "xmatch_id": xmatch_id,
+                "surveys": [detection_1["source"], detection_2["source"]],
+                "identifiers": [detection_1["obj_id"], detection_2["obj_id"]],
+            }
             self.logger.info(status, extra=status)
 
         # Otherwise we have an additional detection to add to an existing hit
         else:
             # If we have more than one result send a warning (shouldn't have a detection.id in more than one document)
             if len(result) > 1:
-                warning = {"status": "found multiple documents with same detection.id",
-                           "offending_ids": [detection_1['obj_id'], detection_2['obj_id']]}
+                warning = {
+                    "status": "found multiple documents with same detection.id",
+                    "offending_ids": [detection_1["obj_id"], detection_2["obj_id"]],
+                }
                 self.logger.warn(warning, extra=warning)
             # Get first xmatch
             xmatch_id = result[0]["xmatch_id"]
@@ -187,53 +240,73 @@ class TarxivXMatchProcessing(TarxivModule):
 
             # See which id is new
             hit_ids = [idx["name"] for idx in meta["identifiers"]]
-            diff = list({detection_1['obj_id'], detection_2['obj_id']} - set(hit_ids))
+            diff = list({detection_1["obj_id"], detection_2["obj_id"]} - set(hit_ids))
 
             if len(diff) == 0:
-                raise TarxivPipelineError(f"duplicate cross-match:"
-                                          f"offending ids: {detection_1['obj_id']}, {detection_2['obj_id']}")
+                raise TarxivPipelineError(
+                    f"duplicate cross-match:"
+                    f"offending ids: {detection_1['obj_id']}, {detection_2['obj_id']}"
+                )
             # Here is our new detection
             det_id = diff[0]
-            if det_id == detection_1['obj_id']:
+            if det_id == detection_1["obj_id"]:
                 new_hit_det = detection_1
-            elif det_id == detection_2['obj_id']:
+            elif det_id == detection_2["obj_id"]:
                 new_hit_det = detection_2
             else:
                 # This should never happen
-                raise TarxivPipelineError(f"database found matched hit detection id, but logic failed:"
-                                          f"offending ids: {detection_1['obj_id']}, {detection_2['obj_id']}")
+                raise TarxivPipelineError(
+                    f"database found matched hit detection id, but logic failed:"
+                    f"offending ids: {detection_1['obj_id']}, {detection_2['obj_id']}"
+                )
 
             # Append values to documents
             meta["identifiers"].append(
-                {"name": new_hit_det["obj_id"], "source": new_hit_det["source"]}
+                {
+                    "name": new_hit_det["obj_id"],
+                    "source": new_hit_det["source"],
+                }
             )
             meta["coords"].append(
-                {"ra_deg": new_hit_det["ra_deg"],
-                 "dec_deg": new_hit_det["dec_deg"],
-                 "ra_hms": new_hit_det["ra_hms"],
-                 "dec_dms": new_hit_det["dec_dms"],
-                 "source": new_hit_det["source"]}
+                {
+                    "ra_deg": new_hit_det["ra_deg"],
+                    "dec_deg": new_hit_det["dec_deg"],
+                    "ra_hms": new_hit_det["ra_hms"],
+                    "dec_dms": new_hit_det["dec_dms"],
+                    "source": new_hit_det["source"],
+                }
             )
             meta["timestamps"].append(
-                {"value": new_hit_det["timestamp"], "source": new_hit_det["source"]}
+                {
+                    "value": new_hit_det["timestamp"],
+                    "source": new_hit_det["source"],
+                }
             )
             # Append source meta
             for source in self.config[new_hit_det["source"]]["associated_sources"]:
                 meta["sources"].append(self.schema_sources[source])
 
-            meta["updated_at"] = (datetime.datetime.now().replace(microsecond=0).isoformat()
-                                  .replace("+00:00", "Z")
-                                  .replace("T", " "))
+            meta["updated_at"] = (
+                datetime.datetime.now()
+                .replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z")
+                .replace("T", " ")
+            )
             # Upsert to database
             self.db.upsert(xmatch_id, meta, collection="hits")
             # Upsert alert
-            alert = self.data_sources[new_hit_det["source"]].pull_alert(new_hit_det["obj_id"])
+            alert = self.data_sources[new_hit_det["source"]].pull_alert(
+                new_hit_det["obj_id"]
+            )
             self.db.upsert(new_hit_det["obj_id"], alert, collection="alerts")
 
             # Log
-            status = {"status": "new hit for existing detection",
-                      "new_id": new_hit_det['obj_id'],
-                      "new_source": new_hit_det["source"]}
+            status = {
+                "status": "new hit for existing detection",
+                "new_id": new_hit_det["obj_id"],
+                "new_source": new_hit_det["source"],
+            }
             self.logger.info(status, extra=status)
 
         return xmatch_id, meta
@@ -244,9 +317,11 @@ class TarxivXMatchProcessing(TarxivModule):
         alerts_collection = self.db.conn.scope(self.db.scope).collection("alerts")
         idx_collection = self.db.conn.scope(self.db.scope).collection("idx")
         # We need to see if either detection already has a crossmatch in our cache
-        query = (f"SELECT META().id AS xmatch_id FROM tarxiv.xmatch.hits "
-                 f"WHERE ANY id IN identifiers SATISFIES id.name IN "
-                 f"             [{detection_1['obj_id']}, {detection_2['obj_id']}] END")
+        query = (
+            f"SELECT META().id AS xmatch_id FROM tarxiv.xmatch.hits "
+            f"WHERE ANY id IN identifiers SATISFIES id.name IN "
+            f"             [{detection_1['obj_id']}, {detection_2['obj_id']}] END"
+        )
         result = ctx.query(query).rows()
 
         # If nothing, then we have a new detection hit
@@ -260,38 +335,55 @@ class TarxivXMatchProcessing(TarxivModule):
             ctx.replace(doc, content)
 
             # Full detection id will be TXV-2025-xxxxxx
-            alpha_id = int_to_alphanumeric(content["current_idx"] , self.config["xmatch_id_len"])
+            alpha_id = int_to_alphanumeric(
+                content["current_idx"], self.config["xmatch_id_len"]
+            )
             xmatch_id = f"TXV-{year}-{alpha_id}"
 
             # Split our crossmatch into separate sub documents
             meta = {
                 "schema": "https://github.com/astrocatalogs/schema/README.md",
-                "identifiers": [{"name": detection_1['obj_id'], "source": detection_1['source']},
-                                {"name": detection_2['obj_id'], "source": detection_2['source']}],
-                "coords": [
-                    {"ra_deg": detection_1['ra_deg'],
-                     "dec_deg": detection_1['dec_deg'],
-                     "ra_hms": detection_1['ra_hms'],
-                     "dec_dms": detection_1['dec_dms'],
-                     "source": detection_1['source']
-                     },
-                    {"ra_deg": detection_2['ra_deg'],
-                     "dec_deg": detection_2['dec_deg'],
-                     "ra_hms": detection_2['ra_hms'],
-                     "dec_dms": detection_2['dec_dms'],
-                     "source": detection_2['source']}
+                "identifiers": [
+                    {"name": detection_1["obj_id"], "source": detection_1["source"]},
+                    {"name": detection_2["obj_id"], "source": detection_2["source"]},
                 ],
-                "timestamps": [{"value": detection_1['timestamp'], "source": detection_1['source']},
-                               {"value": detection_2['timestamp'], "source": detection_2['source']}],
-                "updated_at": datetime.datetime.now().replace(microsecond=0).isoformat()
-                                            .replace("+00:00", "Z")
-                                            .replace("T", " "),
-                "sources": []
+                "coords": [
+                    {
+                        "ra_deg": detection_1["ra_deg"],
+                        "dec_deg": detection_1["dec_deg"],
+                        "ra_hms": detection_1["ra_hms"],
+                        "dec_dms": detection_1["dec_dms"],
+                        "source": detection_1["source"],
+                    },
+                    {
+                        "ra_deg": detection_2["ra_deg"],
+                        "dec_deg": detection_2["dec_deg"],
+                        "ra_hms": detection_2["ra_hms"],
+                        "dec_dms": detection_2["dec_dms"],
+                        "source": detection_2["source"],
+                    },
+                ],
+                "timestamps": [
+                    {
+                        "value": detection_1["timestamp"],
+                        "source": detection_1["source"],
+                    },
+                    {
+                        "value": detection_2["timestamp"],
+                        "source": detection_2["source"],
+                    },
+                ],
+                "updated_at": datetime.datetime.now()
+                .replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z")
+                .replace("T", " "),
+                "sources": [],
             }
             # Append source meta (citations
-            for source in self.config[detection_1['source']]["associated_sources"]:
+            for source in self.config[detection_1["source"]]["associated_sources"]:
                 meta["sources"].append(self.schema_sources[source])
-            for source in self.config[detection_2['source']]["associated_sources"]:
+            for source in self.config[detection_2["source"]]["associated_sources"]:
                 meta["sources"].append(self.schema_sources[source])
 
             # Insert to database
@@ -301,18 +393,22 @@ class TarxivXMatchProcessing(TarxivModule):
             ctx.insert(alerts_collection, detection_2["obj_id"], alert_2)
 
             # Log
-            status = {"status": "new crossmatched detection",
-                      "xmatch_id": xmatch_id,
-                      "surveys": [detection_1["source"], detection_2["source"]],
-                      "identifiers": [detection_1["obj_id"], detection_2["obj_id"]]}
+            status = {
+                "status": "new crossmatched detection",
+                "xmatch_id": xmatch_id,
+                "surveys": [detection_1["source"], detection_2["source"]],
+                "identifiers": [detection_1["obj_id"], detection_2["obj_id"]],
+            }
             self.logger.info(status, extra=status)
 
         # Otherwise we have an additional detection to add to an existing hit
         else:
             # If we have more than one result send a warning (shouldn't have a detection.id in more than one document)
             if len(result) > 1:
-                warning = {"status": "found multiple documents with same detection.id",
-                           "offending_ids": [detection_1['obj_id'], detection_2['obj_id']]}
+                warning = {
+                    "status": "found multiple documents with same detection.id",
+                    "offending_ids": [detection_1["obj_id"], detection_2["obj_id"]],
+                }
                 self.logger.warn(warning, extra=warning)
             # Get first xmatch
             xmatch_id = result[0]["xmatch_id"]
@@ -322,78 +418,102 @@ class TarxivXMatchProcessing(TarxivModule):
 
             # See which id is new
             hit_ids = [idx["name"] for idx in meta["identifiers"]]
-            diff = list({detection_1['obj_id'], detection_2['obj_id']} - set(hit_ids))
+            diff = list({detection_1["obj_id"], detection_2["obj_id"]} - set(hit_ids))
 
             if len(diff) == 0:
-                raise TarxivPipelineError(f"duplicate cross-match:"
-                                          f"offending ids: {detection_1['obj_id']}, {detection_2['obj_id']}")
+                raise TarxivPipelineError(
+                    f"duplicate cross-match:"
+                    f"offending ids: {detection_1['obj_id']}, {detection_2['obj_id']}"
+                )
             # Here is our new detection
             det_id = diff[0]
-            if det_id == detection_1['obj_id']:
+            if det_id == detection_1["obj_id"]:
                 new_hit_det = detection_1
                 new_hit_alert = alert_1
-            elif det_id == detection_2['obj_id']:
+            elif det_id == detection_2["obj_id"]:
                 new_hit_det = detection_2
                 new_hit_alert = alert_2
             else:
                 # This should never happen
-                raise TarxivPipelineError(f"database found matched hit detection id, but logic failed:"
-                                          f"offending ids: {detection_1['obj_id']}, {detection_2['obj_id']}")
+                raise TarxivPipelineError(
+                    f"database found matched hit detection id, but logic failed:"
+                    f"offending ids: {detection_1['obj_id']}, {detection_2['obj_id']}"
+                )
 
             # Append values to documents
             meta["identifiers"].append(
-                {"name": new_hit_det["obj_id"], "source": new_hit_det["source"]}
+                {
+                    "name": new_hit_det["obj_id"],
+                    "source": new_hit_det["source"],
+                }
             )
             meta["coords"].append(
-                {"ra_deg": new_hit_det["ra_deg"],
-                 "dec_deg": new_hit_det["dec_deg"],
-                 "ra_hms": new_hit_det["ra_hms"],
-                 "dec_dms": new_hit_det["dec_dms"],
-                 "source": new_hit_det["source"]}
+                {
+                    "ra_deg": new_hit_det["ra_deg"],
+                    "dec_deg": new_hit_det["dec_deg"],
+                    "ra_hms": new_hit_det["ra_hms"],
+                    "dec_dms": new_hit_det["dec_dms"],
+                    "source": new_hit_det["source"],
+                }
             )
             meta["timestamps"].append(
-                {"value": new_hit_det["timestamp"], "source": new_hit_det["source"]}
+                {
+                    "value": new_hit_det["timestamp"],
+                    "source": new_hit_det["source"],
+                }
             )
             # Append source meta
             for source in self.config[new_hit_det["source"]]["associated_sources"]:
                 meta["sources"].append(self.schema_sources[source])
 
-            meta["updated_at"] = (datetime.datetime.now().replace(microsecond=0).isoformat()
-                                  .replace("+00:00", "Z")
-                                  .replace("T", " "))
+            meta["updated_at"] = (
+                datetime.datetime.now()
+                .replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z")
+                .replace("T", " ")
+            )
             # Upsert to database
             ctx.replace(doc, meta)
             # Upsert alert
             ctx.insert(alerts_collection, new_hit_det["obj_id"], new_hit_alert)
 
             # Log
-            status = {"status": "new hit for existing detection",
-                      "new_id": new_hit_det['obj_id'],
-                      "new_source": new_hit_det["source"]}
+            status = {
+                "status": "new hit for existing detection",
+                "new_id": new_hit_det["obj_id"],
+                "new_source": new_hit_det["source"],
+            }
             self.logger.info(status, extra=status)
 
         return xmatch_id, meta
 
+
 class TarxivXmatchFinder(TarxivModule):
     def __init__(self, script_name, reporting_mode, debug=False):
-        super().__init__(script_name=script_name,
-                         module="spark-xmatch-finder",
-                         reporting_mode=reporting_mode,
-                         debug=debug)
+        super().__init__(
+            script_name=script_name,
+            module="spark-xmatch-finder",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
 
         # Create spark app
-        self.spark = SparkSession.builder \
-                .appName("spark-xmatch-finder") \
-                .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1") \
-                .config("spark.executor.instances", self.config['spark_executors']) \
-                .config("spark.executor.cores", self.config['spark_executor_cores']) \
-                .config("spark.executor.memory", self.config['spark_executor_memory']) \
-                .config("spark.driver.memory", self.config['spark_driver_memory']) \
+        self.spark = (
+            SparkSession.builder.appName("spark-xmatch-finder")
+            .config(
+                "spark.jars.packages",
+                "org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1",
+            )
+            .config("spark.executor.instances", self.config["spark_executors"])
+            .config("spark.executor.cores", self.config["spark_executor_cores"])
+            .config("spark.executor.memory", self.config["spark_executor_memory"])
+            .config("spark.driver.memory", self.config["spark_driver_memory"])
             .getOrCreate()
+        )
         # Log
         status = {"status": "connected to spark"}
         self.logger.info(status, extra=status)
-
 
     def run(self):
         # Log
@@ -411,32 +531,36 @@ class TarxivXmatchFinder(TarxivModule):
             .option("kafka.session.timeout.ms", "1800000") \
             .option("kafka.heartbeat.interval.ms", "5000") \
             """
-        kafka_df = self.spark \
-            .readStream \
-            .format("kafka") \
-            .option("kafka.bootstrap.servers", "localhost:9092") \
-            .option("subscribe", self.config["xmatch_ingest_topic"]) \
+        kafka_df = (
+            self.spark.readStream.format("kafka")
+            .option("kafka.bootstrap.servers", "localhost:9092")
+            .option("subscribe", self.config["xmatch_ingest_topic"])
             .load()
+        )
 
         # Create Schema
-        json_schema = StructType() \
-            .add("obj_id", StringType()) \
-            .add("source", StringType()) \
-            .add("ra_deg", FloatType()) \
-            .add("dec_deg", FloatType()) \
+        json_schema = (
+            StructType()
+            .add("obj_id", StringType())
+            .add("source", StringType())
+            .add("ra_deg", FloatType())
+            .add("dec_deg", FloatType())
             .add("timestamp", TimestampType())
+        )
 
         # Get data from json
-        sdf = kafka_df.selectExpr("CAST(value AS STRING)") \
-            .select(from_json(col("value"), json_schema).alias("data")) \
+        sdf = (
+            kafka_df.selectExpr("CAST(value AS STRING)")
+            .select(from_json(col("value"), json_schema).alias("data"))
             .select("data.*")
+        )
 
         # What is our comparison window
         window = self.config["xmatch_window_len"]
         # Reduce by days
-        #filtered_df = sdf.filter(col("timestamp") >= expr(f"current_timestamp() - INTERVAL {window} HOURS"))
+        # filtered_df = sdf.filter(col("timestamp") >= expr(f"current_timestamp() - INTERVAL {window} HOURS"))
         # Partition on declination
-        sdf = sdf.repartitionByRange(180, 'dec_deg')
+        sdf = sdf.repartitionByRange(180, "dec_deg")
         # Register table for crazy query
         sdf.createOrReplaceTempView("targets")
 
@@ -469,16 +593,17 @@ class TarxivXmatchFinder(TarxivModule):
         match_sdf = self.spark.sql(query)
 
         # Back to json for kafka
-        kafka_df = match_sdf.selectExpr("CAST(obj_id_1 AS STRING) AS key ",
-                                           "to_json(struct(*)) AS value")
+        kafka_df = match_sdf.selectExpr(
+            "CAST(obj_id_1 AS STRING) AS key ", "to_json(struct(*)) AS value"
+        )
 
-        query = kafka_df \
-            .writeStream \
-            .outputMode("append") \
-            .format("kafka") \
-            .option("kafka.bootstrap.servers", "localhost:9092") \
-            .option("topic", "spark-sink") \
-            .option("checkpointLocation", "/tmp/spark-checkpoints") \
+        query = (
+            kafka_df.writeStream.outputMode("append")
+            .format("kafka")
+            .option("kafka.bootstrap.servers", "localhost:9092")
+            .option("topic", "spark-sink")
+            .option("checkpointLocation", "/tmp/spark-checkpoints")
             .start()
+        )
 
         query.awaitTermination()

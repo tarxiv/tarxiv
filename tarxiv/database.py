@@ -33,8 +33,9 @@ class TarxivDB(TarxivModule):
             raise ValueError("user must be 'api' or 'pipeline'")
         # Authenticate
         authenticator = PasswordAuthenticator(username, password)
-        timeout_opts = ClusterTimeoutOptions(connect_timeout=timedelta(seconds=12),
-                                             kv_timeout=timedelta(seconds=10))
+        timeout_opts = ClusterTimeoutOptions(
+            connect_timeout=timedelta(seconds=12), kv_timeout=timedelta(seconds=10)
+        )
         options = ClusterOptions(authenticator, timeout_options=timeout_opts)
         # Connect
         status = {"status": "connecting to couchbase"}
@@ -46,7 +47,6 @@ class TarxivDB(TarxivModule):
         self.conn = self.cluster.bucket("tarxiv")
         status = {"status": "connection success"}
         self.logger.info(status, extra=status)
-
 
         # Set scope, each catalog will have its own scope
         self.scope = catalog

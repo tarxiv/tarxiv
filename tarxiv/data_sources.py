@@ -619,10 +619,12 @@ class ATLAS(Survey):
             if result["sherlock_crossmatches"]:
                 result["sherlock"] = result["sherlock_crossmatches"][0]
                 if result["sherlock"]["z"] is not None:
-                    meta["redshift"] = [{
-                        "value": result["sherlock"]["z"],
-                        "source": "sherlock",
-                    }]
+                    meta["redshift"] = [
+                        {
+                            "value": result["sherlock"]["z"],
+                            "source": "sherlock",
+                        }
+                    ]
 
             # DETECTIONS
             det_df = pd.DataFrame(result["lc"])[
@@ -814,6 +816,7 @@ class LSST(Survey):
         self.logger.info(status, extra=status)
         return alert
 
+
 class DummySurvey(Survey):
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
@@ -825,6 +828,7 @@ class DummySurvey(Survey):
 
     def pull_alert(self, obj_id):
         return {"value": "dummy_value"}
+
 
 if __name__ == "__main__":
     """Execute the test suite"""
