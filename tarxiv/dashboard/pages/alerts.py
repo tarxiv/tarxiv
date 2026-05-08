@@ -1,4 +1,5 @@
 import os
+import json
 
 import dash
 from dash import (
@@ -57,9 +58,8 @@ def layout(**kwargs):
             expressive_card(
                 title="Alerts",
                 children=[
-                    # dmc.Table([head, body, caption]),
                     dmc.Box(
-                        id="alerts-table-container",
+                        id="alerts-table-body",
                     ),
                     dmc.Center(
                         dmc.Pagination(
@@ -89,7 +89,7 @@ def layout(**kwargs):
 
 # callback for table search and results display
 @callback(
-    Output("alerts-table-container", "children"),
+    Output("alerts-table-body", "children"),
     Input("alerts-pagination", "value"),
 )
 def update_alerts_table(page_number):
@@ -102,74 +102,85 @@ def update_alerts_table(page_number):
     response = fetch_api_data(
         "tns_alerts",
         n_rows=items_per_page,
-        offset=max(i * items_per_page - 1, 0),
+        offset=i * items_per_page,
         token=get_jwt_from_request(request),
         logger=current_app.config["TXV_LOGGER"],
     )
 
-    # --------- Table Content ---------
-    # TODO: Update the table contents here
-    # See DMC link below for dmc.Table docs
-    # https://www.dash-mantine-components.com/components/table
-    elements = [
-        {"page": i + 1, "position": 6, "mass": 12.011, "symbol": "C", "name": "Carbon"},
-        {
-            "page": i + 1,
-            "position": 7,
-            "mass": 14.007,
-            "symbol": "N",
-            "name": "Nitrogen",
-        },
-        {
-            "page": i + 1,
-            "position": 39,
-            "mass": 88.906,
-            "symbol": "Y",
-            "name": "Yttrium",
-        },
-        {
-            "page": i + 1,
-            "position": 56,
-            "mass": 137.33,
-            "symbol": "Ba",
-            "name": "Barium",
-        },
-        {
-            "page": i + 1,
-            "position": 58,
-            "mass": 140.12,
-            "symbol": "Ce",
-            "name": "Cerium",
-        },
-    ]
+    if response.status_code == 401:
+        return create_message_banner("Session expired. Please log in again.", "warning")
+
+    if response.status_code != 200:
+        return create_message_banner(
+            f"Alerts request failed with status {response.status_code}.",
+            "error",
+        )
+
+    try:
+        alerts = json.loads(response.text)
+    except json.JSONDecodeError:
+        current_app.config["TXV_LOGGER"].error({
+            "error": "Failed to decode alerts API response",
+            "response": response.text,
+        })
+        return create_message_banner("Received an invalid alerts response.", "error")
+
+    if not alerts:
+        return create_message_banner("No alerts found.", "info")
+
+    def display_value(value):
+        if value in (None, ""):
+            return "-"
+        return str(value)
 
     rows = [
         dmc.TableTr(
             [
-                dmc.TableTd(element["page"]),
-                dmc.TableTd(element["position"]),
-                dmc.TableTd(element["name"]),
-                # dmc.TableTd(element["symbol"]),
-                dmc.TableTd(element["mass"]),
+                dmc.TableTd(display_value(alert.get("date_received"))),
+                dmc.TableTd(
+                    dcc.Link(
+                        display_value(alert.get("obj_name")),
+                        href=f"/lightcurve?id={alert.get('obj_name')}",
+                        refresh=False,
+                    )
+                ),
+                dmc.TableTd(display_value(alert.get("object_type"))),
+                dmc.TableTd(display_value(alert.get("ra"))),
+                dmc.TableTd(display_value(alert.get("dec"))),
+                dmc.TableTd(display_value(alert.get("discovery_source"))),
+                dmc.TableTd(display_value(alert.get("reporting_group"))),
+                dmc.TableTd(display_value(alert.get("redshift"))),
             ]
         )
-        for element in elements
+        for alert in alerts
     ]
 
-    head = dmc.TableThead(
-        dmc.TableTr(
-            [
-                dmc.TableTh("Page Number"),
-                dmc.TableTh("Element Position"),
-                dmc.TableTh("Element Name"),
-                # dmc.TableTh("Symbol"),
-                dmc.TableTh("Atomic Mass"),
-            ]
-        )
+    return dmc.Table(
+        [
+            dmc.TableThead(
+                dmc.TableTr(
+                    [
+                        dmc.TableTh("Received"),
+                        dmc.TableTh("Object"),
+                        dmc.TableTh("Type"),
+                        dmc.TableTh("RA"),
+                        dmc.TableTh("Dec"),
+                        dmc.TableTh("Discovery Source"),
+                        dmc.TableTh("Reporting Group"),
+                        dmc.TableTh("Redshift"),
+                    ]
+                )
+            ),
+            dmc.TableTbody(rows),
+            dmc.TableCaption("Most recent alerts from the TarXiv alerts API."),
+        ],
+        striped=True,
+        highlightOnHover=True,
+        withTableBorder=True,
+        withColumnBorders=True,
+        horizontalSpacing="sm",
+        verticalSpacing="xs",
     )
-    body = dmc.TableTbody(rows)
-    caption = dmc.TableCaption("Some elements from periodic table")
-    return dmc.Table([head, body, caption])
 
 
 def fetch_api_data(endpoint: str, n_rows: int, offset: int, token, logger):
