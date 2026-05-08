@@ -135,6 +135,13 @@ def update_alerts_table(page_number):
                     refresh=False,
                 )
             ),
+            dmc.TableTd(
+                dcc.Link(
+                    "TNS",
+                    href=f"https://www.wis-tns.org/object/{alert.get('obj_name')}",
+                    target="_blank",
+                )
+            ),
             dmc.TableTd(display_value(alert.get("object_type"))),
             dmc.TableTd(display_value(alert.get("ra"))),
             dmc.TableTd(display_value(alert.get("dec"))),
@@ -151,6 +158,7 @@ def update_alerts_table(page_number):
                 dmc.TableTr([
                     dmc.TableTh("Received"),
                     dmc.TableTh("Object"),
+                    dmc.TableTh("TNS Link"),
                     dmc.TableTh("Type"),
                     dmc.TableTh("RA"),
                     dmc.TableTh("Dec"),
