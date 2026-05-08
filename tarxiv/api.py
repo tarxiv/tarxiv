@@ -62,21 +62,18 @@ class API(TarxivModule):
         # Mount the WSGI callable object (app) on the root directory
         cherrypy.tree.graft(app_logged, "/")
         # Set the configuration of the web server
-        cherrypy.config.update(
-            {
-                "engine.autoreload.on": True,
-                "log.screen": True,
-                "server.socket_port": self.config["api_port"],
-                "server.socket_host": "0.0.0.0",
-            }
-        )
+        cherrypy.config.update({
+            "engine.autoreload.on": True,
+            "log.screen": True,
+            "server.socket_port": self.config["api_port"],
+            "server.socket_host": "0.0.0.0",
+        })
         # Start the CherryPy WSGI web server
         cherrypy.engine.start()
         cherrypy.engine.block()
 
     def validate_token_request(self, token: str) -> dict:
         """Validate a JWT and return structured status for error handling."""
-
         result = validate_token(token)
         return {
             "is_valid": result["status"] == TokenStatus.VALID,
@@ -246,19 +243,16 @@ class API(TarxivModule):
 
         @self.app.route("/tns_alerts", methods=["POST"])
         def tns_alerts():
-            n_rows = request.json.get("n_rows")
-            offset = request.json.get("offset")
+            request_json = request.get_json()
             token = request.headers.get("Authorization")
             # Start log
             log = {
                 "query_type": "tns_alerts",
                 "query_ip": request.remote_addr,
                 "token": token,
-                "n_rows": n_rows,
-                "offset": offset,
+                "n_rows": request_json["n_rows"],
+                "offset": request_json["offset"],
             }
-            # self.logger.info(log, extra=log)
-
             try:
                 # Return error if bad token
                 validation = self.validate_token_request(token)
@@ -267,20 +261,12 @@ class API(TarxivModule):
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
+                if not isinstance(request_json["n_rows"], int) or not isinstance(
+                    request_json["offset"], int
+                ):
+                    raise ValueError("n_rows/offset must be an integer")
 
-                if not isinstance(n_rows, int):
-                    raise ValueError(f"n_rows must be an integer, got {type(n_rows)}")
-                if n_rows < 1 or n_rows > 1000:
-                    raise ValueError(f"n_rows must be between 1 and 1000, got {n_rows}")
-
-                if not isinstance(offset, int):
-                    raise ValueError(f"offset must be an integer, got {type(offset)}")
-                elif offset < 0:
-                    raise ValueError(
-                        f"offset must be non-negative integer, got {offset}"
-                    )
-
-                query = f"""SELECT 
+                query = f"""SELECT
                               `objects`.`internal`.`insert_date` AS date_received,
                               META().id AS obj_name,
                               `objects`.`object_type`[0].`value` AS object_type,
@@ -292,11 +278,8 @@ class API(TarxivModule):
                             FROM tarxiv.tns.objects
                             WHERE `objects`.`internal`.`insert_date` IS NOT MISSING
                             ORDER BY `objects`.`internal`.`insert_date` DESC
-                            LIMIT {n_rows} OFFSET {offset}"""
-                result = self.txv_db.query(query)  # a couchbase response
-                for row in result.rows():
-                    print(row)
-                    # This is returning no rows but fails when serialised to JSON in server_response()
+                            LIMIT {request_json["n_rows"]} OFFSET {request_json["offset"]}"""
+                result = self.txv_db.query(query)
 
                 if result is None:
                     raise LookupError("bad lookup")
@@ -304,10 +287,6 @@ class API(TarxivModule):
                 # Normal return
                 status_code = 200
                 log["status"] = "Success"
-            except ValueError as e:
-                result = {"error": str(e), "type": "validation"}
-                status_code = 400
-                log["status"] = "ValidationError"
             except PermissionError as e:
                 result = {"error": str(e), "type": "token"}
                 status_code = 401
@@ -321,69 +300,62 @@ class API(TarxivModule):
                 status_code = 500
                 log["status"] = "ServerError"
 
-            log["satus_code"] = status_code
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
 
-        # @self.app.route("/search_objects", methods=["POST"])
-        # def search_objects():
-        #     # Get request json
-        #     request_json = request.get_json()
-        #     self.logger.info(f"search_objects request: {request_json}")
-        #     token = request.headers.get("Authorization")
-        #     self.logger.info(f"search_objects token: {token}")
-        #     # search = request_json["search"]
-        #     # resquest_json = request.
-        #     # self.logger.info(f"search_objects search: {search}")
-        #     self.logger.info(f"search_objects request: {request}")
-        #     self.logger.info(f"search_objects request json: {request_json}")
-        #     search = request_json.get("search", {})
-        #     # Start log
-        #     log = {
-        #         "query_type": "search",
-        #         "query_ip": request.remote_addr,
-        #         "token": token,
-        #         "search": search,
-        #     }
-        #     try:
-        #         # Return error if bad token
-        #         validation = self.validate_token_request(token)
-        #         if not validation["is_valid"]:
-        #             raise PermissionError("bad token")
-        #         # Build query
-        #         query_str = (
-        #             "SELECT meta().id AS `obj_name` "
-        #             "FROM tarxiv.tns.objects "
-        #             "WHERE 1=1 AND "
-        #         )
-        #         # Add restrictions from search fields, then append search params to query
-        #         condition_list = []
-        #         for field, condition in search.items():
-        #             condition_str = self.build_condition(field, condition)
-        #             condition_list.append(condition_str)
-        #         # Append full condition string to query string
-        #         full_condition_string = " AND ".join(condition_list)
-        #         query_str += full_condition_string
-        #         # Return results
-        #         result = self.txv_db.query(query_str)
-        #         result = [r["obj_name"] for r in result]
-        #         status_code = 200
-        #         log["status"] = "Success"
-        #     except PermissionError as e:
-        #         result = {"error": str(e), "type": "token"}
-        #         status_code = 401
-        #         log["status"] = "PermissionError"
-        #     except LookupError as e:
-        #         result = {"error": str(e), "type": "lookup"}
-        #         status_code = 404
-        #         log["status"] = "LookupError"
-        #     except Exception as e:
-        #         result = {"error": str(e), "type": "server"}
-        #         status_code = 500
-        #         log["status"] = "ServerError"
+        @self.app.route("/search_objects", methods=["POST"])
+        def search_objects():
+            # Get request json
+            request_json = request.get_json()
+            self.logger.info(f"search_objects request: {request_json}")
+            token = request.headers.get("Authorization")
+            search = request_json.get("search", {})
+            # Start log
+            log = {
+                "query_type": "search",
+                "query_ip": request.remote_addr,
+                "token": token,
+                "search": search,
+            }
+            try:
+                # Return error if bad token
+                validation = self.validate_token_request(token)
+                if not validation["is_valid"]:
+                    raise PermissionError("bad token")
+                # Build query
+                query_str = (
+                    "SELECT meta().id AS `obj_name` "
+                    "FROM tarxiv.tns.objects "
+                    "WHERE 1=1 AND "
+                )
+                # Add restrictions from search fields, then append search params to query
+                condition_list = []
+                for field, condition in search.items():
+                    condition_str = self.build_condition(field, condition)
+                    condition_list.append(condition_str)
+                # Append full condition string to query string
+                full_condition_string = " AND ".join(condition_list)
+                query_str += full_condition_string
+                # Return results
+                result = self.txv_db.query(query_str)
+                result = [r["obj_name"] for r in result]
+                status_code = 200
+                log["status"] = "Success"
+            except PermissionError as e:
+                result = {"error": str(e), "type": "token"}
+                status_code = 401
+                log["status"] = "PermissionError"
+            except LookupError as e:
+                result = {"error": str(e), "type": "lookup"}
+                status_code = 404
+                log["status"] = "LookupError"
+            except Exception as e:
+                result = {"error": str(e), "type": "server"}
+                status_code = 500
+                log["status"] = "ServerError"
 
-        #     self.logger.info(log, extra=log)
-        #     return server_response(result, status_code)
+            self.logger.info(log, extra=log)
+            return server_response(result, status_code)
 
         @self.app.route("/cone_search", methods=["POST"])
         def cone_search():

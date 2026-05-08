@@ -18,6 +18,8 @@ from typing import Callable
 
 @dataclass(frozen=True)
 class AuthProvider:
+    """Callable hooks required for an authentication provider."""
+
     build_authorize_url: Callable[[str], str]
     complete_login: Callable[[str], dict]
 

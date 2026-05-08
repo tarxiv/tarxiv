@@ -18,15 +18,15 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install ruff
+        python -m pip install --upgrade pip uv
+        uv sync --frozen --extra dev
 
     - name: tarxiv
       run: |
-        ruff format --preview tarxiv/  # auto-fix formatting issues
-        ruff check --statistics --preview --fix tarxiv/  # fix lint issues
+        uv run ruff format --check tarxiv/
+        uv run ruff check --statistics tarxiv/
 
     - name: bin 
       run: |
-        ruff format --preview bin/
-        ruff check --statistics --preview --fix bin/
+        uv run ruff format --check bin/
+        uv run ruff check --statistics bin/
