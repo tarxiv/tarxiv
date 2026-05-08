@@ -3,14 +3,10 @@ import json
 
 import dash
 from dash import (
-    html,
     callback,
-    no_update,
     dcc,
-    clientside_callback,
     Input,
     Output,
-    State,
 )
 import dash_mantine_components as dmc
 from flask import current_app, request
@@ -25,8 +21,6 @@ from ..components import (
 from ...auth import (
     get_authenticated_user,
     get_jwt_from_request,
-    validate_token,
-    TokenStatus,
 )
 import requests
 # from pydantic import ValidationError
@@ -44,8 +38,6 @@ dash.register_page(
 
 def layout(**kwargs):
     # perform search if id is provided in URL, otherwise show empty search page
-    logger = current_app.config["TXV_LOGGER"]
-
     token = get_jwt_from_request(request)
     user = get_authenticated_user(jwt_token=token)
 
@@ -134,42 +126,38 @@ def update_alerts_table(page_number):
         return str(value)
 
     rows = [
-        dmc.TableTr(
-            [
-                dmc.TableTd(display_value(alert.get("date_received"))),
-                dmc.TableTd(
-                    dcc.Link(
-                        display_value(alert.get("obj_name")),
-                        href=f"/lightcurve?id={alert.get('obj_name')}",
-                        refresh=False,
-                    )
-                ),
-                dmc.TableTd(display_value(alert.get("object_type"))),
-                dmc.TableTd(display_value(alert.get("ra"))),
-                dmc.TableTd(display_value(alert.get("dec"))),
-                dmc.TableTd(display_value(alert.get("discovery_source"))),
-                dmc.TableTd(display_value(alert.get("reporting_group"))),
-                dmc.TableTd(display_value(alert.get("redshift"))),
-            ]
-        )
+        dmc.TableTr([
+            dmc.TableTd(display_value(alert.get("date_received"))),
+            dmc.TableTd(
+                dcc.Link(
+                    display_value(alert.get("obj_name")),
+                    href=f"/lightcurve?id={alert.get('obj_name')}",
+                    refresh=False,
+                )
+            ),
+            dmc.TableTd(display_value(alert.get("object_type"))),
+            dmc.TableTd(display_value(alert.get("ra"))),
+            dmc.TableTd(display_value(alert.get("dec"))),
+            dmc.TableTd(display_value(alert.get("discovery_source"))),
+            dmc.TableTd(display_value(alert.get("reporting_group"))),
+            dmc.TableTd(display_value(alert.get("redshift"))),
+        ])
         for alert in alerts
     ]
 
     return dmc.Table(
         [
             dmc.TableThead(
-                dmc.TableTr(
-                    [
-                        dmc.TableTh("Received"),
-                        dmc.TableTh("Object"),
-                        dmc.TableTh("Type"),
-                        dmc.TableTh("RA"),
-                        dmc.TableTh("Dec"),
-                        dmc.TableTh("Discovery Source"),
-                        dmc.TableTh("Reporting Group"),
-                        dmc.TableTh("Redshift"),
-                    ]
-                )
+                dmc.TableTr([
+                    dmc.TableTh("Received"),
+                    dmc.TableTh("Object"),
+                    dmc.TableTh("Type"),
+                    dmc.TableTh("RA"),
+                    dmc.TableTh("Dec"),
+                    dmc.TableTh("Discovery Source"),
+                    dmc.TableTh("Reporting Group"),
+                    dmc.TableTh("Redshift"),
+                ])
             ),
             dmc.TableTbody(rows),
             dmc.TableCaption("Most recent alerts from the TarXiv alerts API."),
