@@ -46,6 +46,7 @@ class Detection(PropertyValue):
     filter: str
     # date: datetime | str
     date: str
+    mag_rate: Optional[float] = None
 
 
 class MetadataResponseModel(BaseModel):

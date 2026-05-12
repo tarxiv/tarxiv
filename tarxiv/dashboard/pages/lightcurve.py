@@ -45,9 +45,10 @@ def layout(id=None, **kwargs):
 
     if id and user:
         # User came via deep link and has a saved session
-        results, status, banner, lc_store, meta_store = perform_search(
+        results, status, banner, lc_store, aladin_store = perform_search(
             id, token, logger
         )
+        print(f"aladin_store: {aladin_store}")
     elif id and not user:
         validation = validate_token(token)
 
@@ -68,10 +69,10 @@ def layout(id=None, **kwargs):
             banner = create_message_banner("Please log in to view data.", "warning")
 
         lc_store = None
-        meta_store = None
+        aladin_store = None
     else:
         # Default empty search page
-        results, status, banner, lc_store, meta_store = (
+        results, status, banner, lc_store, aladin_store = (
             html.Div(),
             "",
             html.Div(),
@@ -84,7 +85,9 @@ def layout(id=None, **kwargs):
             # NOTE JL: Switched to memory storage since we want the data to be cleared when the user leaves the page.
             dcc.Store(id="lightcurve-store", storage_type="memory", data=lc_store),
             dcc.Store(
-                id="lightcurve-meta-store", storage_type="memory", data=meta_store
+                id="lightcurve-aladin-store",
+                storage_type="memory",
+                data=aladin_store,
             ),
             title_card(
                 title_text="TarXiv Database Explorer",
@@ -174,10 +177,15 @@ def search_navigation(n_clicks, n_keydowns, object_id):
 clientside_callback(
     """
     function(storeData) {
-    if (!storeData) return;
+    if (!storeData || storeData.ra_deg === null || storeData.dec_deg === null) {
+        return "No TNS coordinates available for Aladin";
+    }
 
-    const ra = storeData.ra_deg[0].value;
-    const dec = storeData.dec_deg[0].value;
+    const ra = storeData.ra_deg;
+    const dec = storeData.dec_deg;
+
+    // log the coordinates for debugging
+    console.log("Initializing Aladin with coordinates:", ra, dec);
 
     // The ID Plotly generates for pattern-matching is complex,
     // so we target the container expressive_card or a stable parent.
@@ -213,8 +221,36 @@ clientside_callback(
 }
     """,
     Output("aladin-status-dummy", "children"),
-    Input("lightcurve-meta-store", "data"),
+    Input("lightcurve-aladin-store", "data"),
 )
+
+
+def _extract_tns_coordinate(meta, field_name):
+    entries = meta.get(field_name, [])
+    if not isinstance(entries, list):
+        entries = [entries]
+
+    for entry in entries:
+        if (
+            isinstance(entry, dict)
+            and entry.get("source") == "tns"
+            and "value" in entry
+        ):
+            return entry["value"]
+
+    return None
+
+
+def _build_aladin_store(meta):
+    ra_tns = _extract_tns_coordinate(meta, "ra_deg")
+    dec_tns = _extract_tns_coordinate(meta, "dec_deg")
+    if ra_tns is None or dec_tns is None:
+        return None
+    return {
+        "source": "tns",
+        "ra_deg": ra_tns,
+        "dec_deg": dec_tns,
+    }
 
 
 def fetch_api_data(endpoint, object_id, token, logger):
@@ -346,6 +382,15 @@ def perform_search(object_id, token, logger):
     logger.info({"info": f"Object {object_id} loaded successfully."})
 
     lc_store = {"data": lc_data, "id": object_id}
-    meta_store = meta
+    aladin_store = _build_aladin_store(meta)
+    if aladin_store is None:
+        logger.warning(
+            {
+                "warning": (
+                    f"No TNS RA/Dec found for object {object_id}; "
+                    "Aladin widget will not be initialized."
+                )
+            }
+        )
 
-    return result, status_msg, success_banner, lc_store, meta_store
+    return result, status_msg, success_banner, lc_store, aladin_store
