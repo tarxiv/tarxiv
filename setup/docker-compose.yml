@@ -156,7 +156,6 @@ services:
       POSTGRES_PASSWORD: ${TARXIV_POSTGRES_PASSWORD:-tarxiv}
     volumes:
       - ${TARXIV_POSTGRES_DATA_DIR:-.data/postgres/db}:/var/lib/postgresql/data:Z
-      - ./postgres-init.sql:/docker-entrypoint-initdb.d/postgres-init.sql:ro
     networks:
       - tarxiv_net
     restart: unless-stopped
@@ -215,6 +214,7 @@ services:
       TARXIV_API_SECRET_KEY: ${TARXIV_API_SECRET_KEY:-}
       TARXIV_JWT_SECRET: ${TARXIV_JWT_SECRET}
       TARXIV_DASHBOARD_URL: ${TARXIV_DASHBOARD_URL:-}
+      TARXIV_POSTGRES_URL: ${TARXIV_POSTGRES_URL:-postgresql+psycopg2://tarxiv:tarxiv@postgres:5432/tarxiv}
       VIRTUAL_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.tarxiv.com}
       VIRTUAL_PORT: ${TARXIV_PORT:-9001}
       LETSENCRYPT_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.tarxiv.com}

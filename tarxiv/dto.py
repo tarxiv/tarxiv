@@ -1,8 +1,10 @@
 """DTO - Data Transfer Objects for TarXiv."""
 
+from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
-from pydantic import BaseModel, TypeAdapter, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 # from datetime import datetime
 
@@ -100,27 +102,98 @@ class ConeSearchResponseSingle(BaseModel):
 
 ConeSearchResponseModel = TypeAdapter(list[ConeSearchResponseSingle])
 
-# =============================================================================
-# Domain Models (DTOs)
-# =============================================================================
-from uuid import UUID
-from datetime import datetime
-from pydantic import BaseModel, ConfigDict
 
-
-class User(BaseModel):
-    id: UUID
-    orcid_id: str
-    provider_user_id: str | None = None
+class ProviderProfile(BaseModel):
+    provider_user_id: str
     username: str | None = None
     nickname: str | None = None
     email: str | None = None
-    institution_id: UUID | None = None
     institution: str | None = None
     forename: str | None = None
     surname: str | None = None
     picture_url: str | None = None
     bio: str | None = None
+
+
+class User(BaseModel):
+    id: UUID
+    username: str | None = None
+    nickname: str | None = None
+    email: str | None = None
+    institution: str | None = None
+    forename: str | None = None
+    surname: str | None = None
+    picture_url: str | None = None
+    bio: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserProfileUpdate(BaseModel):
+    username: str | None = None
+    nickname: str | None = None
+    email: str | None = None
+    institution: str | None = None
+    forename: str | None = None
+    surname: str | None = None
+    picture_url: str | None = None
+    bio: str | None = None
+
+
+class ExternalIdentity(BaseModel):
+    id: UUID
+    user_id: UUID
+    provider: str
+    provider_user_id: str
+    provider_username: str | None = None
+    provider_email: str | None = None
+    provider_profile_json: dict | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Team(BaseModel):
+    id: UUID
+    name: str
+    description: str | None = None
+    created_by_user_id: UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TeamMembership(BaseModel):
+    team_id: UUID
+    user_id: UUID
+    role: str
+    created_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Tag(BaseModel):
+    id: UUID
+    name: str
+    description: str | None = None
+    color: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ObjectTagAssignment(BaseModel):
+    id: UUID
+    object_id: str
+    tag_id: UUID
+    applied_by_user_id: UUID | None = None
+    owner_user_id: UUID | None = None
+    owner_team_id: UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

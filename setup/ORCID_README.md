@@ -2,6 +2,8 @@
 
 This setup keeps Postgres as the backend while switching identity to ORCID OAuth.
 
+Schema initialization is now handled via Alembic migrations.
+
 ## 1. Configure environment variables
 
 Add the following to your `.env` (or export in your shell):
@@ -19,9 +21,15 @@ From `setup/`:
 docker-compose up -d postgres
 ```
 
-The database schema is initialized from `postgres-init.sql` on first boot.
+## 3. Run migrations
 
-## 3. Run the dashboard
+From the repository root:
+
+```bash
+TARXIV_POSTGRES_URL="postgresql+psycopg2://tarxiv:password_postgres@localhost:5432/tarxiv" uv run alembic upgrade head
+```
+
+## 4. Run the dashboard
 
 ```bash
 docker-compose --profile tarxiv up -d tarxiv-dashboard

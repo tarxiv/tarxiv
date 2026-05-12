@@ -150,7 +150,8 @@ class API(TarxivModule):
                 return server_response({"error": "Authentication failed"}, 502)
 
             dashboard_url = os.environ.get("TARXIV_DASHBOARD_URL", "/")
-            provider_profile = cast(dto.User, login_result.get("profile"))
+            provider_profile = cast(dto.ProviderProfile, login_result.get("profile"))
+            provider_profile_json = cast(dict | None, login_result.get("provider_profile_json"))
             sub = cast(str, login_result.get("sub"))
             provider_name = cast(str, login_result.get("provider"))
 
@@ -169,39 +170,25 @@ class API(TarxivModule):
                 return server_response({"error": "Authentication failed"}, 502)
 
             try:
-                user_dto = self.user_db.insert_new_user(user=provider_profile)
+                user_dto = self.user_db.get_or_create_user_from_identity(
+                    provider=provider_name,
+                    profile=provider_profile,
+                    provider_profile_json=provider_profile_json,
+                )
             except DataLayerError:
                 log = {
                     "dashboard_url": dashboard_url,
-                    "status": "insert failed, attempting existing user lookup",
-                    "orcid_id": sub,
+                    "status": "user sync failed",
+                    "provider": provider_name,
+                    "provider_user_id": sub,
                 }
                 self.logger.info(log, extra=log)
-
-                try:
-                    user_dto = self.user_db.get_user_by_orcid_id(sub)
-                except DataLayerError:
-                    fail_log = {
-                        "dashboard_url": dashboard_url,
-                        "status": "login failed",
-                        "orcid_id": sub,
-                    }
-                    self.logger.info(fail_log, extra=fail_log)
-                    return redirect(f"{dashboard_url.rstrip('/')}")
-
-                if user_dto is None:
-                    fail_log = {
-                        "dashboard_url": dashboard_url,
-                        "status": "login failed",
-                        "orcid_id": sub,
-                    }
-                    self.logger.info(fail_log, extra=fail_log)
-                    return redirect(f"{dashboard_url.rstrip('/')}")
+                return redirect(f"{dashboard_url.rstrip('/')}")
 
             token_profile = user_dto.model_dump(mode="json", exclude_none=True)
 
             token = sign_token(
-                sub=sub,
+                sub=str(user_dto.id),
                 provider=provider_name,
                 profile=token_profile,
             )

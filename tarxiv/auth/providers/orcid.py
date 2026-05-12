@@ -130,10 +130,6 @@ def _extract_name(person: Dict[str, Any]) -> Dict[str, Optional[str]]:
     }
 
 
-# 1. exchange code for token,
-# 2. fetch profile,
-# 3. normalise to DTO,
-# 4. return dict with keys "sub", "provider", and "profile" (the DTO).
 def complete_login(code: str) -> LoginDict:
     """Exchange an authorization code for a normalised user profile.
 
@@ -147,7 +143,7 @@ def complete_login(code: str) -> LoginDict:
         A dictionary containing:
         - "sub": The ORCID iD (unique user identifier).
         - "provider": The string "orcid".
-        - "profile": A dto.User object constructed from the ORCID profile data.
+        - "profile": A provider-normalized profile DTO.
     """
     token_data = _exchange_code(code)
     orcid_id = token_data.get("orcid")
@@ -167,7 +163,6 @@ def complete_login(code: str) -> LoginDict:
     display_name = name["credit"] or token_data.get("name") or ""
 
     profile_data = {
-        "orcid_id": orcid_id,
         "provider_user_id": orcid_id,
         "email": email,
         "username": display_name or None,
@@ -183,5 +178,6 @@ def complete_login(code: str) -> LoginDict:
     return {
         "sub": orcid_id,
         "provider": "orcid",
-        "profile": dto.User.model_validate(profile_data),
+        "profile": dto.ProviderProfile.model_validate(profile_data),
+        "provider_profile_json": person or token_data,
     }

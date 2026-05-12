@@ -11,11 +11,11 @@ from ..components import (
     format_object_metadata,
     create_message_banner,
 )
-from dto import (
+from ...dto import (
     MetadataResponseModel,
     LightcurveResponseModel,
 )
-from auth import (
+from ...auth import (
     get_authenticated_user,
     get_jwt_from_request,
     validate_token,

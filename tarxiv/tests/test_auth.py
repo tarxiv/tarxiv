@@ -109,7 +109,6 @@ def jwt_secret(monkeypatch):
 @pytest.fixture
 def valid_profile():
     return {
-        "id": "0000-0002-1825-0097",
         "provider_user_id": "0000-0002-1825-0097",
         "email": "ada@example.com",
         "username": "Ada Lovelace",
@@ -123,8 +122,6 @@ def valid_user_dto(valid_profile):
     return tarxiv_dto.User.model_validate(
         {
             "id": uuid.uuid4(),
-            "orcid_id": valid_profile["id"],
-            "provider_user_id": valid_profile["provider_user_id"],
             "email": valid_profile["email"],
             "username": valid_profile["username"],
             "forename": valid_profile["forename"],
@@ -150,7 +147,7 @@ def mock_api(monkeypatch, tmp_path, jwt_secret, valid_profile, valid_user_dto):
     api = API("mock", str(tmp_path))
     api.txv_db = MagicMock()
     api.user_db = MagicMock()
-    api.user_db.insert_new_user.return_value = valid_user_dto
+    api.user_db.get_or_create_user_from_identity.return_value = valid_user_dto
     return api
 
 
@@ -164,7 +161,16 @@ def mock_orcid_provider(monkeypatch, valid_user_dto):
     provider.complete_login.return_value = {
         "sub": "0000-0002-1825-0097",
         "provider": "orcid",
-        "profile": valid_user_dto,
+        "profile": tarxiv_dto.ProviderProfile.model_validate(
+            {
+                "provider_user_id": "0000-0002-1825-0097",
+                "email": valid_user_dto.email,
+                "username": valid_user_dto.username,
+                "forename": valid_user_dto.forename,
+                "surname": valid_user_dto.surname,
+            }
+        ),
+        "provider_profile_json": {"orcid": "0000-0002-1825-0097"},
     }
     monkeypatch.setattr("tarxiv.api.PROVIDERS", {"orcid": provider})
     return provider
@@ -415,7 +421,12 @@ class TestCompleteLogin:
     def test_success_returns_expected_keys(self, monkeypatch, orcid_env):
         self._setup_mocks(monkeypatch)
         result = orcid_provider.complete_login("test-code")
-        assert set(result.keys()) == {"sub", "provider", "profile"}
+        assert set(result.keys()) == {
+            "sub",
+            "provider",
+            "profile",
+            "provider_profile_json",
+        }
 
     def test_sub_matches_orcid_id(self, monkeypatch, orcid_env):
         self._setup_mocks(monkeypatch)
@@ -431,7 +442,7 @@ class TestCompleteLogin:
         self._setup_mocks(monkeypatch)
         result = orcid_provider.complete_login("test-code")
         profile = result["profile"]
-        assert isinstance(profile, tarxiv_dto.User)
+        assert isinstance(profile, tarxiv_dto.ProviderProfile)
         assert profile.forename == "Ada"
         assert profile.surname == "Lovelace"
         assert profile.email == "ada@example.com"
@@ -550,7 +561,7 @@ class TestAuthCallback:
         response = client.get("/auth/orcid/callback?code=authcode123&state=valid-state")
         token = _token_from_location(response.headers["Location"])
         payload = pyjwt.decode(token, jwt_secret, algorithms=["HS256"])
-        assert payload["sub"] == "0000-0002-1825-0097"
+        assert payload["sub"] == str(mock_api.user_db.get_or_create_user_from_identity.return_value.id)
         assert payload["provider"] == "orcid"
 
     def test_issued_jwt_contains_profile(
