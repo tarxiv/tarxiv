@@ -319,13 +319,11 @@ def format_object_metadata(object_id, meta, logger=None):
     ) -> None:
         source = entry_value.get("source") if isinstance(entry_value, dict) else None
         value = value_from_entry(field_name, entry_value)
-        tab_data[tab_key]["kv_rows"].append(
-            {
-                "field": label,
-                "source": source or "-",
-                "value": value,
-            }
-        )
+        tab_data[tab_key]["kv_rows"].append({
+            "field": label,
+            "source": source or "-",
+            "value": value,
+        })
 
     def add_field_for_sources(
         tab_key: str,
@@ -386,26 +384,20 @@ def format_object_metadata(object_id, meta, logger=None):
             dmc.Table(
                 [
                     dmc.TableThead(
-                        dmc.TableTr(
-                            [
-                                dmc.TableTh("Field"),
-                                dmc.TableTh("Source"),
-                                dmc.TableTh("Value"),
-                            ]
-                        )
+                        dmc.TableTr([
+                            dmc.TableTh("Field"),
+                            dmc.TableTh("Source"),
+                            dmc.TableTh("Value"),
+                        ])
                     ),
-                    dmc.TableTbody(
-                        [
-                            dmc.TableTr(
-                                [
-                                    dmc.TableTd(str(row["field"])),
-                                    dmc.TableTd(str(row["source"])),
-                                    dmc.TableTd(str(row["value"])),
-                                ]
-                            )
-                            for row in rows
-                        ]
-                    ),
+                    dmc.TableTbody([
+                        dmc.TableTr([
+                            dmc.TableTd(str(row["field"])),
+                            dmc.TableTd(str(row["source"])),
+                            dmc.TableTd(str(row["value"])),
+                        ])
+                        for row in rows
+                    ]),
                 ],
                 withTableBorder=True,
                 withColumnBorders=True,
@@ -479,36 +471,30 @@ def format_object_metadata(object_id, meta, logger=None):
             latest_entry = latest_for_filter(filter_name)
             peak_entry = peak_for_filter(filter_name)
             rows.append(
-                dmc.TableTr(
-                    [
-                        dmc.TableTd(f"{filter_name} Band"),
-                        dmc.TableTd(
-                            display_or_dash(
-                                latest_entry.get("date") if latest_entry else None
-                            )
-                        ),
-                        dmc.TableTd(
-                            display_or_dash(
-                                latest_entry.get("value") if latest_entry else None
-                            )
-                        ),
-                        dmc.TableTd(
-                            display_or_dash(
-                                latest_entry.get("mag_rate") if latest_entry else None
-                            )
-                        ),
-                        dmc.TableTd(
-                            display_or_dash(
-                                peak_entry.get("date") if peak_entry else None
-                            )
-                        ),
-                        dmc.TableTd(
-                            display_or_dash(
-                                peak_entry.get("value") if peak_entry else None
-                            )
-                        ),
-                    ]
-                )
+                dmc.TableTr([
+                    dmc.TableTd(f"{filter_name} Band"),
+                    dmc.TableTd(
+                        display_or_dash(
+                            latest_entry.get("date") if latest_entry else None
+                        )
+                    ),
+                    dmc.TableTd(
+                        display_or_dash(
+                            latest_entry.get("value") if latest_entry else None
+                        )
+                    ),
+                    dmc.TableTd(
+                        display_or_dash(
+                            latest_entry.get("mag_rate") if latest_entry else None
+                        )
+                    ),
+                    dmc.TableTd(
+                        display_or_dash(peak_entry.get("date") if peak_entry else None)
+                    ),
+                    dmc.TableTd(
+                        display_or_dash(peak_entry.get("value") if peak_entry else None)
+                    ),
+                ])
             )
 
         return [
@@ -517,16 +503,14 @@ def format_object_metadata(object_id, meta, logger=None):
                 dmc.Table(
                     [
                         dmc.TableThead(
-                            dmc.TableTr(
-                                [
-                                    dmc.TableTh("Filter"),
-                                    dmc.TableTh("Latest Date"),
-                                    dmc.TableTh("Latest Mag"),
-                                    dmc.TableTh("Latest Mag Rate"),
-                                    dmc.TableTh("Peak Date"),
-                                    dmc.TableTh("Peak Mag"),
-                                ]
-                            )
+                            dmc.TableTr([
+                                dmc.TableTh("Filter"),
+                                dmc.TableTh("Latest Date"),
+                                dmc.TableTh("Latest Mag"),
+                                dmc.TableTh("Latest Mag Rate"),
+                                dmc.TableTh("Peak Date"),
+                                dmc.TableTh("Peak Mag"),
+                            ])
                         ),
                         dmc.TableTbody(rows),
                     ],
@@ -632,50 +616,46 @@ def format_object_metadata(object_id, meta, logger=None):
         value="tns",  # default to the "TNS" tab since "ALL SOURCES" is currently disabled
     )
 
-    return dmc.Stack(
-        [
-            # Lightcurve card
-            expressive_card(
-                children=dcc.Loading(
-                    dcc.Graph(
-                        id={"type": "themeable-plot", "index": "lightcurve-plot"}
-                    ),
+    return dmc.Stack([
+        # Lightcurve card
+        expressive_card(
+            children=dcc.Loading(
+                dcc.Graph(id={"type": "themeable-plot", "index": "lightcurve-plot"}),
+            ),
+            title=f"Lightcurve: {object_id}",
+        ),
+        # Metadata card
+        expressive_card(
+            children=metadata_component,
+            title=f"Object Metadata: {object_id}",
+        ),
+        # Full JSON card
+        expressive_card(
+            children=dmc.Code(
+                json.dumps(meta, indent=2),
+                style={
+                    "padding": "10px",
+                    "maxHeight": "400px",
+                    "overflow": "auto",
+                    "borderRadius": "4px",
+                },
+                block=True,
+            ),
+            title="Full Metadata (JSON)",
+        ),
+        # Sky plot Aladin card
+        expressive_card(
+            children=[
+                # A hidden div to receive the "success" message from our JS
+                html.Div(id="aladin-status-dummy", style={"display": "none"}),
+                html.Div(
+                    id="aladin-lite-div",
+                    style={"width": "100%", "height": "500px"},
                 ),
-                title=f"Lightcurve: {object_id}",
-            ),
-            # Metadata card
-            expressive_card(
-                children=metadata_component,
-                title=f"Object Metadata: {object_id}",
-            ),
-            # Full JSON card
-            expressive_card(
-                children=dmc.Code(
-                    json.dumps(meta, indent=2),
-                    style={
-                        "padding": "10px",
-                        "maxHeight": "400px",
-                        "overflow": "auto",
-                        "borderRadius": "4px",
-                    },
-                    block=True,
-                ),
-                title="Full Metadata (JSON)",
-            ),
-            # Sky plot Aladin card
-            expressive_card(
-                children=[
-                    # A hidden div to receive the "success" message from our JS
-                    html.Div(id="aladin-status-dummy", style={"display": "none"}),
-                    html.Div(
-                        id="aladin-lite-div",
-                        style={"width": "100%", "height": "500px"},
-                    ),
-                ],
-                title="Sky Plot (Aladin Lite)",
-            ),
-        ]
-    )
+            ],
+            title="Sky Plot (Aladin Lite)",
+        ),
+    ])
 
 
 def format_cone_search_results(
@@ -749,27 +729,25 @@ def format_cone_search_results(
         )
 
     plural = "s" if len(results) != 1 else ""
-    return dmc.Stack(
-        [
-            expressive_card(
-                title=f"Found {len(results)} object{plural}",
-                children=[
-                    dmc.Text(
-                        f"Search coordinates: RA={search_ra:.6f}°, Dec={search_dec:.6f}°",
-                    ),
-                    dcc.Loading(
-                        dcc.Graph(
-                            id={"type": "themeable-plot", "index": "sky-plot"},
-                        ),
-                    ),
-                ],
-            ),
-            expressive_card(
-                title="Objects Found",
-                title_order=3,
-                children=dmc.Stack(
-                    object_cards,
+    return dmc.Stack([
+        expressive_card(
+            title=f"Found {len(results)} object{plural}",
+            children=[
+                dmc.Text(
+                    f"Search coordinates: RA={search_ra:.6f}°, Dec={search_dec:.6f}°",
                 ),
+                dcc.Loading(
+                    dcc.Graph(
+                        id={"type": "themeable-plot", "index": "sky-plot"},
+                    ),
+                ),
+            ],
+        ),
+        expressive_card(
+            title="Objects Found",
+            title_order=3,
+            children=dmc.Stack(
+                object_cards,
             ),
-        ]
-    )
+        ),
+    ])

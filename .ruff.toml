@@ -27,6 +27,12 @@ exclude = [
     "site-packages",
     "venv",
 ]
+# include = [
+ #   "bin/kafka-admin",
+#    "bin/start-api",
+#    "bin/tns-ingest",
+#    "bin/xmatch",
+#]
 
 # Same as Black.
 line-length = 88
@@ -43,9 +49,9 @@ ignore = [
     "D400", "D401", "D100", "D102", "D103", "D104", "D415", "D419", 
     "E731",
     "N812", "N806", "N803", 
-    "PD901", 
-    "PLR0913"
+    "PLR0913",
 ]
+preview = true
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
@@ -55,6 +61,9 @@ unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [format]
+# Enable preview mode for formatting - matches CI 
+preview = true
+
 # Like Black, use double quotes for strings.
 quote-style = "double"
 

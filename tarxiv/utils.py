@@ -39,7 +39,7 @@ class TarxivModule:
         with open(self.config_file) as stream:
             self.config = yaml.safe_load(stream)
         print(f"Config loaded from {self.config_file}")
-        
+
         # Logger
         self.logger = logging.getLogger(self.module)
         # Set log level
@@ -107,16 +107,21 @@ class TarxivModule:
 
 class SurveyMetaMissingError(Exception):
     """TBD"""
+
     pass
 
 
 class SurveyLightCurveMissingError(Exception):
     """TBD"""
+
     pass
+
 
 class TarxivPipelineError(Exception):
     """TBD"""
+
     pass
+
 
 def clean_meta(obj_meta):
     """Removes any empty fields from object meta schema
@@ -128,21 +133,28 @@ def clean_meta(obj_meta):
     # obj_meta = {k: v[0] for k, v in obj_meta.items() if len(v) == 1}
     return obj_meta
 
+
 def precision(x, p):
-    return float(Decimal( x*10**p ).quantize(0,ROUND_HALF_UP)/10**p) if x is not None else None
+    return (
+        float(Decimal(x * 10**p).quantize(0, ROUND_HALF_UP) / 10**p)
+        if x is not None
+        else None
+    )
+
 
 def int_to_alphanumeric(num, n):
     """Converts int to n-significant alphanumeric string (base 36)."""
     chars = string.digits + string.ascii_uppercase  # 0-9A-Z
     base = len(chars)
     if num == 0:
-        return chars[0].rjust(n, '0')
+        return chars[0].rjust(n, "0")
     result = []
     while num > 0:
         num, rem = divmod(num, base)
         result.append(chars[rem])
     # Pad to significant length n
-    return "".join(reversed(result)).rjust(n, '0')[:n]
+    return "".join(reversed(result)).rjust(n, "0")[:n]
+
 
 def deg2sex(ra_deg, dec_deg):
     c = SkyCoord(ra=ra_deg * u.degree, dec=dec_deg * u.degree)

@@ -91,21 +91,23 @@ def append_dynamic_values(obj_meta, obj_lc_df):
                 if survey == "atlas":
                     # First get night med mjd_diff and mag diff
                     mjd_diff = (
-                        sorted_detections.groupby("night")["mjd"]
+                        sorted_detections
+                        .groupby("night")["mjd"]
                         .median()
                         .diff()
                         .rename("mjd_diff")
                     )
                     mag_diffs = (
-                        sorted_detections.groupby("night")["mag"]
+                        sorted_detections
+                        .groupby("night")["mag"]
                         .median()
                         .diff()
                         .rename("mag_diff")
                     )
-                    diffs = pd.merge(mag_diffs, mjd_diff, on="night")
+                    diffs = mag_diffs.merge(mjd_diff, on="night")
                     # Then merge to sorted and get full diffs
-                    sorted_detections = pd.merge(
-                        sorted_detections, diffs, on="night", how="left"
+                    sorted_detections = sorted_detections.merge(
+                        diffs, on="night", how="left"
                     )
                     sorted_detections["mag_rate"] = -(
                         sorted_detections["mag_diff"] / sorted_detections["mjd_diff"]
@@ -326,13 +328,11 @@ class ASAS_SN(Survey):  # noqa: N801
         except SurveyLightCurveMissingError:
             status["status"] += "|no light curve"
         except Exception as e:
-            status.update(
-                {
-                    "status": "encontered unexpected error",
-                    "error_message": str(e),
-                    "details": traceback.format_exc(),
-                }
-            )
+            status.update({
+                "status": "encontered unexpected error",
+                "error_message": str(e),
+                "details": traceback.format_exc(),
+            })
 
         self.logger.info(status, extra=status)
         return meta, lc_df
@@ -484,13 +484,11 @@ class ZTF(Survey):
             status["status"] += "|no light curve"
 
         except Exception as e:
-            status.update(
-                {
-                    "status": "encontered unexpected error",
-                    "error_message": str(e),
-                    "details": traceback.format_exc(),
-                }
-            )
+            status.update({
+                "status": "encontered unexpected error",
+                "error_message": str(e),
+                "details": traceback.format_exc(),
+            })
 
         self.logger.info(status, extra=status)
         return meta, lc_df
@@ -519,13 +517,11 @@ class ZTF(Survey):
             alert = {}
 
         except Exception as e:
-            status.update(
-                {
-                    "status": "encountered unexpected error",
-                    "error_message": str(e),
-                    "details": traceback.format_exc(),
-                }
-            )
+            status.update({
+                "status": "encountered unexpected error",
+                "error_message": str(e),
+                "details": traceback.format_exc(),
+            })
             alert = {}
 
         self.logger.info(status, extra=status)
@@ -619,10 +615,12 @@ class ATLAS(Survey):
             if result["sherlock_crossmatches"]:
                 result["sherlock"] = result["sherlock_crossmatches"][0]
                 if result["sherlock"]["z"] is not None:
-                    meta["redshift"] = [{
-                        "value": result["sherlock"]["z"],
-                        "source": "sherlock",
-                    }]
+                    meta["redshift"] = [
+                        {
+                            "value": result["sherlock"]["z"],
+                            "source": "sherlock",
+                        }
+                    ]
 
             # DETECTIONS
             det_df = pd.DataFrame(result["lc"])[
@@ -684,13 +682,11 @@ class ATLAS(Survey):
             status["status"] += "|no light curve"
 
         except Exception as e:
-            status.update(
-                {
-                    "status": "encountered unexpected error",
-                    "error_message": str(e),
-                    "details": traceback.format_exc(),
-                }
-            )
+            status.update({
+                "status": "encountered unexpected error",
+                "error_message": str(e),
+                "details": traceback.format_exc(),
+            })
 
         self.logger.info(status, extra=status)
         return meta, lc_df
@@ -734,14 +730,12 @@ class TNS(Survey):
         # Run request to TNS server
         get_url = self.site + "/api/get/object"
         headers = {"User-Agent": self.marker}
-        obj_request = OrderedDict(
-            [
-                ("objid", ""),
-                ("objname", obj_name),
-                ("photometry", "0"),
-                ("spectra", "0"),
-            ]
-        )
+        obj_request = OrderedDict([
+            ("objid", ""),
+            ("objname", obj_name),
+            ("photometry", "0"),
+            ("spectra", "0"),
+        ])
         get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
         response = requests.post(get_url, headers=headers, data=get_data)
         if response.status_code != 200:
@@ -785,6 +779,8 @@ class TNS(Survey):
 
 
 class LSST(Survey):
+    """Survey adapter for LSST alerts pulled through Lasair."""
+
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
@@ -802,19 +798,20 @@ class LSST(Survey):
             alert = self.client.object(obj_id, lasair_added=True)
             status["status"] = "pulled alert"
         except Exception as e:
-            status.update(
-                {
-                    "status": "encountered unexpected error",
-                    "error_message": str(e),
-                    "details": traceback.format_exc(),
-                }
-            )
+            status.update({
+                "status": "encountered unexpected error",
+                "error_message": str(e),
+                "details": traceback.format_exc(),
+            })
             alert = {}
 
         self.logger.info(status, extra=status)
         return alert
 
+
 class DummySurvey(Survey):
+    """Minimal survey implementation used for testing and dry runs."""
+
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
@@ -825,6 +822,7 @@ class DummySurvey(Survey):
 
     def pull_alert(self, obj_id):
         return {"value": "dummy_value"}
+
 
 if __name__ == "__main__":
     """Execute the test suite"""
