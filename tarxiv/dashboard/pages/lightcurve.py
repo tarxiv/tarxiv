@@ -96,38 +96,36 @@ def layout(id=None, **kwargs):
             expressive_card(
                 title="Lightcurve Search",
                 children=[
-                    dmc.Stack(
-                        [
-                            dmc.Text(
-                                "Enter a TNS object name to view its metadata and lightcurve",
-                            ),
-                            dmc.Group(
-                                [
-                                    Keyboard(
-                                        children=[
-                                            dmc.TextInput(
-                                                id="object-id-input",
-                                                placeholder="Enter object ID (e.g., 2024abc)",
-                                                value=id,  # Pre-populate with URL parameter
-                                                style={
-                                                    "width": "400px",
-                                                    "marginRight": "10px",
-                                                },
-                                            ),
-                                        ],
-                                        captureKeys=["Enter"],
-                                        id="search-id-keyboard",
-                                        n_keydowns=0,
-                                    ),
-                                    dmc.Button(
-                                        "Search",
-                                        id="search-id-button",
-                                        n_clicks=0,
-                                    ),
-                                ],
-                            ),
-                        ]
-                    ),
+                    dmc.Stack([
+                        dmc.Text(
+                            "Enter a TNS object name to view its metadata and lightcurve",
+                        ),
+                        dmc.Group(
+                            [
+                                Keyboard(
+                                    children=[
+                                        dmc.TextInput(
+                                            id="object-id-input",
+                                            placeholder="Enter object ID (e.g., 2024abc)",
+                                            value=id,  # Pre-populate with URL parameter
+                                            style={
+                                                "width": "400px",
+                                                "marginRight": "10px",
+                                            },
+                                        ),
+                                    ],
+                                    captureKeys=["Enter"],
+                                    id="search-id-keyboard",
+                                    n_keydowns=0,
+                                ),
+                                dmc.Button(
+                                    "Search",
+                                    id="search-id-button",
+                                    n_clicks=0,
+                                ),
+                            ],
+                        ),
+                    ]),
                 ],
             ),
             dmc.Box(
@@ -284,25 +282,21 @@ def get_metadata_data(object_id, token, logger):
             return data.model_dump()
         except ValidationError as e:
             logger.exception(e)
-            logger.error(
-                {"error": f"Failed to parse metadata for object {object_id}: {str(e)}"}
-            )
+            logger.error({
+                "error": f"Failed to parse metadata for object {object_id}: {str(e)}"
+            })
     # authentication error
     elif response.status_code == 401:
-        logger.warning(
-            {
-                "warning": f"Unauthorized access when fetching metadata for object {object_id}. "
-                f"Check if the token is valid."
-            }
-        )
+        logger.warning({
+            "warning": f"Unauthorized access when fetching metadata for object {object_id}. "
+            f"Check if the token is valid."
+        })
         raise Unauthorized("Invalid API token. Check your token.")
 
-    logger.error(
-        {
-            "error": f"Metadata request failed for object {object_id}: "
-            f"Status {response.status_code}"
-        }
-    )
+    logger.error({
+        "error": f"Metadata request failed for object {object_id}: "
+        f"Status {response.status_code}"
+    })
     return None
 
 
@@ -312,26 +306,20 @@ def get_lightcurve_data(object_id, token, logger):
     if response and response.status_code == 200:
         try:
             data = LightcurveResponseModel.validate_json(response.text)
-            logger.info(
-                {
-                    "success": f"Parsed lightcurve for object {object_id}: {len(data)} points"
-                }
-            )
+            logger.info({
+                "success": f"Parsed lightcurve for object {object_id}: {len(data)} points"
+            })
             return LightcurveResponseModel.dump_python(data)
         except ValidationError as e:
-            logger.error(
-                {
-                    "error": f"Failed to parse lightcurve for object {object_id}: {str(e)}"
-                }
-            )
+            logger.error({
+                "error": f"Failed to parse lightcurve for object {object_id}: {str(e)}"
+            })
     else:
         if response:
-            logger.error(
-                {
-                    "error": f"Lightcurve request failed for object {object_id}: "
-                    f"Status {response.status_code}"
-                }
-            )
+            logger.error({
+                "error": f"Lightcurve request failed for object {object_id}: "
+                f"Status {response.status_code}"
+            })
     return None
 
 
@@ -352,9 +340,9 @@ def perform_search(object_id, token, logger):
             None,
         )
     except Exception as e:
-        logger.error(
-            {"error": f"Unexpected error fetching metadata for {object_id}: {str(e)}"}
-        )
+        logger.error({
+            "error": f"Unexpected error fetching metadata for {object_id}: {str(e)}"
+        })
         logger.exception(e)
         return (
             html.Div(),
@@ -384,13 +372,11 @@ def perform_search(object_id, token, logger):
     lc_store = {"data": lc_data, "id": object_id}
     aladin_store = _build_aladin_store(meta)
     if aladin_store is None:
-        logger.warning(
-            {
-                "warning": (
-                    f"No TNS RA/Dec found for object {object_id}; "
-                    "Aladin widget will not be initialized."
-                )
-            }
-        )
+        logger.warning({
+            "warning": (
+                f"No TNS RA/Dec found for object {object_id}; "
+                "Aladin widget will not be initialized."
+            )
+        })
 
     return result, status_msg, success_banner, lc_store, aladin_store

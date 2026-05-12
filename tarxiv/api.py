@@ -70,21 +70,18 @@ class API(TarxivModule):
         # Mount the WSGI callable object (app) on the root directory
         cherrypy.tree.graft(app_logged, "/")
         # Set the configuration of the web server
-        cherrypy.config.update(
-            {
-                "engine.autoreload.on": True,
-                "log.screen": True,
-                "server.socket_port": self.config["api_port"],
-                "server.socket_host": "0.0.0.0",
-            }
-        )
+        cherrypy.config.update({
+            "engine.autoreload.on": True,
+            "log.screen": True,
+            "server.socket_port": self.config["api_port"],
+            "server.socket_host": "0.0.0.0",
+        })
         # Start the CherryPy WSGI web server
         cherrypy.engine.start()
         cherrypy.engine.block()
 
     def validate_token_request(self, token: str) -> dict:
         """Validate a JWT and return structured status for error handling."""
-
         result = validate_token(token)
         return {
             "is_valid": result["status"] == TokenStatus.VALID,
@@ -323,10 +320,12 @@ class API(TarxivModule):
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
-                if type(request_json["n_rows"]) != int or type(request_json["offset"]) != int:
+                if not isinstance(request_json["n_rows"], int) or not isinstance(
+                    request_json["offset"], int
+                ):
                     raise ValueError("n_rows/offset must be an integer")
 
-                query = f"""SELECT 
+                query = f"""SELECT
                               `objects`.`internal`.`insert_date` AS date_received,
                               META().id AS obj_name,
                               `objects`.`object_type`[0].`value` AS object_type,
@@ -339,7 +338,7 @@ class API(TarxivModule):
                             WHERE `objects`.`internal`.`insert_date` IS NOT MISSING
                             ORDER BY `objects`.`internal`.`insert_date` DESC
                             LIMIT {request_json["n_rows"]} OFFSET {request_json["offset"]}"""
-                result = self.txv_db.query(query)
+                result = list(self.txv_db.query(query))
 
                 if result is None:
                     raise LookupError("bad lookup")

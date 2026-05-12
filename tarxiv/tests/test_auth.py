@@ -196,6 +196,8 @@ def orcid_env(monkeypatch):
 
 @pytest.mark.auth
 class TestSignToken:
+    """Coverage for JWT creation helpers."""
+
     def test_sign_token_basic(self, jwt_secret, valid_profile):
         token = sign_token("test-sub", "orcid", valid_profile)
         payload = pyjwt.decode(token, jwt_secret, algorithms=["HS256"])
@@ -233,6 +235,8 @@ class TestSignToken:
 
 @pytest.mark.auth
 class TestVerifyToken:
+    """Coverage for JWT verification helpers."""
+
     def test_verify_token_round_trip(self, jwt_secret, valid_profile):
         token = sign_token("test-sub", "orcid", valid_profile)
         payload = verify_token(token)
@@ -356,6 +360,8 @@ class TestValidateToken:
 
 @pytest.mark.auth
 class TestBuildAuthorizeUrl:
+    """Coverage for ORCID authorization URL construction."""
+
     def test_url_starts_with_auth_base(self, orcid_env):
         url = orcid_provider.build_authorize_url("my-state")
         assert url.startswith("https://sandbox.orcid.org/oauth/authorize")
@@ -393,6 +399,8 @@ class TestBuildAuthorizeUrl:
 
 @pytest.mark.auth
 class TestCompleteLogin:
+    """Coverage for ORCID login completion flows."""
+
     def _setup_mocks(self, monkeypatch, token_response=None, person_response=None):
         mock_post = MagicMock(
             return_value=_make_http_response(token_response or ORCID_TOKEN_RESPONSE)
@@ -477,6 +485,8 @@ class TestCompleteLogin:
 
 @pytest.mark.auth
 class TestAuthLogin:
+    """Coverage for the login route."""
+
     def test_redirects_to_provider_oauth_url(self, mock_api, mock_orcid_provider):
         client = mock_api.app.test_client()
         response = client.get("/auth/orcid/login")
@@ -511,6 +521,8 @@ class TestAuthLogin:
 
 @pytest.mark.auth
 class TestAuthCallback:
+    """Coverage for the OAuth callback route."""
+
     def _seed_session_state(self, client, state, provider="orcid"):
         """Write oauth_state and oauth_provider into the Flask session."""
         with client.session_transaction() as sess:
@@ -617,6 +629,8 @@ class TestAuthCallback:
 
 @pytest.mark.auth
 class TestCheckToken:
+    """Coverage for API token validation helpers."""
+
     def test_valid_jwt_returns_true(self, mock_api, valid_profile):
         token = sign_token("test-sub", "orcid", valid_profile)
         assert mock_api.validate_token_request(token)["is_valid"] is True
