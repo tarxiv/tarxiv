@@ -22,7 +22,7 @@ from urllib.parse import urlencode
 import requests
 
 from ... import dto
-from . import LoginDict
+from .. import typing as auth_typing
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ def _extract_name(person: Dict[str, Any]) -> Dict[str, Optional[str]]:
     }
 
 
-def complete_login(code: str) -> LoginDict:
+def complete_login(code: str) -> auth_typing.LoginDict:
     """Exchange an authorization code for a normalised user profile.
 
     Args
@@ -139,7 +139,7 @@ def complete_login(code: str) -> LoginDict:
 
     Returns
     -------
-    LoginDict
+    auth_typing.LoginDict
         A dictionary containing:
         - "sub": The ORCID iD (unique user identifier).
         - "provider": The string "orcid".

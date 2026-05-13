@@ -3,9 +3,8 @@
 from dataclasses import dataclass
 from typing import Callable
 
-from ... import dto
-
-LoginDict = dict[str, str | dto.ProviderProfile | dict | None]
+from . import orcid
+from ..typing import LoginDict
 
 
 @dataclass(frozen=True)
@@ -15,8 +14,6 @@ class AuthProvider:
     build_authorize_url: Callable[[str], str]
     complete_login: Callable[[str], LoginDict]
 
-
-from . import orcid
 
 PROVIDERS = {
     "orcid": AuthProvider(
