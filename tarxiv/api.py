@@ -331,7 +331,7 @@ class API(TarxivModule):
                             WHERE `objects`.`internal`.`insert_date` IS NOT MISSING
                             ORDER BY `objects`.`internal`.`insert_date` DESC
                             LIMIT {request_json["n_rows"]} OFFSET {request_json["offset"]}"""
-                result = self.txv_db.query(query)
+                result = list(self.txv_db.query(query))
 
                 # Normal return
                 status_code = 200

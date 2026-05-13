@@ -60,11 +60,33 @@ jobs:
         run: |
           cd setup
           cp .env.sample .env
+          set -a
+          source .env
+          set +a
           mkdir -p .data/elastic .data/couchbase .data/redis .data/logs
           chmod 777 .data/elastic .data/couchbase .data/redis .data/logs
           docker compose run setup_elasticsearch
           docker compose up -d elasticsearch logstash kibana couchbase
-          sleep 60
+
+          ready=0
+          for _ in $(seq 1 90); do
+            if docker compose exec -T couchbase /opt/couchbase/bin/couchbase-cli user-manage \
+              -c http://127.0.0.1:8091 \
+              --username "$TARXIV_COUCHBASE_ADMIN_USERNAME" \
+              --password "$TARXIV_COUCHBASE_ADMIN_PASSWORD" \
+              --list 2>/dev/null | grep -q "$TARXIV_COUCHBASE_PIPELINE_USERNAME"; then
+              ready=1
+              break
+            fi
+            sleep 5
+          done
+
+          if [ "$ready" -ne 1 ]; then
+            echo "Couchbase bootstrap did not finish before timeout"
+            docker compose logs couchbase
+            exit 1
+          fi
+
           docker ps -a
       - name: Load test data
         run: |
