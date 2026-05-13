@@ -264,7 +264,10 @@ class API(TarxivModule):
                 # Get all relevant citations
                 citations = []
                 for source in request_json["sources"]:
-                    with open(os.path.join(self.config_dir, "citations", f"{source}.bib"), mode="r") as f:
+                    with open(
+                        os.path.join(self.config_dir, "citations", f"{source}.bib"),
+                        mode="r",
+                    ) as f:
                         citations.append(f.read())
 
                 # Return as one big printable string
@@ -289,7 +292,6 @@ class API(TarxivModule):
 
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
-
 
         @self.app.route("/tns_alerts", methods=["POST"])
         def tns_alerts():
