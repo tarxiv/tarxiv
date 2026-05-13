@@ -52,16 +52,15 @@ class User(TimestampMixin, Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     owned_teams: Mapped[list["Team"]] = relationship(back_populates="created_by_user")
+    owned_tags: Mapped[list["Tag"]] = relationship(
+        back_populates="owner_user", foreign_keys="Tag.owner_user_id"
+    )
     team_memberships: Mapped[list["TeamMembership"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
     applied_tag_assignments: Mapped[list["ObjectTagAssignment"]] = relationship(
         back_populates="applied_by_user",
         foreign_keys="ObjectTagAssignment.applied_by_user_id",
-    )
-    owned_tag_assignments: Mapped[list["ObjectTagAssignment"]] = relationship(
-        back_populates="owner_user",
-        foreign_keys="ObjectTagAssignment.owner_user_id",
     )
 
 
@@ -103,9 +102,9 @@ class Team(TimestampMixin, Base):
     memberships: Mapped[list["TeamMembership"]] = relationship(
         back_populates="team", cascade="all, delete-orphan"
     )
-    owned_tag_assignments: Mapped[list["ObjectTagAssignment"]] = relationship(
+    owned_tags: Mapped[list["Tag"]] = relationship(
         back_populates="owner_team",
-        foreign_keys="ObjectTagAssignment.owner_team_id",
+        foreign_keys="Tag.owner_team_id",
     )
 
 
@@ -135,12 +134,35 @@ class Tag(TimestampMixin, Base):
     id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     color: Mapped[str | None] = mapped_column(String)
+    owner_user_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE")
+    )
+    owner_team_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE")
+    )
+
+    owner_user: Mapped[User | None] = relationship(
+        back_populates="owned_tags", foreign_keys=[owner_user_id]
+    )
+    owner_team: Mapped[Team | None] = relationship(
+        back_populates="owned_tags", foreign_keys=[owner_team_id]
+    )
 
     object_assignments: Mapped[list["ObjectTagAssignment"]] = relationship(
         back_populates="tag", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "(owner_user_id IS NOT NULL AND owner_team_id IS NULL) OR "
+            "(owner_user_id IS NULL AND owner_team_id IS NOT NULL)",
+            name="ck_tags_single_owner",
+        ),
+        UniqueConstraint("owner_user_id", "name", name="uq_tags_owner_user_name"),
+        UniqueConstraint("owner_team_id", "name", name="uq_tags_owner_team_name"),
     )
 
 
@@ -157,31 +179,13 @@ class ObjectTagAssignment(TimestampMixin, Base):
     applied_by_user_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
-    owner_user_id: Mapped[UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE")
-    )
-    owner_team_id: Mapped[UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE")
-    )
 
     tag: Mapped[Tag] = relationship(back_populates="object_assignments")
     applied_by_user: Mapped[User | None] = relationship(
         back_populates="applied_tag_assignments",
         foreign_keys=[applied_by_user_id],
     )
-    owner_user: Mapped[User | None] = relationship(
-        back_populates="owned_tag_assignments",
-        foreign_keys=[owner_user_id],
-    )
-    owner_team: Mapped[Team | None] = relationship(
-        back_populates="owned_tag_assignments",
-        foreign_keys=[owner_team_id],
-    )
 
     __table_args__ = (
-        CheckConstraint(
-            "(owner_user_id IS NOT NULL AND owner_team_id IS NULL) OR "
-            "(owner_user_id IS NULL AND owner_team_id IS NOT NULL)",
-            name="ck_object_tag_assignments_single_owner",
-        ),
+        UniqueConstraint("object_id", "tag_id", name="uq_object_tag_assignment"),
     )

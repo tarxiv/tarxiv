@@ -181,6 +181,8 @@ class Tag(BaseModel):
     name: str
     description: str | None = None
     color: str | None = None
+    owner_type: str
+    owner_id: UUID
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -201,6 +203,7 @@ class TagCreate(BaseModel):
     name: str
     description: str | None = None
     color: str | None = None
+    owner_team_id: UUID | None = None
 
 
 class ObjectTagAssignment(BaseModel):
@@ -208,8 +211,6 @@ class ObjectTagAssignment(BaseModel):
     object_id: str
     tag_id: UUID
     applied_by_user_id: UUID | None = None
-    owner_user_id: UUID | None = None
-    owner_team_id: UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

@@ -299,28 +299,48 @@ class UserDB(TarxivModule):
         finally:
             session.close()
 
-    def list_tags(self) -> list[dto.Tag]:
+    def list_tags(self, user_id: UUID | str) -> list[dto.Tag]:
         with self.get_session() as session:
             try:
-                tags = session.query(orm.Tag).order_by(orm.Tag.name.asc()).all()
-                return [dto.Tag.model_validate(tag) for tag in tags]
+                user_uuid = self._coerce_uuid(user_id)
+                team_ids = self._team_ids_for_user(session, user_uuid)
+                query = session.query(orm.Tag).order_by(orm.Tag.name.asc())
+                if team_ids:
+                    tags = query.filter(
+                        (orm.Tag.owner_user_id == user_uuid)
+                        | (orm.Tag.owner_team_id.in_(team_ids))
+                    ).all()
+                else:
+                    tags = query.filter(orm.Tag.owner_user_id == user_uuid).all()
+                return [self._build_tag_dto(tag) for tag in tags]
             except SQLAlchemyError as exc:
                 raise DataLayerError(
                     "A system error occurred while loading tags."
                 ) from exc
 
-    def create_tag(self, tag: dto.TagCreate) -> dto.Tag:
+    def create_tag(self, user_id: UUID | str, tag: dto.TagCreate) -> dto.Tag:
         session = self.get_session()
         try:
+            user_uuid = self._coerce_uuid(user_id)
+            owner_team_uuid = (
+                self._coerce_uuid(tag.owner_team_id)
+                if tag.owner_team_id is not None
+                else None
+            )
+            if owner_team_uuid is not None:
+                self._ensure_team_membership(session, owner_team_uuid, user_uuid)
+
             tag_row = orm.Tag(
                 name=tag.name,
                 description=tag.description,
                 color=tag.color,
+                owner_user_id=None if owner_team_uuid is not None else user_uuid,
+                owner_team_id=owner_team_uuid,
             )
             session.add(tag_row)
             session.commit()
             session.refresh(tag_row)
-            return dto.Tag.model_validate(tag_row)
+            return self._build_tag_dto(tag_row)
         except SQLAlchemyError as exc:
             session.rollback()
             raise DataLayerError(
@@ -338,26 +358,14 @@ class UserDB(TarxivModule):
         session = self.get_session()
         try:
             actor_uuid = self._coerce_uuid(acting_user_id)
-            owner_team_uuid = (
-                self._coerce_uuid(assignment.owner_team_id)
-                if assignment.owner_team_id is not None
-                else None
-            )
-
-            tag_row = self._resolve_tag(session, assignment)
-            if owner_team_uuid is None:
-                owner_user_uuid = actor_uuid
-            else:
-                self._ensure_team_membership(session, owner_team_uuid, actor_uuid)
-                owner_user_uuid = None
+            team_ids = self._team_ids_for_user(session, actor_uuid)
+            tag_row = self._resolve_visible_tag(session, assignment, actor_uuid, team_ids)
 
             existing = (
                 session
                 .query(orm.ObjectTagAssignment)
                 .filter(orm.ObjectTagAssignment.object_id == object_id)
                 .filter(orm.ObjectTagAssignment.tag_id == tag_row.id)
-                .filter(orm.ObjectTagAssignment.owner_user_id == owner_user_uuid)
-                .filter(orm.ObjectTagAssignment.owner_team_id == owner_team_uuid)
                 .first()
             )
             if existing is not None:
@@ -367,8 +375,6 @@ class UserDB(TarxivModule):
                 object_id=object_id,
                 tag_id=tag_row.id,
                 applied_by_user_id=actor_uuid,
-                owner_user_id=owner_user_uuid,
-                owner_team_id=owner_team_uuid,
             )
             session.add(assignment_row)
             session.commit()
@@ -389,30 +395,23 @@ class UserDB(TarxivModule):
         with self.get_session() as session:
             try:
                 user_uuid = self._coerce_uuid(user_id)
-                team_ids = [
-                    membership.team_id
-                    for membership in (
-                        session
-                        .query(orm.TeamMembership)
-                        .filter(orm.TeamMembership.user_id == user_uuid)
-                        .all()
-                    )
-                ]
+                team_ids = self._team_ids_for_user(session, user_uuid)
 
                 query = (
                     session
                     .query(orm.ObjectTagAssignment)
                     .options(joinedload(orm.ObjectTagAssignment.tag))
+                    .join(orm.Tag)
                     .filter(orm.ObjectTagAssignment.object_id == object_id)
                 )
                 if team_ids:
                     assignments = query.filter(
-                        (orm.ObjectTagAssignment.owner_user_id == user_uuid)
-                        | (orm.ObjectTagAssignment.owner_team_id.in_(team_ids))
+                        (orm.Tag.owner_user_id == user_uuid)
+                        | (orm.Tag.owner_team_id.in_(team_ids))
                     ).all()
                 else:
                     assignments = query.filter(
-                        orm.ObjectTagAssignment.owner_user_id == user_uuid
+                        orm.Tag.owner_user_id == user_uuid
                     ).all()
 
                 return [self._build_assignment_view(item) for item in assignments]
@@ -436,13 +435,13 @@ class UserDB(TarxivModule):
             if assignment is None:
                 return False
 
-            if assignment.owner_user_id == actor_uuid:
+            if assignment.tag.owner_user_id == actor_uuid:
                 allowed = True
-            elif assignment.owner_team_id is not None:
+            elif assignment.tag.owner_team_id is not None:
                 membership = (
                     session
                     .query(orm.TeamMembership)
-                    .filter(orm.TeamMembership.team_id == assignment.owner_team_id)
+                    .filter(orm.TeamMembership.team_id == assignment.tag.owner_team_id)
                     .filter(orm.TeamMembership.user_id == actor_uuid)
                     .first()
                 )
@@ -474,24 +473,7 @@ class UserDB(TarxivModule):
     def _resolve_tag(
         session: Session, assignment: dto.ObjectTagAssignmentCreate
     ) -> orm.Tag:
-        if assignment.tag_id is not None:
-            tag_row = session.get(orm.Tag, assignment.tag_id)
-            if tag_row is None:
-                raise DataLayerError("Tag not found.")
-            return tag_row
-
-        if assignment.tag_name is not None:
-            tag_row = (
-                session
-                .query(orm.Tag)
-                .filter(orm.Tag.name == assignment.tag_name)
-                .first()
-            )
-            if tag_row is None:
-                raise DataLayerError("Tag not found.")
-            return tag_row
-
-        raise DataLayerError("A tag_id or tag_name is required.")
+        raise NotImplementedError
 
     @staticmethod
     def _ensure_team_membership(session: Session, team_id: UUID, user_id: UUID) -> None:
@@ -509,18 +491,80 @@ class UserDB(TarxivModule):
     def _build_assignment_view(
         assignment: orm.ObjectTagAssignment,
     ) -> dto.ObjectTagAssignmentView:
-        owner_type = "team" if assignment.owner_team_id is not None else "user"
-        owner_id = assignment.owner_team_id or assignment.owner_user_id
+        owner_type = "team" if assignment.tag.owner_team_id is not None else "user"
+        owner_id = assignment.tag.owner_team_id or assignment.tag.owner_user_id
         if owner_id is None:
             raise DataLayerError("Invalid tag assignment owner state.")
 
         return dto.ObjectTagAssignmentView(
             id=assignment.id,
             object_id=assignment.object_id,
-            tag=dto.Tag.model_validate(assignment.tag),
+            tag=UserDB._build_tag_dto(assignment.tag),
             owner_type=owner_type,
             owner_id=owner_id,
             applied_by_user_id=assignment.applied_by_user_id,
             created_at=assignment.created_at,
             updated_at=assignment.updated_at,
         )
+
+    @staticmethod
+    def _build_tag_dto(tag: orm.Tag) -> dto.Tag:
+        owner_type = "team" if tag.owner_team_id is not None else "user"
+        owner_id = tag.owner_team_id or tag.owner_user_id
+        if owner_id is None:
+            raise DataLayerError("Invalid tag owner state.")
+
+        return dto.Tag(
+            id=tag.id,
+            name=tag.name,
+            description=tag.description,
+            color=tag.color,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            created_at=tag.created_at,
+            updated_at=tag.updated_at,
+        )
+
+    @staticmethod
+    def _team_ids_for_user(session: Session, user_id: UUID) -> list[UUID]:
+        return [
+            membership.team_id
+            for membership in (
+                session.query(orm.TeamMembership)
+                .filter(orm.TeamMembership.user_id == user_id)
+                .all()
+            )
+        ]
+
+    @staticmethod
+    def _resolve_visible_tag(
+        session: Session,
+        assignment: dto.ObjectTagAssignmentCreate,
+        user_id: UUID,
+        team_ids: list[UUID],
+    ) -> orm.Tag:
+        query = session.query(orm.Tag)
+
+        if assignment.tag_id is not None:
+            query = query.filter(orm.Tag.id == assignment.tag_id)
+        elif assignment.tag_name is not None:
+            query = query.filter(orm.Tag.name == assignment.tag_name)
+            if assignment.owner_team_id is not None:
+                query = query.filter(
+                    orm.Tag.owner_team_id == UserDB._coerce_uuid(assignment.owner_team_id)
+                )
+            else:
+                query = query.filter(orm.Tag.owner_user_id == user_id)
+        else:
+            raise DataLayerError("A tag_id or tag_name is required.")
+
+        tag_row = query.first()
+        if tag_row is None:
+            raise DataLayerError("Tag not found.")
+
+        if tag_row.owner_user_id == user_id:
+            return tag_row
+        if tag_row.owner_team_id is not None and tag_row.owner_team_id in team_ids:
+            return tag_row
+
+        raise DataLayerError("Tag not found.")

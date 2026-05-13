@@ -299,8 +299,8 @@ class API(TarxivModule):
         def list_tags():
             token = request.headers.get("Authorization")
             try:
-                self._require_authenticated_user_id(token)
-                tags = self.user_db.list_tags()
+                user_id = self._require_authenticated_user_id(token)
+                tags = self.user_db.list_tags(user_id)
                 return server_response(
                     [tag.model_dump(mode="json") for tag in tags], 200
                 )
@@ -314,9 +314,9 @@ class API(TarxivModule):
             token = request.headers.get("Authorization")
             request_json = request.get_json(silent=True) or {}
             try:
-                self._require_authenticated_user_id(token)
+                user_id = self._require_authenticated_user_id(token)
                 tag = dto.TagCreate.model_validate(request_json)
-                created_tag = self.user_db.create_tag(tag)
+                created_tag = self.user_db.create_tag(user_id, tag)
                 return server_response(created_tag.model_dump(mode="json"), 201)
             except PermissionError as exc:
                 return server_response({"error": str(exc), "type": "token"}, 401)

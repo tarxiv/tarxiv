@@ -140,14 +140,25 @@ Suggested fields:
 - `created_at`
 - `updated_at`
 
-Constraint options:
+Tag definitions should no longer be global.
 
-- If tags are global labels: unique on `name`
-- If tags are scoped per owner: unique on `(owner scope, name)` through ownership tables
+Updated direction:
 
-Recommendation:
+- tags should be scoped to either a user or a team
+- there should not be a global shared list of tags visible to everyone
+- UI should eventually expose three views derived from ownership relative to the current user:
+  - personal tags
+  - tags from teams the user belongs to
+  - not a global tag catalog, but the user's combined visible tag universe
 
-- Start with global tag definitions plus explicit ownership on assignments. This is simpler and good enough unless private tag vocabularies are required.
+Implemented schema direction:
+
+- add `owner_user_id` nullable FK to `tags`
+- add `owner_team_id` nullable FK to `tags`
+- require exactly one owner scope on each tag
+- enforce uniqueness on `(owner_user_id, name)` and `(owner_team_id, name)`
+
+This keeps tag definition and tag ownership aligned, rather than treating ownership as a property only of assignments.
 
 #### `object_tag_assignments`
 
@@ -159,24 +170,20 @@ Suggested fields:
 - `object_id` string
 - `tag_id` FK to `tags`
 - `applied_by_user_id` FK to `users`, nullable
-- `owner_user_id` FK to `users`, nullable
-- `owner_team_id` FK to `teams`, nullable
-- `note` nullable
 - `created_at`
 - `updated_at`
 
 Constraints:
 
-- exactly one of `owner_user_id` or `owner_team_id` must be set
-- optional uniqueness depending on intended semantics:
-  - one assignment per `(object_id, tag_id, owner_user_id)`
-  - one assignment per `(object_id, tag_id, owner_team_id)`
+- uniqueness should be based on the scoped tag definition:
+  - one assignment per `(object_id, tag_id)` is likely sufficient if `tag_id` already implies owner scope
 
 Notes:
 
 - `object_id` should use the stable TarXiv object identifier already used in Couchbase and the API.
 - This avoids duplicating object records into Postgres just to support tagging.
 - If candidate IDs and promoted object IDs diverge in future, we should add an object alias mapping layer rather than making the tagging schema more complex now.
+- free-form notes on assignments are not part of the current design.
 
 ## DTO Strategy
 
@@ -261,7 +268,7 @@ Important operations:
 ### Tags
 
 - `create_tag(...)`
-- `list_tags()`
+- `list_visible_tags(user_id)`
 - `assign_tag_to_object_for_user(object_id, tag_id, owner_user_id, ...)`
 - `assign_tag_to_object_for_team(object_id, tag_id, owner_team_id, ...)`
 - `list_object_tags(object_id, viewer_user_id)`
@@ -314,6 +321,10 @@ Recommended initial endpoints:
 - `GET /tags`
 - `POST /tags`
 
+Note:
+
+- `/tags` returns only the tags visible to the authenticated user, not a global catalog
+
 ### Object tags
 
 - `GET /objects/<object_id>/tags`
@@ -347,8 +358,9 @@ Visibility rules in the current implementation:
 
 - personal object tags are visible only to the owning user
 - team-owned object tags are visible only to members of that team
-- global tags are currently implemented as global tag definitions in `/tags`
 - `GET /objects/<object_id>/tags` returns only the assignments visible to the authenticated user
+
+The backend now models tag definitions as user- or team-scoped rows in `tags`.
 
 ## Recommended Implementation Order
 

@@ -140,32 +140,6 @@ def upgrade() -> None:
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("color", sa.String(), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.text("now()"),
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.text("now()"),
-        ),
-        sa.UniqueConstraint("name", name="uq_tags_name"),
-    )
-
-    op.create_table(
-        "object_tag_assignments",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            primary_key=True,
-            server_default=sa.text("gen_random_uuid()"),
-        ),
-        sa.Column("object_id", sa.String(), nullable=False),
-        sa.Column("tag_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("applied_by_user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("owner_user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("owner_team_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column(
@@ -183,14 +157,42 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "(owner_user_id IS NOT NULL AND owner_team_id IS NULL) OR "
             "(owner_user_id IS NULL AND owner_team_id IS NOT NULL)",
-            name="ck_object_tag_assignments_single_owner",
+            name="ck_tags_single_owner",
+        ),
+        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["owner_team_id"], ["teams.id"], ondelete="CASCADE"),
+        sa.UniqueConstraint("owner_user_id", "name", name="uq_tags_owner_user_name"),
+        sa.UniqueConstraint("owner_team_id", "name", name="uq_tags_owner_team_name"),
+    )
+
+    op.create_table(
+        "object_tag_assignments",
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
+        sa.Column("object_id", sa.String(), nullable=False),
+        sa.Column("tag_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("applied_by_user_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
         ),
         sa.ForeignKeyConstraint(["tag_id"], ["tags.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["applied_by_user_id"], ["users.id"], ondelete="SET NULL"
         ),
-        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["owner_team_id"], ["teams.id"], ondelete="CASCADE"),
+        sa.UniqueConstraint("object_id", "tag_id", name="uq_object_tag_assignment"),
     )
 
 
