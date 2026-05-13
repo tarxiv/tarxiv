@@ -21,6 +21,7 @@ stream = Stream(auth)
 def check_message(message, condition_dict):
     """
     Check if this message matches the filter criteria.
+
     :param message: tarxiv tns message; dict
     :param filter_dict: defined set of filters; dict
     :return: bool
@@ -35,13 +36,21 @@ def check_message(message, condition_dict):
         # If the field is in the message, then we check it
         for condition in condition_list:
             if condition["source"] == "any":
-                is_true &= any([check_field(field, condition) for field in message[field_name]])
+                is_true &= any(
+                    check_field(field, condition) for field in message[field_name]
+                )
             elif condition["source"] == "all":
-                is_true &= all([check_field(field, condition) for field in message[field_name]])
+                is_true &= all(
+                    check_field(field, condition) for field in message[field_name]
+                )
             else:
-                is_true &= all([check_field(field, condition) for field in message[field_name]
-                                if field["source"] == condition["source"]])
+                is_true &= all(
+                    check_field(field, condition)
+                    for field in message[field_name]
+                    if field["source"] == condition["source"]
+                )
     return is_true
+
 
 def check_field(message_field, condition):
     is_true = True
@@ -68,7 +77,7 @@ def check_field(message_field, condition):
 
     # Check filter specific mag checks (latest detections and non detections)
     if "filter" in condition.keys():
-        is_true &= (condition["filter"] == message_field["filter"])
+        is_true &= condition["filter"] == message_field["filter"]
 
     return is_true
 
@@ -97,18 +106,25 @@ with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "r") as s:
             "discovery_source": [
                 {"source": "tns", "value": ["GOTO", "ASAS-SN", "ZTF", "Rubin"]}
             ],
-            "latest_detection":[
-                {"source": "atlas", "value": 18.5, "operator": operator.lt, "filter": "c"},
-                {"source": "asas-sn", "value": 17.5, "operator": operator.lt, "filter": "g"},
+            "latest_detection": [
+                {
+                    "source": "atlas",
+                    "value": 18.5,
+                    "operator": operator.lt,
+                    "filter": "c",
+                },
+                {
+                    "source": "asas-sn",
+                    "value": 17.5,
+                    "operator": operator.lt,
+                    "filter": "g",
+                },
                 {"source": "atlas", "date_limit": date_limit, "operator": operator.gt},
-                {"source": "asas-sn", "date_limit": date_limit, "operator": operator.gt},
+                {
+                    "source": "asas-sn",
+                    "date_limit": date_limit,
+                    "operator": operator.gt,
+                },
                 {"source": "any", "mag_rate": 0.05, "operator": operator.gt},
-
             ],
         }
-
-
-
-
-
-
