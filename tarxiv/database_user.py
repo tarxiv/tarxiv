@@ -359,7 +359,9 @@ class UserDB(TarxivModule):
         try:
             actor_uuid = self._coerce_uuid(acting_user_id)
             team_ids = self._team_ids_for_user(session, actor_uuid)
-            tag_row = self._resolve_visible_tag(session, assignment, actor_uuid, team_ids)
+            tag_row = self._resolve_visible_tag(
+                session, assignment, actor_uuid, team_ids
+            )
 
             existing = (
                 session
@@ -410,9 +412,7 @@ class UserDB(TarxivModule):
                         | (orm.Tag.owner_team_id.in_(team_ids))
                     ).all()
                 else:
-                    assignments = query.filter(
-                        orm.Tag.owner_user_id == user_uuid
-                    ).all()
+                    assignments = query.filter(orm.Tag.owner_user_id == user_uuid).all()
 
                 return [self._build_assignment_view(item) for item in assignments]
             except SQLAlchemyError as exc:
@@ -530,7 +530,8 @@ class UserDB(TarxivModule):
         return [
             membership.team_id
             for membership in (
-                session.query(orm.TeamMembership)
+                session
+                .query(orm.TeamMembership)
                 .filter(orm.TeamMembership.user_id == user_id)
                 .all()
             )
@@ -551,7 +552,8 @@ class UserDB(TarxivModule):
             query = query.filter(orm.Tag.name == assignment.tag_name)
             if assignment.owner_team_id is not None:
                 query = query.filter(
-                    orm.Tag.owner_team_id == UserDB._coerce_uuid(assignment.owner_team_id)
+                    orm.Tag.owner_team_id
+                    == UserDB._coerce_uuid(assignment.owner_team_id)
                 )
             else:
                 query = query.filter(orm.Tag.owner_user_id == user_id)

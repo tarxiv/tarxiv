@@ -49,102 +49,94 @@ def layout(**kwargs):
         avatar_src = user_profile.get("picture_url")
         avatar = avatar_image(avatar_src) if avatar_src else avatar_fallback(name[:1])
 
-        auth_content = dmc.Stack(
-            [
-                dmc.Stack(
-                    id="user-profile-panel",
-                    children=[
-                        line("Username", user_profile.get("username")),
-                        line("Nickname", user_profile.get("nickname")),
-                        line("Forename", user_profile.get("forename")),
-                        line("Surname", user_profile.get("surname")),
-                        line("Institution", user_profile.get("institution")),
-                        line("Bio", user_profile.get("bio")),
-                        dmc.Divider(label="Teams", labelPosition="left", my="sm"),
-                        team_membership_block(team_memberships),
-                        dmc.Divider(label="Tags", labelPosition="left", my="sm"),
-                        dmc.Text(
-                            "Personal and team object tags will appear here once the dashboard tagging UI is wired up.",
-                            size="sm",
-                            c="dimmed",
-                        ),
-                        (
-                            dmc.Alert(
-                                fetch_error,
-                                color="yellow",
-                                title="Partial profile load",
-                                variant="light",
-                            )
-                            if fetch_error
-                            else None
-                        ),
-                    ],
-                ),
-                dmc.Group(
-                    id="auth-user-chip",
-                    children=[
-                        dmc.Group(id="auth-avatar-wrapper", children=avatar),
-                        dmc.Stack(
-                            [
-                                dmc.Text(name, id="auth-user-name", fw=600, size="sm"),
-                                dmc.Text(
-                                    email,
-                                    id="auth-user-email",
-                                    size="xs",
-                                    c="dimmed",
-                                ),
-                            ],
-                            gap=0,
-                        ),
-                        dmc.Button(
-                            "Logout",
-                            id="auth-logout-button",
-                            n_clicks=0,
+        auth_content = dmc.Stack([
+            dmc.Stack(
+                id="user-profile-panel",
+                children=[
+                    line("Username", user_profile.get("username")),
+                    line("Nickname", user_profile.get("nickname")),
+                    line("Forename", user_profile.get("forename")),
+                    line("Surname", user_profile.get("surname")),
+                    line("Institution", user_profile.get("institution")),
+                    line("Bio", user_profile.get("bio")),
+                    dmc.Divider(label="Teams", labelPosition="left", my="sm"),
+                    team_membership_block(team_memberships),
+                    dmc.Divider(label="Tags", labelPosition="left", my="sm"),
+                    dmc.Text(
+                        "Personal and team object tags will appear here once the dashboard tagging UI is wired up.",
+                        size="sm",
+                        c="dimmed",
+                    ),
+                    (
+                        dmc.Alert(
+                            fetch_error,
+                            color="yellow",
+                            title="Partial profile load",
                             variant="light",
-                            color="red",
-                        ),
-                    ],
-                    justify="space-between",
-                    mt="md",
-                ),
-                dmc.Group(
-                    id="api-token-group",
-                    children=[
-                        dmc.Text("Your API token:", size="sm", fw=500),
-                        dmc.Group(
-                            [
-                                dmc.Text(
-                                    token,
-                                    size="xs",
-                                    c="dimmed",
-                                    id="api-token",
-                                    truncate=True,
-                                )
-                            ]
-                        ),
-                    ],
-                ),
-            ]
-        )
-    else:
-        auth_content = dmc.Stack(
-            [
-                dmc.Text(
-                    "Sign in with ORCID to see your profile, tags, and teams. "
-                    "This section will grow as we add permissions and roles."
-                ),
-                dmc.Group(
-                    [
-                        dmc.Button(
-                            "Sign in with ORCID",
-                            id="auth-orcid-login",
-                            n_clicks=0,
-                            style=ORCID_BUTTON_STYLE,
                         )
-                    ]
-                ),
-            ]
-        )
+                        if fetch_error
+                        else None
+                    ),
+                ],
+            ),
+            dmc.Group(
+                id="auth-user-chip",
+                children=[
+                    dmc.Group(id="auth-avatar-wrapper", children=avatar),
+                    dmc.Stack(
+                        [
+                            dmc.Text(name, id="auth-user-name", fw=600, size="sm"),
+                            dmc.Text(
+                                email,
+                                id="auth-user-email",
+                                size="xs",
+                                c="dimmed",
+                            ),
+                        ],
+                        gap=0,
+                    ),
+                    dmc.Button(
+                        "Logout",
+                        id="auth-logout-button",
+                        n_clicks=0,
+                        variant="light",
+                        color="red",
+                    ),
+                ],
+                justify="space-between",
+                mt="md",
+            ),
+            dmc.Group(
+                id="api-token-group",
+                children=[
+                    dmc.Text("Your API token:", size="sm", fw=500),
+                    dmc.Group([
+                        dmc.Text(
+                            token,
+                            size="xs",
+                            c="dimmed",
+                            id="api-token",
+                            truncate=True,
+                        )
+                    ]),
+                ],
+            ),
+        ])
+    else:
+        auth_content = dmc.Stack([
+            dmc.Text(
+                "Sign in with ORCID to see your profile, tags, and teams. "
+                "This section will grow as we add permissions and roles."
+            ),
+            dmc.Group([
+                dmc.Button(
+                    "Sign in with ORCID",
+                    id="auth-orcid-login",
+                    n_clicks=0,
+                    style=ORCID_BUTTON_STYLE,
+                )
+            ]),
+        ])
 
     return dmc.Stack(
         children=[

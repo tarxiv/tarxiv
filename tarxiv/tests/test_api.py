@@ -207,14 +207,12 @@ def test_add_team_member_success(mock_api, auth_token):
 def test_list_tags_success(mock_api, auth_token):
     client = mock_api.app.test_client()
     mock_api.user_db.list_tags.return_value = [
-        tarxiv_dto.Tag.model_validate(
-            {
-                "id": uuid.uuid4(),
-                "name": "interesting",
-                "owner_type": "user",
-                "owner_id": uuid.uuid4(),
-            }
-        )
+        tarxiv_dto.Tag.model_validate({
+            "id": uuid.uuid4(),
+            "name": "interesting",
+            "owner_type": "user",
+            "owner_id": uuid.uuid4(),
+        })
     ]
 
     response = client.get("/tags", headers={"Authorization": auth_token})
@@ -225,14 +223,12 @@ def test_list_tags_success(mock_api, auth_token):
 
 def test_assign_object_tag_success(mock_api, auth_token):
     client = mock_api.app.test_client()
-    tag = tarxiv_dto.Tag.model_validate(
-        {
-            "id": uuid.uuid4(),
-            "name": "interesting",
-            "owner_type": "user",
-            "owner_id": uuid.uuid4(),
-        }
-    )
+    tag = tarxiv_dto.Tag.model_validate({
+        "id": uuid.uuid4(),
+        "name": "interesting",
+        "owner_type": "user",
+        "owner_id": uuid.uuid4(),
+    })
     assignment = tarxiv_dto.ObjectTagAssignmentView(
         id=uuid.uuid4(),
         object_id="2024abc",
@@ -255,14 +251,12 @@ def test_assign_object_tag_success(mock_api, auth_token):
 
 def test_list_object_tags_success(mock_api, auth_token):
     client = mock_api.app.test_client()
-    tag = tarxiv_dto.Tag.model_validate(
-        {
-            "id": uuid.uuid4(),
-            "name": "team-tag",
-            "owner_type": "team",
-            "owner_id": uuid.uuid4(),
-        }
-    )
+    tag = tarxiv_dto.Tag.model_validate({
+        "id": uuid.uuid4(),
+        "name": "team-tag",
+        "owner_type": "team",
+        "owner_id": uuid.uuid4(),
+    })
     mock_api.user_db.list_object_tags_for_user.return_value = [
         tarxiv_dto.ObjectTagAssignmentView(
             id=uuid.uuid4(),
