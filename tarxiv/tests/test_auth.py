@@ -119,15 +119,13 @@ def valid_profile():
 
 @pytest.fixture
 def valid_user_dto(valid_profile):
-    return tarxiv_dto.User.model_validate(
-        {
-            "id": uuid.uuid4(),
-            "email": valid_profile["email"],
-            "username": valid_profile["username"],
-            "forename": valid_profile["forename"],
-            "surname": valid_profile["surname"],
-        }
-    )
+    return tarxiv_dto.User.model_validate({
+        "id": uuid.uuid4(),
+        "email": valid_profile["email"],
+        "username": valid_profile["username"],
+        "forename": valid_profile["forename"],
+        "surname": valid_profile["surname"],
+    })
 
 
 @pytest.fixture
@@ -161,15 +159,13 @@ def mock_orcid_provider(monkeypatch, valid_user_dto):
     provider.complete_login.return_value = {
         "sub": "0000-0002-1825-0097",
         "provider": "orcid",
-        "profile": tarxiv_dto.ProviderProfile.model_validate(
-            {
-                "provider_user_id": "0000-0002-1825-0097",
-                "email": valid_user_dto.email,
-                "username": valid_user_dto.username,
-                "forename": valid_user_dto.forename,
-                "surname": valid_user_dto.surname,
-            }
-        ),
+        "profile": tarxiv_dto.ProviderProfile.model_validate({
+            "provider_user_id": "0000-0002-1825-0097",
+            "email": valid_user_dto.email,
+            "username": valid_user_dto.username,
+            "forename": valid_user_dto.forename,
+            "surname": valid_user_dto.surname,
+        }),
         "provider_profile_json": {"orcid": "0000-0002-1825-0097"},
     }
     monkeypatch.setattr("tarxiv.api.PROVIDERS", {"orcid": provider})
@@ -561,7 +557,9 @@ class TestAuthCallback:
         response = client.get("/auth/orcid/callback?code=authcode123&state=valid-state")
         token = _token_from_location(response.headers["Location"])
         payload = pyjwt.decode(token, jwt_secret, algorithms=["HS256"])
-        assert payload["sub"] == str(mock_api.user_db.get_or_create_user_from_identity.return_value.id)
+        assert payload["sub"] == str(
+            mock_api.user_db.get_or_create_user_from_identity.return_value.id
+        )
         assert payload["provider"] == "orcid"
 
     def test_issued_jwt_contains_profile(

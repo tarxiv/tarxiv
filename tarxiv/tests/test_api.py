@@ -1,7 +1,11 @@
 """HFS - created with help from GPT 4o"""
 
+import uuid
+
 import pytest
 from unittest.mock import MagicMock
+
+import tarxiv.dto as tarxiv_dto
 from tarxiv.api import API
 from tarxiv.auth.token_utils import sign_token
 import os
@@ -54,6 +58,28 @@ def mock_api(monkeypatch, tmp_path):
     return api
 
 
+@pytest.fixture
+def authenticated_user():
+    return tarxiv_dto.User.model_validate(
+        {
+            "id": uuid.uuid4(),
+            "username": "ada",
+            "email": "ada@example.com",
+            "forename": "Ada",
+            "surname": "Lovelace",
+        }
+    )
+
+
+@pytest.fixture
+def auth_token(authenticated_user):
+    return sign_token(
+        str(authenticated_user.id),
+        "orcid",
+        authenticated_user.model_dump(mode="json", exclude_none=True),
+    )
+
+
 def test_get_object_meta_success(mock_api):
     # HFS - 2025-05-28: The .app stuff comes from Flask and it returns a client object
     # that can do .post .get .put etc.. and send requests through
@@ -91,3 +117,151 @@ def test_get_object_meta_missing_obj(mock_api):
     )
     assert response.status_code == 404
     assert response.json["error"] == "no such object"
+
+
+def test_get_user_profile_success(mock_api, authenticated_user, auth_token):
+    client = mock_api.app.test_client()
+    mock_api.user_db.get_user.return_value = authenticated_user
+
+    response = client.get("/user", headers={"Authorization": auth_token})
+
+    assert response.status_code == 200
+    assert response.json["id"] == str(authenticated_user.id)
+    mock_api.user_db.get_user.assert_called_once_with(str(authenticated_user.id))
+
+
+def test_patch_user_profile_success(mock_api, authenticated_user, auth_token):
+    client = mock_api.app.test_client()
+    updated_user = authenticated_user.model_copy(update={"bio": "First programmer."})
+    mock_api.user_db.update_user_profile.return_value = updated_user
+
+    response = client.patch(
+        "/user",
+        json={"bio": "First programmer."},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 200
+    assert response.json["bio"] == "First programmer."
+    update_arg = mock_api.user_db.update_user_profile.call_args.args[1]
+    assert isinstance(update_arg, tarxiv_dto.UserProfileUpdate)
+    assert update_arg.bio == "First programmer."
+
+
+def test_list_user_teams_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    team_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    mock_api.user_db.list_user_teams.return_value = [
+        tarxiv_dto.TeamMembership.model_validate(
+            {"team_id": team_id, "user_id": user_id, "role": "owner"}
+        )
+    ]
+
+    response = client.get("/user/teams", headers={"Authorization": auth_token})
+
+    assert response.status_code == 200
+    assert response.json[0]["team_id"] == str(team_id)
+
+
+def test_create_team_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    created_team = tarxiv_dto.Team.model_validate(
+        {"id": uuid.uuid4(), "name": "transients", "description": "A team"}
+    )
+    mock_api.user_db.create_team.return_value = created_team
+
+    response = client.post(
+        "/teams",
+        json={"name": "transients", "description": "A team"},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 201
+    assert response.json["name"] == "transients"
+    create_arg = mock_api.user_db.create_team.call_args.args[1]
+    assert isinstance(create_arg, tarxiv_dto.TeamCreate)
+
+
+def test_add_team_member_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    membership = tarxiv_dto.TeamMembership.model_validate(
+        {"team_id": uuid.uuid4(), "user_id": uuid.uuid4(), "role": "member"}
+    )
+    mock_api.user_db.add_user_to_team.return_value = membership
+
+    response = client.post(
+        f"/teams/{membership.team_id}/members",
+        json={"user_id": str(membership.user_id), "role": "member"},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 201
+    assert response.json["user_id"] == str(membership.user_id)
+
+
+def test_list_tags_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    mock_api.user_db.list_tags.return_value = [
+        tarxiv_dto.Tag.model_validate({"id": uuid.uuid4(), "name": "interesting"})
+    ]
+
+    response = client.get("/tags", headers={"Authorization": auth_token})
+
+    assert response.status_code == 200
+    assert response.json[0]["name"] == "interesting"
+
+
+def test_assign_object_tag_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    tag = tarxiv_dto.Tag.model_validate({"id": uuid.uuid4(), "name": "interesting"})
+    assignment = tarxiv_dto.ObjectTagAssignmentView(
+        id=uuid.uuid4(),
+        object_id="2024abc",
+        tag=tag,
+        owner_type="user",
+        owner_id=uuid.uuid4(),
+    )
+    mock_api.user_db.assign_tag_to_object.return_value = assignment
+
+    response = client.post(
+        "/objects/2024abc/tags",
+        json={"tag_id": str(tag.id)},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 201
+    assert response.json["object_id"] == "2024abc"
+    assert response.json["tag"]["name"] == "interesting"
+
+
+def test_list_object_tags_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    tag = tarxiv_dto.Tag.model_validate({"id": uuid.uuid4(), "name": "team-tag"})
+    mock_api.user_db.list_object_tags_for_user.return_value = [
+        tarxiv_dto.ObjectTagAssignmentView(
+            id=uuid.uuid4(),
+            object_id="2024abc",
+            tag=tag,
+            owner_type="team",
+            owner_id=uuid.uuid4(),
+        )
+    ]
+
+    response = client.get("/objects/2024abc/tags", headers={"Authorization": auth_token})
+
+    assert response.status_code == 200
+    assert response.json[0]["owner_type"] == "team"
+
+
+def test_delete_object_tag_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    mock_api.user_db.remove_object_tag_assignment.return_value = True
+
+    response = client.delete(
+        f"/objects/2024abc/tags/{uuid.uuid4()}",
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 200
+    assert response.json["status"] == "deleted"

@@ -187,6 +187,22 @@ class Tag(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TeamCreate(BaseModel):
+    name: str
+    description: str | None = None
+
+
+class TeamMembershipCreate(BaseModel):
+    user_id: UUID
+    role: str = "member"
+
+
+class TagCreate(BaseModel):
+    name: str
+    description: str | None = None
+    color: str | None = None
+
+
 class ObjectTagAssignment(BaseModel):
     id: UUID
     object_id: str
@@ -198,3 +214,20 @@ class ObjectTagAssignment(BaseModel):
     updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ObjectTagAssignmentCreate(BaseModel):
+    tag_id: UUID | None = None
+    tag_name: str | None = None
+    owner_team_id: UUID | None = None
+
+
+class ObjectTagAssignmentView(BaseModel):
+    id: UUID
+    object_id: str
+    tag: Tag
+    owner_type: str
+    owner_id: UUID
+    applied_by_user_id: UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

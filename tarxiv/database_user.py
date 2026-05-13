@@ -1,8 +1,9 @@
 import os
+from uuid import UUID
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, joinedload, sessionmaker
 
 from . import dto, orm
 from .utils import TarxivModule
@@ -59,7 +60,8 @@ class UserDB(TarxivModule):
         with self.get_session() as session:
             try:
                 identity = (
-                    session.query(orm.ExternalIdentity)
+                    session
+                    .query(orm.ExternalIdentity)
                     .filter(orm.ExternalIdentity.provider == provider)
                     .filter(orm.ExternalIdentity.provider_user_id == provider_user_id)
                     .first()
@@ -90,7 +92,8 @@ class UserDB(TarxivModule):
         session = self.get_session()
         try:
             identity = (
-                session.query(orm.ExternalIdentity)
+                session
+                .query(orm.ExternalIdentity)
                 .filter(orm.ExternalIdentity.provider == provider)
                 .filter(
                     orm.ExternalIdentity.provider_user_id == profile.provider_user_id
@@ -159,3 +162,347 @@ class UserDB(TarxivModule):
                 continue
             if overwrite or getattr(user, field_name) in (None, ""):
                 setattr(user, field_name, incoming_value)
+
+    def get_user(self, user_id: UUID | str) -> dto.User | None:
+        with self.get_session() as session:
+            try:
+                user = session.get(orm.User, self._coerce_uuid(user_id))
+                if user is None:
+                    return None
+                return dto.User.model_validate(user)
+            except SQLAlchemyError as exc:
+                raise UserRetrievalError(
+                    "A system error occurred while accessing the user database."
+                ) from exc
+
+    def update_user_profile(
+        self, user_id: UUID | str, profile_update: dto.UserProfileUpdate
+    ) -> dto.User | None:
+        session = self.get_session()
+        try:
+            user = session.get(orm.User, self._coerce_uuid(user_id))
+            if user is None:
+                return None
+
+            for field_name, value in profile_update.model_dump(
+                exclude_unset=True, exclude_none=False
+            ).items():
+                setattr(user, field_name, value)
+
+            session.commit()
+            session.refresh(user)
+            return dto.User.model_validate(user)
+        except SQLAlchemyError as exc:
+            session.rollback()
+            raise DataLayerError(
+                "A system error occurred while updating the user profile."
+            ) from exc
+        finally:
+            session.close()
+
+    def list_user_teams(self, user_id: UUID | str) -> list[dto.TeamMembership]:
+        with self.get_session() as session:
+            try:
+                memberships = (
+                    session.query(orm.TeamMembership)
+                    .filter(orm.TeamMembership.user_id == self._coerce_uuid(user_id))
+                    .all()
+                )
+                return [dto.TeamMembership.model_validate(item) for item in memberships]
+            except SQLAlchemyError as exc:
+                raise DataLayerError(
+                    "A system error occurred while loading team memberships."
+                ) from exc
+
+    def create_team(self, creator_user_id: UUID | str, team: dto.TeamCreate) -> dto.Team:
+        session = self.get_session()
+        try:
+            creator_uuid = self._coerce_uuid(creator_user_id)
+            team_row = orm.Team(
+                name=team.name,
+                description=team.description,
+                created_by_user_id=creator_uuid,
+            )
+            session.add(team_row)
+            session.flush()
+            session.add(
+                orm.TeamMembership(
+                    team_id=team_row.id,
+                    user_id=creator_uuid,
+                    role="owner",
+                )
+            )
+            session.commit()
+            session.refresh(team_row)
+            return dto.Team.model_validate(team_row)
+        except SQLAlchemyError as exc:
+            session.rollback()
+            raise DataLayerError("A system error occurred while creating the team.") from exc
+        finally:
+            session.close()
+
+    def add_user_to_team(
+        self,
+        team_id: UUID | str,
+        acting_user_id: UUID | str,
+        membership: dto.TeamMembershipCreate,
+    ) -> dto.TeamMembership:
+        session = self.get_session()
+        try:
+            team_uuid = self._coerce_uuid(team_id)
+            actor_uuid = self._coerce_uuid(acting_user_id)
+            target_user_uuid = self._coerce_uuid(membership.user_id)
+
+            actor_membership = (
+                session.query(orm.TeamMembership)
+                .filter(orm.TeamMembership.team_id == team_uuid)
+                .filter(orm.TeamMembership.user_id == actor_uuid)
+                .first()
+            )
+            if actor_membership is None or actor_membership.role not in {
+                "owner",
+                "admin",
+            }:
+                raise DataLayerError("You do not have permission to add team members.")
+
+            team_membership = (
+                session.query(orm.TeamMembership)
+                .filter(orm.TeamMembership.team_id == team_uuid)
+                .filter(orm.TeamMembership.user_id == target_user_uuid)
+                .first()
+            )
+            if team_membership is None:
+                team_membership = orm.TeamMembership(
+                    team_id=team_uuid,
+                    user_id=target_user_uuid,
+                    role=membership.role,
+                )
+                session.add(team_membership)
+            else:
+                team_membership.role = membership.role
+
+            session.commit()
+            session.refresh(team_membership)
+            return dto.TeamMembership.model_validate(team_membership)
+        except SQLAlchemyError as exc:
+            session.rollback()
+            raise DataLayerError(
+                "A system error occurred while updating team membership."
+            ) from exc
+        finally:
+            session.close()
+
+    def list_tags(self) -> list[dto.Tag]:
+        with self.get_session() as session:
+            try:
+                tags = session.query(orm.Tag).order_by(orm.Tag.name.asc()).all()
+                return [dto.Tag.model_validate(tag) for tag in tags]
+            except SQLAlchemyError as exc:
+                raise DataLayerError("A system error occurred while loading tags.") from exc
+
+    def create_tag(self, tag: dto.TagCreate) -> dto.Tag:
+        session = self.get_session()
+        try:
+            tag_row = orm.Tag(
+                name=tag.name,
+                description=tag.description,
+                color=tag.color,
+            )
+            session.add(tag_row)
+            session.commit()
+            session.refresh(tag_row)
+            return dto.Tag.model_validate(tag_row)
+        except SQLAlchemyError as exc:
+            session.rollback()
+            raise DataLayerError("A system error occurred while creating the tag.") from exc
+        finally:
+            session.close()
+
+    def assign_tag_to_object(
+        self,
+        object_id: str,
+        acting_user_id: UUID | str,
+        assignment: dto.ObjectTagAssignmentCreate,
+    ) -> dto.ObjectTagAssignmentView:
+        session = self.get_session()
+        try:
+            actor_uuid = self._coerce_uuid(acting_user_id)
+            owner_team_uuid = (
+                self._coerce_uuid(assignment.owner_team_id)
+                if assignment.owner_team_id is not None
+                else None
+            )
+
+            tag_row = self._resolve_tag(session, assignment)
+            if owner_team_uuid is None:
+                owner_user_uuid = actor_uuid
+            else:
+                self._ensure_team_membership(session, owner_team_uuid, actor_uuid)
+                owner_user_uuid = None
+
+            existing = (
+                session.query(orm.ObjectTagAssignment)
+                .filter(orm.ObjectTagAssignment.object_id == object_id)
+                .filter(orm.ObjectTagAssignment.tag_id == tag_row.id)
+                .filter(orm.ObjectTagAssignment.owner_user_id == owner_user_uuid)
+                .filter(orm.ObjectTagAssignment.owner_team_id == owner_team_uuid)
+                .first()
+            )
+            if existing is not None:
+                return self._build_assignment_view(existing)
+
+            assignment_row = orm.ObjectTagAssignment(
+                object_id=object_id,
+                tag_id=tag_row.id,
+                applied_by_user_id=actor_uuid,
+                owner_user_id=owner_user_uuid,
+                owner_team_id=owner_team_uuid,
+            )
+            session.add(assignment_row)
+            session.commit()
+            session.refresh(assignment_row)
+            session.refresh(tag_row)
+            return self._build_assignment_view(assignment_row)
+        except SQLAlchemyError as exc:
+            session.rollback()
+            raise DataLayerError(
+                "A system error occurred while assigning the tag to the object."
+            ) from exc
+        finally:
+            session.close()
+
+    def list_object_tags_for_user(
+        self, object_id: str, user_id: UUID | str
+    ) -> list[dto.ObjectTagAssignmentView]:
+        with self.get_session() as session:
+            try:
+                user_uuid = self._coerce_uuid(user_id)
+                team_ids = [
+                    membership.team_id
+                    for membership in (
+                        session.query(orm.TeamMembership)
+                        .filter(orm.TeamMembership.user_id == user_uuid)
+                        .all()
+                    )
+                ]
+
+                query = (
+                    session.query(orm.ObjectTagAssignment)
+                    .options(joinedload(orm.ObjectTagAssignment.tag))
+                    .filter(orm.ObjectTagAssignment.object_id == object_id)
+                )
+                if team_ids:
+                    assignments = query.filter(
+                        (orm.ObjectTagAssignment.owner_user_id == user_uuid)
+                        | (orm.ObjectTagAssignment.owner_team_id.in_(team_ids))
+                    ).all()
+                else:
+                    assignments = query.filter(
+                        orm.ObjectTagAssignment.owner_user_id == user_uuid
+                    ).all()
+
+                return [self._build_assignment_view(item) for item in assignments]
+            except SQLAlchemyError as exc:
+                raise DataLayerError(
+                    "A system error occurred while loading object tags."
+                ) from exc
+
+    def remove_object_tag_assignment(
+        self, assignment_id: UUID | str, acting_user_id: UUID | str
+    ) -> bool:
+        session = self.get_session()
+        try:
+            actor_uuid = self._coerce_uuid(acting_user_id)
+            assignment = (
+                session.query(orm.ObjectTagAssignment)
+                .filter(orm.ObjectTagAssignment.id == self._coerce_uuid(assignment_id))
+                .first()
+            )
+            if assignment is None:
+                return False
+
+            if assignment.owner_user_id == actor_uuid:
+                allowed = True
+            elif assignment.owner_team_id is not None:
+                membership = (
+                    session.query(orm.TeamMembership)
+                    .filter(orm.TeamMembership.team_id == assignment.owner_team_id)
+                    .filter(orm.TeamMembership.user_id == actor_uuid)
+                    .first()
+                )
+                allowed = membership is not None
+            else:
+                allowed = False
+
+            if not allowed:
+                raise DataLayerError("You do not have permission to remove this tag.")
+
+            session.delete(assignment)
+            session.commit()
+            return True
+        except SQLAlchemyError as exc:
+            session.rollback()
+            raise DataLayerError(
+                "A system error occurred while removing the object tag."
+            ) from exc
+        finally:
+            session.close()
+
+    @staticmethod
+    def _coerce_uuid(value: UUID | str) -> UUID:
+        if isinstance(value, UUID):
+            return value
+        return UUID(str(value))
+
+    @staticmethod
+    def _resolve_tag(
+        session: Session, assignment: dto.ObjectTagAssignmentCreate
+    ) -> orm.Tag:
+        if assignment.tag_id is not None:
+            tag_row = session.get(orm.Tag, assignment.tag_id)
+            if tag_row is None:
+                raise DataLayerError("Tag not found.")
+            return tag_row
+
+        if assignment.tag_name is not None:
+            tag_row = (
+                session.query(orm.Tag)
+                .filter(orm.Tag.name == assignment.tag_name)
+                .first()
+            )
+            if tag_row is None:
+                raise DataLayerError("Tag not found.")
+            return tag_row
+
+        raise DataLayerError("A tag_id or tag_name is required.")
+
+    @staticmethod
+    def _ensure_team_membership(session: Session, team_id: UUID, user_id: UUID) -> None:
+        membership = (
+            session.query(orm.TeamMembership)
+            .filter(orm.TeamMembership.team_id == team_id)
+            .filter(orm.TeamMembership.user_id == user_id)
+            .first()
+        )
+        if membership is None:
+            raise DataLayerError("You are not a member of the requested team.")
+
+    @staticmethod
+    def _build_assignment_view(
+        assignment: orm.ObjectTagAssignment,
+    ) -> dto.ObjectTagAssignmentView:
+        owner_type = "team" if assignment.owner_team_id is not None else "user"
+        owner_id = assignment.owner_team_id or assignment.owner_user_id
+        if owner_id is None:
+            raise DataLayerError("Invalid tag assignment owner state.")
+
+        return dto.ObjectTagAssignmentView(
+            id=assignment.id,
+            object_id=assignment.object_id,
+            tag=dto.Tag.model_validate(assignment.tag),
+            owner_type=owner_type,
+            owner_id=owner_id,
+            applied_by_user_id=assignment.applied_by_user_id,
+            created_at=assignment.created_at,
+            updated_at=assignment.updated_at,
+        )
