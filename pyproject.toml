@@ -58,7 +58,8 @@ dev = [
     "pytest-cov",
     "ruff",
     "ipython",
-    "jupyter"
+    "jupyter",
+    "testcontainers[postgres]>=4.8.2",
 ]
 
 [tool.setuptools.packages]
