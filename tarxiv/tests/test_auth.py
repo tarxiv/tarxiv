@@ -38,6 +38,8 @@ import os
 
 _TEST_JWT_SECRET = "test-jwt-secret-for-auth-tests-32b"
 _TEST_DASHBOARD_URL = "http://localhost:8050"
+# TODO: quick dirty fix, needs addressing
+_API_IMPORT_ERROR = None
 
 # Realistic ORCID API responses used across multiple tests
 # TODO: How realistic is this?
