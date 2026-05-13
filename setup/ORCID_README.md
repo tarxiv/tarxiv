@@ -23,11 +23,13 @@ docker-compose up -d postgres
 
 ## 3. Run migrations
 
-From the repository root:
+From `setup/`, run the one-shot migration service inside the compose network:
 
 ```bash
-TARXIV_POSTGRES_URL="postgresql+psycopg2://tarxiv:password_postgres@localhost:5432/tarxiv" uv run alembic upgrade head
+docker compose run --rm tarxiv-migrate
 ```
+
+If you need to run Alembic directly from the host instead, make sure `TARXIV_POSTGRES_URL` points at the exposed local port rather than the docker service hostname (this is not recommended).
 
 ## 4. Run the dashboard
 

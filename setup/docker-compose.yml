@@ -175,6 +175,29 @@ services:
       - postgres
     restart: unless-stopped
 
+  tarxiv-migrate:
+    profiles:
+      - tarxiv
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:${TARXIV_IMAGE_TAG:-latest}
+    command: uv run alembic upgrade head
+    volumes:
+      - ../bin:/app/bin:Z
+      - ../tarxiv:/app/tarxiv:Z
+      - ../aux/config.yml:/app/aux/config.yml:Z
+      - ../examples:/app/examples:Z
+      - ../scripts:/app/scripts:Z
+    environment:
+      TARXIV_CONFIG_DIR: /app/aux
+      TARXIV_POSTGRES_URL: ${TARXIV_POSTGRES_URL:-postgresql+psycopg2://tarxiv:password_postgres@postgres:5432/tarxiv}
+    networks:
+      - tarxiv_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   tarxiv-api:
     profiles:
       - tarxiv
