@@ -287,9 +287,7 @@ class API(TarxivModule):
                 created_membership = self.user_db.add_user_to_team(
                     team_id, user_id, membership
                 )
-                return server_response(
-                    created_membership.model_dump(mode="json"), 201
-                )
+                return server_response(created_membership.model_dump(mode="json"), 201)
             except PermissionError as exc:
                 return server_response({"error": str(exc), "type": "token"}, 401)
             except ValueError as exc:
@@ -303,7 +301,9 @@ class API(TarxivModule):
             try:
                 self._require_authenticated_user_id(token)
                 tags = self.user_db.list_tags()
-                return server_response([tag.model_dump(mode="json") for tag in tags], 200)
+                return server_response(
+                    [tag.model_dump(mode="json") for tag in tags], 200
+                )
             except PermissionError as exc:
                 return server_response({"error": str(exc), "type": "token"}, 401)
             except DataLayerError as exc:
@@ -349,9 +349,7 @@ class API(TarxivModule):
                 created_assignment = self.user_db.assign_tag_to_object(
                     object_id, user_id, assignment
                 )
-                return server_response(
-                    created_assignment.model_dump(mode="json"), 201
-                )
+                return server_response(created_assignment.model_dump(mode="json"), 201)
             except PermissionError as exc:
                 return server_response({"error": str(exc), "type": "token"}, 401)
             except ValueError as exc:
@@ -360,7 +358,8 @@ class API(TarxivModule):
                 return server_response({"error": str(exc), "type": "server"}, 500)
 
         @self.app.route(
-            "/objects/<string:object_id>/tags/<string:assignment_id>", methods=["DELETE"]
+            "/objects/<string:object_id>/tags/<string:assignment_id>",
+            methods=["DELETE"],
         )
         def remove_object_tag(object_id, assignment_id):
             token = request.headers.get("Authorization")
@@ -371,7 +370,9 @@ class API(TarxivModule):
                 )
                 if not removed:
                     return server_response({"error": "Tag assignment not found"}, 404)
-                return server_response({"status": "deleted", "object_id": object_id}, 200)
+                return server_response(
+                    {"status": "deleted", "object_id": object_id}, 200
+                )
             except PermissionError as exc:
                 return server_response({"error": str(exc), "type": "token"}, 401)
             except DataLayerError as exc:

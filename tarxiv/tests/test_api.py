@@ -60,15 +60,13 @@ def mock_api(monkeypatch, tmp_path):
 
 @pytest.fixture
 def authenticated_user():
-    return tarxiv_dto.User.model_validate(
-        {
-            "id": uuid.uuid4(),
-            "username": "ada",
-            "email": "ada@example.com",
-            "forename": "Ada",
-            "surname": "Lovelace",
-        }
-    )
+    return tarxiv_dto.User.model_validate({
+        "id": uuid.uuid4(),
+        "username": "ada",
+        "email": "ada@example.com",
+        "forename": "Ada",
+        "surname": "Lovelace",
+    })
 
 
 @pytest.fixture
@@ -153,9 +151,11 @@ def test_list_user_teams_success(mock_api, auth_token):
     team_id = uuid.uuid4()
     user_id = uuid.uuid4()
     mock_api.user_db.list_user_teams.return_value = [
-        tarxiv_dto.TeamMembership.model_validate(
-            {"team_id": team_id, "user_id": user_id, "role": "owner"}
-        )
+        tarxiv_dto.TeamMembership.model_validate({
+            "team_id": team_id,
+            "user_id": user_id,
+            "role": "owner",
+        })
     ]
 
     response = client.get("/user/teams", headers={"Authorization": auth_token})
@@ -166,9 +166,11 @@ def test_list_user_teams_success(mock_api, auth_token):
 
 def test_create_team_success(mock_api, auth_token):
     client = mock_api.app.test_client()
-    created_team = tarxiv_dto.Team.model_validate(
-        {"id": uuid.uuid4(), "name": "transients", "description": "A team"}
-    )
+    created_team = tarxiv_dto.Team.model_validate({
+        "id": uuid.uuid4(),
+        "name": "transients",
+        "description": "A team",
+    })
     mock_api.user_db.create_team.return_value = created_team
 
     response = client.post(
@@ -185,9 +187,11 @@ def test_create_team_success(mock_api, auth_token):
 
 def test_add_team_member_success(mock_api, auth_token):
     client = mock_api.app.test_client()
-    membership = tarxiv_dto.TeamMembership.model_validate(
-        {"team_id": uuid.uuid4(), "user_id": uuid.uuid4(), "role": "member"}
-    )
+    membership = tarxiv_dto.TeamMembership.model_validate({
+        "team_id": uuid.uuid4(),
+        "user_id": uuid.uuid4(),
+        "role": "member",
+    })
     mock_api.user_db.add_user_to_team.return_value = membership
 
     response = client.post(
@@ -248,7 +252,9 @@ def test_list_object_tags_success(mock_api, auth_token):
         )
     ]
 
-    response = client.get("/objects/2024abc/tags", headers={"Authorization": auth_token})
+    response = client.get(
+        "/objects/2024abc/tags", headers={"Authorization": auth_token}
+    )
 
     assert response.status_code == 200
     assert response.json[0]["owner_type"] == "team"

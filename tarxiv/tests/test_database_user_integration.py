@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import pytest
@@ -43,9 +42,7 @@ def test_get_or_create_user_from_identity_round_trip(monkeypatch):
         repeated = user_db.get_or_create_user_from_identity(
             "orcid", profile, {"orcid": "0000-0002-1825-0097"}
         )
-        fetched = user_db.get_user_by_external_identity(
-            "orcid", "0000-0002-1825-0097"
-        )
+        fetched = user_db.get_user_by_external_identity("orcid", "0000-0002-1825-0097")
 
         assert created.id == repeated.id
         assert fetched is not None

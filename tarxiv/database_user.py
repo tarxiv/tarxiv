@@ -204,7 +204,8 @@ class UserDB(TarxivModule):
         with self.get_session() as session:
             try:
                 memberships = (
-                    session.query(orm.TeamMembership)
+                    session
+                    .query(orm.TeamMembership)
                     .filter(orm.TeamMembership.user_id == self._coerce_uuid(user_id))
                     .all()
                 )
@@ -214,7 +215,9 @@ class UserDB(TarxivModule):
                     "A system error occurred while loading team memberships."
                 ) from exc
 
-    def create_team(self, creator_user_id: UUID | str, team: dto.TeamCreate) -> dto.Team:
+    def create_team(
+        self, creator_user_id: UUID | str, team: dto.TeamCreate
+    ) -> dto.Team:
         session = self.get_session()
         try:
             creator_uuid = self._coerce_uuid(creator_user_id)
@@ -237,7 +240,9 @@ class UserDB(TarxivModule):
             return dto.Team.model_validate(team_row)
         except SQLAlchemyError as exc:
             session.rollback()
-            raise DataLayerError("A system error occurred while creating the team.") from exc
+            raise DataLayerError(
+                "A system error occurred while creating the team."
+            ) from exc
         finally:
             session.close()
 
@@ -254,7 +259,8 @@ class UserDB(TarxivModule):
             target_user_uuid = self._coerce_uuid(membership.user_id)
 
             actor_membership = (
-                session.query(orm.TeamMembership)
+                session
+                .query(orm.TeamMembership)
                 .filter(orm.TeamMembership.team_id == team_uuid)
                 .filter(orm.TeamMembership.user_id == actor_uuid)
                 .first()
@@ -266,7 +272,8 @@ class UserDB(TarxivModule):
                 raise DataLayerError("You do not have permission to add team members.")
 
             team_membership = (
-                session.query(orm.TeamMembership)
+                session
+                .query(orm.TeamMembership)
                 .filter(orm.TeamMembership.team_id == team_uuid)
                 .filter(orm.TeamMembership.user_id == target_user_uuid)
                 .first()
@@ -298,7 +305,9 @@ class UserDB(TarxivModule):
                 tags = session.query(orm.Tag).order_by(orm.Tag.name.asc()).all()
                 return [dto.Tag.model_validate(tag) for tag in tags]
             except SQLAlchemyError as exc:
-                raise DataLayerError("A system error occurred while loading tags.") from exc
+                raise DataLayerError(
+                    "A system error occurred while loading tags."
+                ) from exc
 
     def create_tag(self, tag: dto.TagCreate) -> dto.Tag:
         session = self.get_session()
@@ -314,7 +323,9 @@ class UserDB(TarxivModule):
             return dto.Tag.model_validate(tag_row)
         except SQLAlchemyError as exc:
             session.rollback()
-            raise DataLayerError("A system error occurred while creating the tag.") from exc
+            raise DataLayerError(
+                "A system error occurred while creating the tag."
+            ) from exc
         finally:
             session.close()
 
@@ -341,7 +352,8 @@ class UserDB(TarxivModule):
                 owner_user_uuid = None
 
             existing = (
-                session.query(orm.ObjectTagAssignment)
+                session
+                .query(orm.ObjectTagAssignment)
                 .filter(orm.ObjectTagAssignment.object_id == object_id)
                 .filter(orm.ObjectTagAssignment.tag_id == tag_row.id)
                 .filter(orm.ObjectTagAssignment.owner_user_id == owner_user_uuid)
@@ -380,14 +392,16 @@ class UserDB(TarxivModule):
                 team_ids = [
                     membership.team_id
                     for membership in (
-                        session.query(orm.TeamMembership)
+                        session
+                        .query(orm.TeamMembership)
                         .filter(orm.TeamMembership.user_id == user_uuid)
                         .all()
                     )
                 ]
 
                 query = (
-                    session.query(orm.ObjectTagAssignment)
+                    session
+                    .query(orm.ObjectTagAssignment)
                     .options(joinedload(orm.ObjectTagAssignment.tag))
                     .filter(orm.ObjectTagAssignment.object_id == object_id)
                 )
@@ -414,7 +428,8 @@ class UserDB(TarxivModule):
         try:
             actor_uuid = self._coerce_uuid(acting_user_id)
             assignment = (
-                session.query(orm.ObjectTagAssignment)
+                session
+                .query(orm.ObjectTagAssignment)
                 .filter(orm.ObjectTagAssignment.id == self._coerce_uuid(assignment_id))
                 .first()
             )
@@ -425,7 +440,8 @@ class UserDB(TarxivModule):
                 allowed = True
             elif assignment.owner_team_id is not None:
                 membership = (
-                    session.query(orm.TeamMembership)
+                    session
+                    .query(orm.TeamMembership)
                     .filter(orm.TeamMembership.team_id == assignment.owner_team_id)
                     .filter(orm.TeamMembership.user_id == actor_uuid)
                     .first()
@@ -466,7 +482,8 @@ class UserDB(TarxivModule):
 
         if assignment.tag_name is not None:
             tag_row = (
-                session.query(orm.Tag)
+                session
+                .query(orm.Tag)
                 .filter(orm.Tag.name == assignment.tag_name)
                 .first()
             )
@@ -479,7 +496,8 @@ class UserDB(TarxivModule):
     @staticmethod
     def _ensure_team_membership(session: Session, team_id: UUID, user_id: UUID) -> None:
         membership = (
-            session.query(orm.TeamMembership)
+            session
+            .query(orm.TeamMembership)
             .filter(orm.TeamMembership.team_id == team_id)
             .filter(orm.TeamMembership.user_id == user_id)
             .first()

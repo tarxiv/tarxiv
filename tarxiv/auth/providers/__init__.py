@@ -15,6 +15,7 @@ class AuthProvider:
     build_authorize_url: Callable[[str], str]
     complete_login: Callable[[str], LoginDict]
 
+
 from . import orcid
 
 PROVIDERS = {
