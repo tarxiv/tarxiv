@@ -84,6 +84,10 @@ def layout(id=None, **kwargs):
         children=[
             # NOTE JL: Switched to memory storage since we want the data to be cleared when the user leaves the page.
             dcc.Store(id="lightcurve-store", storage_type="memory", data=lc_store),
+            dcc.Store(id="lightcurve-tags-store", storage_type="memory", data=[]),
+            dcc.Store(
+                id="lightcurve-object-tags-store", storage_type="memory", data=[]
+            ),
             dcc.Store(
                 id="lightcurve-aladin-store",
                 storage_type="memory",
@@ -148,6 +152,7 @@ def layout(id=None, **kwargs):
                         id="results-container",
                         children=[results],
                     ),
+                    html.Div(id="object-tagging-container"),
                 ],
             ),
         ],
@@ -270,6 +275,148 @@ def fetch_api_data(endpoint, object_id, token, logger):
     return response
 
 
+def api_base_url():
+    host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
+    port = os.getenv("TARXIV_API_PORT", "9001")
+    return os.getenv("TARXIV_INTERNAL_API_URL", f"http://{host}:{port}")
+
+
+def fetch_visible_tags(token, logger):
+    response = requests.get(
+        url=f"{api_base_url()}/tags",
+        timeout=10,
+        headers={
+            "accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    logger.info({"info": f"tags response status: {response.status_code}"})
+    return response
+
+
+def fetch_object_tags(object_id, token, logger):
+    response = requests.get(
+        url=f"{api_base_url()}/objects/{object_id}/tags",
+        timeout=10,
+        headers={
+            "accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    logger.info({"info": f"object tags response status: {response.status_code}"})
+    return response
+
+
+def assign_object_tag(object_id, tag_id, token, logger):
+    response = requests.post(
+        url=f"{api_base_url()}/objects/{object_id}/tags",
+        timeout=10,
+        headers={
+            "accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        json={"tag_id": tag_id},
+    )
+    logger.info({"info": f"assign object tag response status: {response.status_code}"})
+    return response
+
+
+def delete_object_tag(object_id, assignment_id, token, logger):
+    response = requests.delete(
+        url=f"{api_base_url()}/objects/{object_id}/tags/{assignment_id}",
+        timeout=10,
+        headers={
+            "accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    logger.info({"info": f"delete object tag response status: {response.status_code}"})
+    return response
+
+
+def render_tagging_panel(object_id, visible_tags, assigned_tags):
+    assigned_tag_ids = {item["tag"]["id"] for item in assigned_tags}
+    available_options = [
+        {
+            "value": tag["id"],
+            "label": f"{tag['name']} ({tag['owner_type']})",
+        }
+        for tag in visible_tags
+        if tag["id"] not in assigned_tag_ids
+    ]
+
+    assigned_blocks = (
+        [
+            dmc.Paper(
+                withBorder=True,
+                p="sm",
+                radius="md",
+                children=dmc.Group(
+                    [
+                        dmc.Group(
+                            [
+                                dmc.Badge(
+                                    item["tag"]["name"],
+                                    color=(item["tag"].get("color") or "gray").lstrip(
+                                        "#"
+                                    ),
+                                    variant="light",
+                                ),
+                                dmc.Text(
+                                    item["owner_type"].capitalize(),
+                                    size="sm",
+                                    c="dimmed",
+                                ),
+                            ],
+                            gap="xs",
+                        ),
+                        dmc.Button(
+                            "Remove",
+                            id={
+                                "type": "remove-object-tag",
+                                "assignment_id": item["id"],
+                            },
+                            n_clicks=0,
+                            variant="subtle",
+                            color="red",
+                        ),
+                    ],
+                    justify="space-between",
+                ),
+            )
+            for item in assigned_tags
+        ]
+        if assigned_tags
+        else [dmc.Text("No tags assigned to this object.", c="dimmed")]
+    )
+
+    return expressive_card(
+        title=f"Object Tags: {object_id}",
+        children=[
+            dmc.Text(
+                "Assign any tag available to you, including personal tags and team tags from your memberships.",
+                c="dimmed",
+            ),
+            dmc.Group([
+                dmc.Select(
+                    id="assign-object-tag-select",
+                    placeholder="Choose a tag",
+                    data=available_options,
+                    value=None,
+                    style={"minWidth": "320px"},
+                ),
+                dmc.Button("Assign tag", id="assign-object-tag-button", n_clicks=0),
+            ]),
+            html.Div(id="object-tagging-banner"),
+            dmc.Stack(id="object-tagging-list", children=assigned_blocks),
+        ],
+    )
+
+
 def get_metadata_data(object_id, token, logger):
     """Fetch metadata for an object."""
     response = fetch_api_data("get_object_meta", object_id, token, logger)
@@ -380,3 +527,117 @@ def perform_search(object_id, token, logger):
         })
 
     return result, status_msg, success_banner, lc_store, aladin_store
+
+
+@callback(
+    [
+        Output("object-tagging-container", "children"),
+        Output("lightcurve-tags-store", "data"),
+        Output("lightcurve-object-tags-store", "data"),
+    ],
+    Input("lightcurve-store", "data"),
+    prevent_initial_call=False,
+)
+def load_object_tagging_panel(lightcurve_store):
+    if not lightcurve_store or not isinstance(lightcurve_store, dict):
+        return html.Div(), [], []
+
+    object_id = lightcurve_store.get("id")
+    if not object_id:
+        return html.Div(), [], []
+
+    logger = current_app.config["TXV_LOGGER"]
+    token = get_jwt_from_request(request)
+    validation = validate_token(token)
+    if validation["status"] != TokenStatus.VALID:
+        return html.Div(), [], []
+
+    tags_response = fetch_visible_tags(token, logger)
+    object_tags_response = fetch_object_tags(object_id, token, logger)
+    if tags_response.status_code != 200 or object_tags_response.status_code != 200:
+        return (
+            create_message_banner("Could not load tagging controls.", "warning"),
+            [],
+            [],
+        )
+
+    visible_tags = tags_response.json()
+    assigned_tags = object_tags_response.json()
+    return (
+        render_tagging_panel(object_id, visible_tags, assigned_tags),
+        visible_tags,
+        assigned_tags,
+    )
+
+
+@callback(
+    [
+        Output("object-tagging-container", "children", allow_duplicate=True),
+        Output("lightcurve-object-tags-store", "data", allow_duplicate=True),
+        Output("assign-object-tag-select", "value"),
+    ],
+    Input("assign-object-tag-button", "n_clicks"),
+    [
+        State("assign-object-tag-select", "value"),
+        State("lightcurve-store", "data"),
+        State("lightcurve-tags-store", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def handle_assign_object_tag(n_clicks, tag_id, lightcurve_store, visible_tags):
+    if not n_clicks or not lightcurve_store or not tag_id:
+        return no_update, no_update, no_update
+
+    object_id = lightcurve_store.get("id")
+    logger = current_app.config["TXV_LOGGER"]
+    token = get_jwt_from_request(request)
+    response = assign_object_tag(object_id, tag_id, token, logger)
+    if response.status_code != 201:
+        assigned_tags = fetch_object_tags(object_id, token, logger)
+        current_assignments = (
+            assigned_tags.json() if assigned_tags.status_code == 200 else []
+        )
+        panel = render_tagging_panel(object_id, visible_tags or [], current_assignments)
+        return panel, current_assignments, no_update
+
+    updated_response = fetch_object_tags(object_id, token, logger)
+    updated_assignments = (
+        updated_response.json() if updated_response.status_code == 200 else []
+    )
+    panel = render_tagging_panel(object_id, visible_tags or [], updated_assignments)
+    return panel, updated_assignments, None
+
+
+@callback(
+    [
+        Output("object-tagging-container", "children", allow_duplicate=True),
+        Output("lightcurve-object-tags-store", "data", allow_duplicate=True),
+    ],
+    Input({"type": "remove-object-tag", "assignment_id": dash.ALL}, "n_clicks"),
+    [
+        State({"type": "remove-object-tag", "assignment_id": dash.ALL}, "id"),
+        State("lightcurve-store", "data"),
+        State("lightcurve-tags-store", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def handle_remove_object_tag(n_clicks, button_ids, lightcurve_store, visible_tags):
+    if not lightcurve_store or not any(n_clicks or []):
+        return no_update, no_update
+
+    triggered = dash.ctx.triggered_id
+    if not triggered:
+        return no_update, no_update
+
+    object_id = lightcurve_store.get("id")
+    assignment_id = triggered.get("assignment_id")
+    logger = current_app.config["TXV_LOGGER"]
+    token = get_jwt_from_request(request)
+    delete_object_tag(object_id, assignment_id, token, logger)
+
+    updated_response = fetch_object_tags(object_id, token, logger)
+    updated_assignments = (
+        updated_response.json() if updated_response.status_code == 200 else []
+    )
+    panel = render_tagging_panel(object_id, visible_tags or [], updated_assignments)
+    return panel, updated_assignments
