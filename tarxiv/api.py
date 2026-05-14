@@ -307,6 +307,10 @@ class API(TarxivModule):
             except PermissionError as exc:
                 return server_response({"error": str(exc), "type": "token"}, 401)
             except DataLayerError as exc:
+                self.logger.exception(
+                    "Failed to list tags for authenticated user.",
+                    extra={"route": "/tags", "user_id": token},
+                )
                 return server_response({"error": str(exc), "type": "server"}, 500)
 
         @self.app.route("/tags", methods=["POST"])
@@ -323,6 +327,14 @@ class API(TarxivModule):
             except ValueError as exc:
                 return server_response({"error": str(exc), "type": "validation"}, 400)
             except DataLayerError as exc:
+                self.logger.exception(
+                    "Failed to create tag.",
+                    extra={
+                        "route": "/tags",
+                        "user_id": token,
+                        "request_json": request_json,
+                    },
+                )
                 return server_response({"error": str(exc), "type": "server"}, 500)
 
         @self.app.route("/objects/<string:object_id>/tags", methods=["GET"])
@@ -337,6 +349,14 @@ class API(TarxivModule):
             except PermissionError as exc:
                 return server_response({"error": str(exc), "type": "token"}, 401)
             except DataLayerError as exc:
+                self.logger.exception(
+                    "Failed to list object tags.",
+                    extra={
+                        "route": "/objects/<object_id>/tags",
+                        "object_id": object_id,
+                        "user_id": token,
+                    },
+                )
                 return server_response({"error": str(exc), "type": "server"}, 500)
 
         @self.app.route("/objects/<string:object_id>/tags", methods=["POST"])
@@ -355,6 +375,15 @@ class API(TarxivModule):
             except ValueError as exc:
                 return server_response({"error": str(exc), "type": "validation"}, 400)
             except DataLayerError as exc:
+                self.logger.exception(
+                    "Failed to assign object tag.",
+                    extra={
+                        "route": "/objects/<object_id>/tags",
+                        "object_id": object_id,
+                        "user_id": token,
+                        "request_json": request_json,
+                    },
+                )
                 return server_response({"error": str(exc), "type": "server"}, 500)
 
         @self.app.route(
@@ -376,6 +405,15 @@ class API(TarxivModule):
             except PermissionError as exc:
                 return server_response({"error": str(exc), "type": "token"}, 401)
             except DataLayerError as exc:
+                self.logger.exception(
+                    "Failed to delete object tag.",
+                    extra={
+                        "route": "/objects/<object_id>/tags/<assignment_id>",
+                        "object_id": object_id,
+                        "assignment_id": assignment_id,
+                        "user_id": token,
+                    },
+                )
                 return server_response({"error": str(exc), "type": "server"}, 500)
 
         # HFS - 2025-05-28: These self.app.route things are Flask decorators which become
@@ -467,15 +505,16 @@ class API(TarxivModule):
 
         @self.app.route("/tns_alerts", methods=["POST"])
         def tns_alerts():
-            request_json = request.get_json()
+            request_json = request.get_json() or {}
             token = request.headers.get("Authorization")
             # Start log
             log = {
                 "query_type": "tns_alerts",
                 "query_ip": request.remote_addr,
                 "token": token,
-                "n_rows": request_json["n_rows"],
-                "offset": request_json["offset"],
+                "n_rows": request_json.get("n_rows"),
+                "offset": request_json.get("offset"),
+                "tag_ids": request_json.get("tag_ids", []),
             }
             try:
                 # Return error if bad token
@@ -485,10 +524,37 @@ class API(TarxivModule):
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
-                if not isinstance(request_json["n_rows"], int) or not isinstance(
-                    request_json["offset"], int
+                if not isinstance(request_json.get("n_rows"), int) or not isinstance(
+                    request_json.get("offset"), int
                 ):
                     raise ValueError("n_rows/offset must be an integer")
+                if not isinstance(request_json.get("tag_ids", []), list):
+                    raise ValueError("tag_ids must be a list")
+
+                user_id = self._require_authenticated_user_id(token)
+                tag_ids = request_json.get("tag_ids", [])
+                tagged_object_ids: list[str] | None = None
+                if tag_ids:
+                    tagged_object_ids = self.user_db.list_tagged_object_ids_for_user(
+                        user_id, tag_ids
+                    )
+                    if not tagged_object_ids:
+                        result = []
+                        status_code = 200
+                        log["status"] = "Success"
+                        self.logger.info(log, extra=log)
+                        return server_response(result, status_code)
+
+                object_filter = ""
+                if tagged_object_ids is not None:
+                    escaped_ids = [
+                        object_id.replace("\\", "\\\\").replace('"', '\\"')
+                        for object_id in tagged_object_ids
+                    ]
+                    object_list = ", ".join(
+                        f'"{object_id}"' for object_id in escaped_ids
+                    )
+                    object_filter = f" AND META().id IN [{object_list}]"
 
                 query = f"""SELECT
                               `objects`.`internal`.`insert_date` AS date_received,
@@ -501,6 +567,7 @@ class API(TarxivModule):
                               IFMISSING(`objects`.`redshift`[0].`value`, "") AS redshift
                             FROM tarxiv.tns.objects
                             WHERE `objects`.`internal`.`insert_date` IS NOT MISSING
+                            {object_filter}
                             ORDER BY `objects`.`internal`.`insert_date` DESC
                             LIMIT {request_json["n_rows"]} OFFSET {request_json["offset"]}"""
                 result = list(self.txv_db.query(query))

@@ -206,13 +206,60 @@ class UserDB(TarxivModule):
                 memberships = (
                     session
                     .query(orm.TeamMembership)
+                    .options(joinedload(orm.TeamMembership.team))
                     .filter(orm.TeamMembership.user_id == self._coerce_uuid(user_id))
                     .all()
                 )
-                return [dto.TeamMembership.model_validate(item) for item in memberships]
+                return [
+                    dto.TeamMembership(
+                        team_id=item.team_id,
+                        user_id=item.user_id,
+                        role=item.role,
+                        created_at=item.created_at,
+                        team_name=item.team.name if item.team is not None else None,
+                        team_description=(
+                            item.team.description if item.team is not None else None
+                        ),
+                    )
+                    for item in memberships
+                ]
             except SQLAlchemyError as exc:
                 raise DataLayerError(
                     "A system error occurred while loading team memberships."
+                ) from exc
+
+    def list_tagged_object_ids_for_user(
+        self, user_id: UUID | str, tag_ids: list[UUID | str]
+    ) -> list[str]:
+        if not tag_ids:
+            return []
+
+        with self.get_session() as session:
+            try:
+                user_uuid = self._coerce_uuid(user_id)
+                team_ids = self._team_ids_for_user(session, user_uuid)
+                normalized_tag_ids = [self._coerce_uuid(tag_id) for tag_id in tag_ids]
+
+                query = (
+                    session
+                    .query(orm.ObjectTagAssignment.object_id)
+                    .join(orm.Tag)
+                    .filter(orm.ObjectTagAssignment.tag_id.in_(normalized_tag_ids))
+                )
+
+                if team_ids:
+                    query = query.filter(
+                        (orm.Tag.owner_user_id == user_uuid)
+                        | (orm.Tag.owner_team_id.in_(team_ids))
+                    )
+                else:
+                    query = query.filter(orm.Tag.owner_user_id == user_uuid)
+
+                rows = query.distinct().all()
+                return [row[0] for row in rows]
+            except SQLAlchemyError as exc:
+                raise DataLayerError(
+                    "A system error occurred while loading tag-filtered objects."
                 ) from exc
 
     def create_team(
