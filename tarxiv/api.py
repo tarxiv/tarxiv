@@ -12,6 +12,7 @@ from .database import TarxivDB
 from .auth import sign_token, PROVIDERS, validate_token, TokenStatus, verify_token
 from .database_user import UserDB, DataLayerError
 from . import dto
+from .openapi import build_openapi_spec
 
 
 class API(TarxivModule):
@@ -108,6 +109,40 @@ class API(TarxivModule):
         @self.app.route("/", methods=["GET"])
         def index():
             return server_response({"status": "TarXiv API is running"}, 200)
+
+        @self.app.route("/openapi.json", methods=["GET"])
+        def openapi_json():
+            return server_response(build_openapi_spec(), 200)
+
+        @self.app.route("/docs", methods=["GET"])
+        def swagger_docs():
+            html_content = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>TarXiv API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = function() {
+      SwaggerUIBundle({
+        url: '/openapi.json',
+        dom_id: '#swagger-ui',
+        presets: [SwaggerUIBundle.presets.apis],
+        layout: 'BaseLayout'
+      });
+    };
+  </script>
+</body>
+</html>
+"""
+            response = make_response(html_content)
+            response.mimetype = "text/html"
+            response.headers["Content-Type"] = "text/html; charset=utf-8"
+            return response
 
         @self.app.route("/auth/<string:provider>/login", methods=["GET"])
         def auth_login(provider):

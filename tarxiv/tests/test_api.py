@@ -117,6 +117,32 @@ def test_get_object_meta_missing_obj(mock_api):
     assert response.json["error"] == "no such object"
 
 
+def test_openapi_json_served(mock_api):
+    client = mock_api.app.test_client()
+
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    # This is we get back valid semver
+    assert len(response.json["openapi"].split(".")) == 3
+    assert response.json["info"]["title"] == "TarXiv API"
+    assert "/tags" in response.json["paths"]
+    assert "/auth/{provider}/login" in response.json["paths"]
+    assert "/auth/{provider}/callback" in response.json["paths"]
+    assert "/docs" not in response.json["paths"]
+
+
+def test_swagger_docs_page_served(mock_api):
+    client = mock_api.app.test_client()
+
+    response = client.get("/docs")
+
+    assert response.status_code == 200
+    assert response.mimetype == "text/html"
+    assert "SwaggerUIBundle" in response.text
+    assert "/openapi.json" in response.text
+
+
 def test_get_user_profile_success(mock_api, authenticated_user, auth_token):
     client = mock_api.app.test_client()
     mock_api.user_db.get_user.return_value = authenticated_user
