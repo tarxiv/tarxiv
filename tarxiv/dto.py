@@ -131,6 +131,17 @@ class User(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserSummary(BaseModel):
+    id: UUID
+    username: str | None = None
+    nickname: str | None = None
+    email: str | None = None
+    forename: str | None = None
+    surname: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class UserProfileUpdate(BaseModel):
     username: str | None = None
     nickname: str | None = None
@@ -163,6 +174,15 @@ class Team(BaseModel):
     created_by_user_id: UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TeamSummary(BaseModel):
+    id: UUID
+    name: str
+    description: str | None = None
+    is_member: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -234,3 +254,7 @@ class ObjectTagAssignmentView(BaseModel):
     applied_by_user_id: UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class TaggedObject(BaseModel):
+    object_id: str

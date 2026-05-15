@@ -4,7 +4,7 @@ import pytest
 from testcontainers.postgres import PostgresContainer
 
 from tarxiv import dto
-from tarxiv.database_user import UserDB
+from tarxiv.database_user import DuplicateValueError, UserDB
 
 
 @pytest.mark.slow
@@ -177,3 +177,78 @@ def test_tag_round_trip_and_visibility(monkeypatch):
         assert filtered_ids == ["2024abc"]
         assert teammate_filtered_ids == ["2024abc"]
         assert outsider_filtered_ids == []
+
+
+@pytest.mark.slow
+def test_team_search_join_leave_and_username_uniqueness(monkeypatch):
+    pytest.importorskip("testcontainers")
+
+    workspace_root = Path(__file__).resolve().parents[2]
+    config_dir = workspace_root / "aux"
+
+    with PostgresContainer("postgres:15") as postgres:
+        sync_url = postgres.get_connection_url()
+        sqlalchemy_url = sync_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+        monkeypatch.setenv("TARXIV_POSTGRES_URL", sqlalchemy_url)
+        monkeypatch.setenv("TARXIV_CONFIG_DIR", str(config_dir))
+
+        from alembic import command
+        from alembic.config import Config
+
+        alembic_cfg = Config(str(workspace_root / "alembic.ini"))
+        command.upgrade(alembic_cfg, "head")
+
+        user_db = UserDB("integration", 0, debug=False)
+
+        owner = user_db.get_or_create_user_from_identity(
+            "orcid",
+            dto.ProviderProfile(
+                provider_user_id="0000-0001-1000-0001",
+                username="owner_a",
+                email="owner_a@example.com",
+            ),
+            {"orcid": "0000-0001-1000-0001"},
+        )
+        joiner = user_db.get_or_create_user_from_identity(
+            "orcid",
+            dto.ProviderProfile(
+                provider_user_id="0000-0001-1000-0002",
+                username="joiner_b",
+                email="joiner_b@example.com",
+                forename="Joiner",
+                surname="Example",
+            ),
+            {"orcid": "0000-0001-1000-0002"},
+        )
+
+        user_search_results = user_db.search_users("joiner")
+        assert [user.username for user in user_search_results] == ["joiner_b"]
+
+        created_team = user_db.create_team(
+            owner.id,
+            dto.TeamCreate(name="spectroscopy-team", description="Follow-up work"),
+        )
+
+        team_search_results = user_db.search_teams(joiner.id, "spectro")
+        assert [team.name for team in team_search_results] == ["spectroscopy-team"]
+        assert team_search_results[0].is_member is False
+
+        joined_membership = user_db.join_team(created_team.id, joiner.id)
+        assert joined_membership.team_id == created_team.id
+        assert joined_membership.user_id == joiner.id
+
+        team_search_results_after_join = user_db.search_teams(joiner.id, "spectro")
+        assert team_search_results_after_join[0].is_member is True
+
+        leave_result = user_db.leave_team(created_team.id, joiner.id)
+        assert leave_result is True
+
+        team_search_results_after_leave = user_db.search_teams(joiner.id, "spectro")
+        assert team_search_results_after_leave[0].is_member is False
+
+        with pytest.raises(DuplicateValueError, match="Username is already taken"):
+            user_db.update_user_profile(
+                joiner.id,
+                dto.UserProfileUpdate(username="owner_a"),
+            )

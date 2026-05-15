@@ -1,8 +1,8 @@
 import os
 from uuid import UUID
 
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import create_engine, func, or_, text
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload, sessionmaker
 
 from . import dto, orm
@@ -15,6 +15,10 @@ class DataLayerError(Exception):
 
 class UserRetrievalError(DataLayerError):
     """Raised when there is a system failure retrieving a user."""
+
+
+class DuplicateValueError(DataLayerError):
+    """Raised when a unique field conflicts with an existing record."""
 
 
 class UserDB(TarxivModule):
@@ -192,6 +196,13 @@ class UserDB(TarxivModule):
             session.commit()
             session.refresh(user)
             return dto.User.model_validate(user)
+        except IntegrityError as exc:
+            session.rollback()
+            if "username" in str(exc).lower():
+                raise DuplicateValueError("Username is already taken.") from exc
+            raise DataLayerError(
+                "A system error occurred while updating the user profile."
+            ) from exc
         except SQLAlchemyError as exc:
             session.rollback()
             raise DataLayerError(
@@ -289,6 +300,174 @@ class UserDB(TarxivModule):
             session.rollback()
             raise DataLayerError(
                 "A system error occurred while creating the team."
+            ) from exc
+        finally:
+            session.close()
+
+    def search_users(self, query: str, limit: int = 20) -> list[dto.UserSummary]:
+        normalized = query.strip()
+        if not normalized:
+            return []
+
+        with self.get_session() as session:
+            try:
+                pattern = f"%{normalized.lower()}%"
+                users = (
+                    session
+                    .query(orm.User)
+                    .filter(
+                        or_(
+                            func.lower(func.coalesce(orm.User.username, "")).like(
+                                pattern
+                            ),
+                            func.lower(func.coalesce(orm.User.nickname, "")).like(
+                                pattern
+                            ),
+                            func.lower(func.coalesce(orm.User.forename, "")).like(
+                                pattern
+                            ),
+                            func.lower(func.coalesce(orm.User.surname, "")).like(
+                                pattern
+                            ),
+                            func.lower(func.coalesce(orm.User.email, "")).like(pattern),
+                        )
+                    )
+                    .order_by(orm.User.username.asc().nullslast(), orm.User.id.asc())
+                    .limit(limit)
+                    .all()
+                )
+                return [dto.UserSummary.model_validate(user) for user in users]
+            except SQLAlchemyError as exc:
+                raise DataLayerError(
+                    "A system error occurred while searching for users."
+                ) from exc
+
+    def search_teams(
+        self, user_id: UUID | str, query: str, limit: int = 20
+    ) -> list[dto.TeamSummary]:
+        normalized = query.strip()
+        if not normalized:
+            return []
+
+        with self.get_session() as session:
+            try:
+                user_uuid = self._coerce_uuid(user_id)
+                member_team_ids = set(self._team_ids_for_user(session, user_uuid))
+                pattern = f"%{normalized.lower()}%"
+                teams = (
+                    session
+                    .query(orm.Team)
+                    .filter(
+                        or_(
+                            func.lower(orm.Team.name).like(pattern),
+                            func.lower(func.coalesce(orm.Team.description, "")).like(
+                                pattern
+                            ),
+                        )
+                    )
+                    .order_by(orm.Team.name.asc())
+                    .limit(limit)
+                    .all()
+                )
+                return [
+                    dto.TeamSummary(
+                        id=team.id,
+                        name=team.name,
+                        description=team.description,
+                        is_member=team.id in member_team_ids,
+                    )
+                    for team in teams
+                ]
+            except SQLAlchemyError as exc:
+                raise DataLayerError(
+                    "A system error occurred while searching for teams."
+                ) from exc
+
+    def join_team(self, team_id: UUID | str, user_id: UUID | str) -> dto.TeamMembership:
+        session = self.get_session()
+        try:
+            team_uuid = self._coerce_uuid(team_id)
+            user_uuid = self._coerce_uuid(user_id)
+
+            membership = (
+                session
+                .query(orm.TeamMembership)
+                .options(joinedload(orm.TeamMembership.team))
+                .filter(orm.TeamMembership.team_id == team_uuid)
+                .filter(orm.TeamMembership.user_id == user_uuid)
+                .first()
+            )
+            if membership is None:
+                membership = orm.TeamMembership(
+                    team_id=team_uuid,
+                    user_id=user_uuid,
+                    role="member",
+                )
+                session.add(membership)
+                session.commit()
+                membership = (
+                    session
+                    .query(orm.TeamMembership)
+                    .options(joinedload(orm.TeamMembership.team))
+                    .filter(orm.TeamMembership.team_id == team_uuid)
+                    .filter(orm.TeamMembership.user_id == user_uuid)
+                    .first()
+                )
+
+            if membership is None:
+                raise DataLayerError("Team membership could not be created.")
+
+            return dto.TeamMembership(
+                team_id=membership.team_id,
+                user_id=membership.user_id,
+                role=membership.role,
+                created_at=membership.created_at,
+                team_name=membership.team.name if membership.team is not None else None,
+                team_description=(
+                    membership.team.description if membership.team is not None else None
+                ),
+            )
+        except SQLAlchemyError as exc:
+            session.rollback()
+            raise DataLayerError(
+                "A system error occurred while joining the team."
+            ) from exc
+        finally:
+            session.close()
+
+    def leave_team(self, team_id: UUID | str, user_id: UUID | str) -> bool:
+        session = self.get_session()
+        try:
+            team_uuid = self._coerce_uuid(team_id)
+            user_uuid = self._coerce_uuid(user_id)
+            membership = (
+                session
+                .query(orm.TeamMembership)
+                .filter(orm.TeamMembership.team_id == team_uuid)
+                .filter(orm.TeamMembership.user_id == user_uuid)
+                .first()
+            )
+            if membership is None:
+                return False
+
+            if membership.role == "owner":
+                owner_count = (
+                    session
+                    .query(orm.TeamMembership)
+                    .filter(orm.TeamMembership.team_id == team_uuid)
+                    .filter(orm.TeamMembership.role == "owner")
+                    .count()
+                )
+                if owner_count <= 1:
+                    raise DataLayerError("You cannot leave a team as its only owner.")
+
+            session.delete(membership)
+            session.commit()
+            return True
+        except SQLAlchemyError as exc:
+            session.rollback()
+            raise DataLayerError(
+                "A system error occurred while leaving the team."
             ) from exc
         finally:
             session.close()
@@ -465,6 +644,42 @@ class UserDB(TarxivModule):
             except SQLAlchemyError as exc:
                 raise DataLayerError(
                     "A system error occurred while loading object tags."
+                ) from exc
+
+    def list_objects_for_tag(
+        self, tag_id: UUID | str, user_id: UUID | str, limit: int = 100, offset: int = 0
+    ) -> list[dto.TaggedObject]:
+        with self.get_session() as session:
+            try:
+                user_uuid = self._coerce_uuid(user_id)
+                tag_uuid = self._coerce_uuid(tag_id)
+                team_ids = self._team_ids_for_user(session, user_uuid)
+
+                query = (
+                    session
+                    .query(orm.ObjectTagAssignment.object_id)
+                    .join(orm.Tag)
+                    .filter(orm.ObjectTagAssignment.tag_id == tag_uuid)
+                )
+                if team_ids:
+                    query = query.filter(
+                        (orm.Tag.owner_user_id == user_uuid)
+                        | (orm.Tag.owner_team_id.in_(team_ids))
+                    )
+                else:
+                    query = query.filter(orm.Tag.owner_user_id == user_uuid)
+
+                object_ids = (
+                    query
+                    .order_by(orm.ObjectTagAssignment.object_id.asc())
+                    .limit(limit)
+                    .offset(offset)
+                    .all()
+                )
+                return [dto.TaggedObject(object_id=row[0]) for row in object_ids]
+            except SQLAlchemyError as exc:
+                raise DataLayerError(
+                    "A system error occurred while loading tagged objects."
                 ) from exc
 
     def remove_object_tag_assignment(
