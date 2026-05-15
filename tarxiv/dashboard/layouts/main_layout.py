@@ -33,7 +33,11 @@ def create_layout() -> dmc.MantineProvider:
     theme, theme_switch = get_theme_components()
     user_page = dash.page_registry.get(
         "tarxiv.dashboard.pages.user",
-        {"name": "User", "icon": "mdi:user-outline", "relative_path": "/user"},
+        {
+            "name": "Account",
+            "icon": "mdi:user-outline",
+            "relative_path": "/user",
+        },
     )
 
     # Check if user is authenticated and update layout
