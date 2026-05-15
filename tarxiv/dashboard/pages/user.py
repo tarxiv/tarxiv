@@ -78,15 +78,23 @@ def layout(**kwargs):
             ),
             dcc.Store(id="user-profile-editing", storage_type="memory", data=False),
             dcc.Store(id="user-tag-create-open", storage_type="memory", data=False),
+            dcc.Store(id="user-team-create-open", storage_type="memory", data=False),
             dmc.Box(id="user-page-banner"),
             dmc.Stack(
                 id="user-profile-panel",
                 children=render_profile_panel(user_profile, False),
             ),
             dmc.Divider(label="Teams", labelPosition="left", my="sm"),
-            html.Div(
-                id="user-teams-panel", children=team_membership_block(team_memberships)
-            ),
+            dmc.Stack([
+                dmc.Group([
+                    dmc.Button("Create Team", id="add-team-button", n_clicks=0),
+                ]),
+                html.Div(id="user-team-create-panel"),
+                html.Div(
+                    id="user-teams-panel",
+                    children=team_membership_block(team_memberships),
+                ),
+            ]),
             dmc.Divider(label="Tags", labelPosition="left", my="sm"),
             dmc.Stack([
                 dmc.Text(
@@ -267,6 +275,36 @@ def render_tag_create_form(team_memberships):
                 dmc.Button(
                     "Cancel",
                     id="cancel-tag-button",
+                    n_clicks=0,
+                    variant="light",
+                ),
+            ]),
+        ],
+        gap="sm",
+    )
+
+
+def render_team_create_form():
+    return dmc.Stack(
+        [
+            dmc.Text("Create a new team", fw=600),
+            dmc.TextInput(
+                id="new-team-name",
+                label="Team name",
+                placeholder="Transient classifiers",
+            ),
+            dmc.Textarea(
+                id="new-team-description",
+                label="Description",
+                placeholder="Optional description",
+                minRows=3,
+                autosize=True,
+            ),
+            dmc.Group([
+                dmc.Button("Create team", id="create-team-button", n_clicks=0),
+                dmc.Button(
+                    "Cancel",
+                    id="cancel-team-button",
                     n_clicks=0,
                     variant="light",
                 ),
@@ -619,6 +657,127 @@ def cancel_tag_create_form(n_clicks):
         return no_update, no_update
 
     return html.Div(), False
+
+
+@callback(
+    [
+        Output("user-team-create-panel", "children"),
+        Output("user-team-create-open", "data"),
+    ],
+    Input("add-team-button", "n_clicks"),
+    prevent_initial_call=True,
+)
+def open_team_create_form(n_clicks):
+    if not n_clicks:
+        return no_update, no_update
+
+    return render_team_create_form(), True
+
+
+@callback(
+    [
+        Output("user-team-create-panel", "children", allow_duplicate=True),
+        Output("user-team-create-open", "data", allow_duplicate=True),
+    ],
+    Input("cancel-team-button", "n_clicks"),
+    prevent_initial_call=True,
+)
+def cancel_team_create_form(n_clicks):
+    if not n_clicks:
+        return no_update, no_update
+
+    return html.Div(), False
+
+
+@callback(
+    [
+        Output("user-teams-panel", "children"),
+        Output("user-teams-store", "data"),
+        Output("user-page-banner", "children", allow_duplicate=True),
+        Output("new-team-name", "value"),
+        Output("new-team-description", "value"),
+        Output("user-team-create-panel", "children", allow_duplicate=True),
+        Output("user-team-create-open", "data", allow_duplicate=True),
+        Output("user-tag-create-panel", "children", allow_duplicate=True),
+    ],
+    Input("create-team-button", "n_clicks"),
+    [
+        State("new-team-name", "value"),
+        State("new-team-description", "value"),
+        State("user-tag-create-open", "data"),
+        State("user-tag-create-panel", "children"),
+    ],
+    prevent_initial_call=True,
+)
+def create_team(n_clicks, name, description, tag_form_open, tag_form_children):
+    if not n_clicks:
+        return (
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+        )
+
+    if not name or not str(name).strip():
+        return (
+            no_update,
+            no_update,
+            create_message_banner("Team name is required.", "warning"),
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+        )
+
+    logger = current_app.config["TXV_LOGGER"]
+    token = get_jwt_from_request(request)
+    response = post_api_data(
+        "teams",
+        token,
+        {"name": str(name).strip(), "description": description or None},
+        logger,
+    )
+    if response.status_code != 201:
+        error_message = "Could not create team right now."
+        try:
+            error_message = response.json().get("error", error_message)
+        except ValueError:
+            pass
+        return (
+            no_update,
+            no_update,
+            create_message_banner(error_message, "error"),
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+        )
+
+    updated_teams_response = fetch_api_data("user/teams", token, logger)
+    updated_teams = []
+    if updated_teams_response.status_code == 200:
+        updated_teams = updated_teams_response.json()
+
+    refreshed_tag_panel = tag_form_children
+    if tag_form_open:
+        refreshed_tag_panel = render_tag_create_form(updated_teams)
+
+    return (
+        team_membership_block(updated_teams),
+        updated_teams,
+        create_message_banner("Team created.", "success"),
+        "",
+        "",
+        html.Div(),
+        False,
+        refreshed_tag_panel,
+    )
 
 
 @callback(
