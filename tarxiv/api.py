@@ -10,7 +10,7 @@ from paste.translogger import TransLogger
 from .utils import TarxivModule
 from .database import TarxivDB
 from .auth import sign_token, PROVIDERS, validate_token, TokenStatus, verify_token
-from .database_user import UserDB, DataLayerError
+from .database_user import UserDB, DataLayerError, DuplicateValueError
 from . import dto
 from .openapi import build_openapi_spec
 
@@ -277,8 +277,25 @@ class API(TarxivModule):
                 return server_response(user.model_dump(mode="json"), 200)
             except PermissionError as exc:
                 return server_response({"error": str(exc), "type": "token"}, 401)
+            except DuplicateValueError as exc:
+                return server_response({"error": str(exc), "type": "validation"}, 409)
             except ValueError as exc:
                 return server_response({"error": str(exc), "type": "validation"}, 400)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/users/search", methods=["GET"])
+        def search_users():
+            token = request.headers.get("Authorization")
+            query = request.args.get("q", "")
+            try:
+                self._require_authenticated_user_id(token)
+                users = self.user_db.search_users(query)
+                return server_response(
+                    [user.model_dump(mode="json") for user in users], 200
+                )
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
             except DataLayerError as exc:
                 return server_response({"error": str(exc), "type": "server"}, 500)
 
@@ -309,6 +326,47 @@ class API(TarxivModule):
                 return server_response({"error": str(exc), "type": "token"}, 401)
             except ValueError as exc:
                 return server_response({"error": str(exc), "type": "validation"}, 400)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/teams/search", methods=["GET"])
+        def search_teams():
+            token = request.headers.get("Authorization")
+            query = request.args.get("q", "")
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                teams = self.user_db.search_teams(user_id, query)
+                return server_response(
+                    [team.model_dump(mode="json") for team in teams], 200
+                )
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/teams/<string:team_id>/join", methods=["POST"])
+        def join_team(team_id):
+            token = request.headers.get("Authorization")
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                membership = self.user_db.join_team(team_id, user_id)
+                return server_response(membership.model_dump(mode="json"), 201)
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/user/teams/<string:team_id>", methods=["DELETE"])
+        def leave_team(team_id):
+            token = request.headers.get("Authorization")
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                removed = self.user_db.leave_team(team_id, user_id)
+                if not removed:
+                    return server_response({"error": "Team membership not found"}, 404)
+                return server_response({"status": "left", "team_id": team_id}, 200)
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
             except DataLayerError as exc:
                 return server_response({"error": str(exc), "type": "server"}, 500)
 
@@ -392,6 +450,24 @@ class API(TarxivModule):
                         "user_id": token,
                     },
                 )
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/tags/<string:tag_id>/objects", methods=["GET"])
+        def list_objects_for_tag(tag_id):
+            token = request.headers.get("Authorization")
+            limit = request.args.get("limit", default=100, type=int)
+            offset = request.args.get("offset", default=0, type=int)
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                objects = self.user_db.list_objects_for_tag(
+                    tag_id, user_id, limit=limit, offset=offset
+                )
+                return server_response(
+                    [item.model_dump(mode="json") for item in objects], 200
+                )
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DataLayerError as exc:
                 return server_response({"error": str(exc), "type": "server"}, 500)
 
         @self.app.route("/objects/<string:object_id>/tags", methods=["POST"])

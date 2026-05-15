@@ -33,10 +33,16 @@ def build_openapi_spec() -> dict:
                     "required": ["error"],
                 },
                 "User": dto.User.model_json_schema(ref_template=ref_template),
+                "UserSummary": dto.UserSummary.model_json_schema(
+                    ref_template=ref_template
+                ),
                 "UserProfileUpdate": dto.UserProfileUpdate.model_json_schema(
                     ref_template=ref_template
                 ),
                 "Team": dto.Team.model_json_schema(ref_template=ref_template),
+                "TeamSummary": dto.TeamSummary.model_json_schema(
+                    ref_template=ref_template
+                ),
                 "TeamCreate": dto.TeamCreate.model_json_schema(
                     ref_template=ref_template
                 ),
@@ -54,6 +60,9 @@ def build_openapi_spec() -> dict:
                     )
                 ),
                 "ObjectTagAssignmentView": dto.ObjectTagAssignmentView.model_json_schema(
+                    ref_template=ref_template
+                ),
+                "TaggedObject": dto.TaggedObject.model_json_schema(
                     ref_template=ref_template
                 ),
                 "MetadataResponseModel": dto.MetadataResponseModel.model_json_schema(
@@ -194,9 +203,40 @@ def build_openapi_spec() -> dict:
                             },
                         },
                         "400": {"description": "Validation error"},
+                        "409": {"description": "Unique field conflict"},
                         "401": {"description": "Unauthorized"},
                     },
                 },
+            },
+            "/users/search": {
+                "get": {
+                    "summary": "Search users by username, name, or email",
+                    "security": bearer_auth,
+                    "parameters": [
+                        {
+                            "name": "q",
+                            "in": "query",
+                            "required": False,
+                            "schema": {"type": "string"},
+                        }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Matching users",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "array",
+                                        "items": {
+                                            "$ref": "#/components/schemas/UserSummary"
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "401": {"description": "Unauthorized"},
+                    },
+                }
             },
             "/user/teams": {
                 "get": {
@@ -217,6 +257,25 @@ def build_openapi_spec() -> dict:
                             },
                         },
                         "401": {"description": "Unauthorized"},
+                    },
+                }
+            },
+            "/user/teams/{team_id}": {
+                "delete": {
+                    "summary": "Leave a team",
+                    "security": bearer_auth,
+                    "parameters": [
+                        {
+                            "name": "team_id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string", "format": "uuid"},
+                        }
+                    ],
+                    "responses": {
+                        "200": {"description": "Left team successfully"},
+                        "401": {"description": "Unauthorized"},
+                        "404": {"description": "Membership not found"},
                     },
                 }
             },
@@ -242,6 +301,63 @@ def build_openapi_spec() -> dict:
                             },
                         },
                         "400": {"description": "Validation error"},
+                        "401": {"description": "Unauthorized"},
+                    },
+                }
+            },
+            "/teams/search": {
+                "get": {
+                    "summary": "Search teams by name or description",
+                    "security": bearer_auth,
+                    "parameters": [
+                        {
+                            "name": "q",
+                            "in": "query",
+                            "required": False,
+                            "schema": {"type": "string"},
+                        }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Matching teams",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "array",
+                                        "items": {
+                                            "$ref": "#/components/schemas/TeamSummary"
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "401": {"description": "Unauthorized"},
+                    },
+                }
+            },
+            "/teams/{team_id}/join": {
+                "post": {
+                    "summary": "Join a team directly",
+                    "security": bearer_auth,
+                    "parameters": [
+                        {
+                            "name": "team_id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string", "format": "uuid"},
+                        }
+                    ],
+                    "responses": {
+                        "201": {
+                            "description": "Joined team membership",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/TeamMembership"
+                                    }
+                                }
+                            },
+                        },
                         "401": {"description": "Unauthorized"},
                     },
                 }
@@ -327,6 +443,48 @@ def build_openapi_spec() -> dict:
                         "401": {"description": "Unauthorized"},
                     },
                 },
+            },
+            "/tags/{tag_id}/objects": {
+                "get": {
+                    "summary": "List objects associated with a tag",
+                    "security": bearer_auth,
+                    "parameters": [
+                        {
+                            "name": "tag_id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string", "format": "uuid"},
+                        },
+                        {
+                            "name": "limit",
+                            "in": "query",
+                            "required": False,
+                            "schema": {"type": "integer"},
+                        },
+                        {
+                            "name": "offset",
+                            "in": "query",
+                            "required": False,
+                            "schema": {"type": "integer"},
+                        },
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Tagged objects",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "array",
+                                        "items": {
+                                            "$ref": "#/components/schemas/TaggedObject"
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "401": {"description": "Unauthorized"},
+                    },
+                }
             },
             "/objects/{object_id}/tags": {
                 "get": {

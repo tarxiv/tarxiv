@@ -127,6 +127,11 @@ def test_openapi_json_served(mock_api):
     assert len(response.json["openapi"].split(".")) == 3
     assert response.json["info"]["title"] == "TarXiv API"
     assert "/tags" in response.json["paths"]
+    assert "/users/search" in response.json["paths"]
+    assert "/teams/search" in response.json["paths"]
+    assert "/teams/{team_id}/join" in response.json["paths"]
+    assert "/user/teams/{team_id}" in response.json["paths"]
+    assert "/tags/{tag_id}/objects" in response.json["paths"]
     assert "/auth/{provider}/login" in response.json["paths"]
     assert "/auth/{provider}/callback" in response.json["paths"]
     assert "/docs" not in response.json["paths"]
@@ -172,6 +177,24 @@ def test_patch_user_profile_success(mock_api, authenticated_user, auth_token):
     assert update_arg.bio == "First programmer."
 
 
+def test_patch_user_profile_duplicate_username(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    from tarxiv.database_user import DuplicateValueError
+
+    mock_api.user_db.update_user_profile.side_effect = DuplicateValueError(
+        "Username is already taken."
+    )
+
+    response = client.patch(
+        "/user",
+        json={"username": "ada"},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 409
+    assert response.json["error"] == "Username is already taken."
+
+
 def test_list_user_teams_success(mock_api, auth_token):
     client = mock_api.app.test_client()
     team_id = uuid.uuid4()
@@ -211,6 +234,42 @@ def test_create_team_success(mock_api, auth_token):
     assert isinstance(create_arg, tarxiv_dto.TeamCreate)
 
 
+def test_search_users_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    mock_api.user_db.search_users.return_value = [
+        tarxiv_dto.UserSummary.model_validate({
+            "id": uuid.uuid4(),
+            "username": "ada",
+            "email": "ada@example.com",
+        })
+    ]
+
+    response = client.get("/users/search?q=ada", headers={"Authorization": auth_token})
+
+    assert response.status_code == 200
+    assert response.json[0]["username"] == "ada"
+    mock_api.user_db.search_users.assert_called_once_with("ada")
+
+
+def test_search_teams_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    mock_api.user_db.search_teams.return_value = [
+        tarxiv_dto.TeamSummary.model_validate({
+            "id": uuid.uuid4(),
+            "name": "team-alpha",
+            "description": "Transient classifiers",
+            "is_member": False,
+        })
+    ]
+
+    response = client.get(
+        "/teams/search?q=alpha", headers={"Authorization": auth_token}
+    )
+
+    assert response.status_code == 200
+    assert response.json[0]["name"] == "team-alpha"
+
+
 def test_add_team_member_success(mock_api, auth_token):
     client = mock_api.app.test_client()
     membership = tarxiv_dto.TeamMembership.model_validate({
@@ -230,6 +289,40 @@ def test_add_team_member_success(mock_api, auth_token):
     assert response.json["user_id"] == str(membership.user_id)
 
 
+def test_join_team_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    membership = tarxiv_dto.TeamMembership.model_validate({
+        "team_id": uuid.uuid4(),
+        "user_id": uuid.uuid4(),
+        "role": "member",
+        "team_name": "team-alpha",
+    })
+    mock_api.user_db.join_team.return_value = membership
+
+    response = client.post(
+        f"/teams/{membership.team_id}/join",
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 201
+    assert response.json["role"] == "member"
+
+
+def test_leave_team_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    team_id = uuid.uuid4()
+    mock_api.user_db.leave_team.return_value = True
+
+    response = client.delete(
+        f"/user/teams/{team_id}",
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 200
+    assert response.json["status"] == "left"
+    assert response.json["team_id"] == str(team_id)
+
+
 def test_list_tags_success(mock_api, auth_token):
     client = mock_api.app.test_client()
     mock_api.user_db.list_tags.return_value = [
@@ -245,6 +338,22 @@ def test_list_tags_success(mock_api, auth_token):
 
     assert response.status_code == 200
     assert response.json[0]["name"] == "interesting"
+
+
+def test_list_objects_for_tag_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    tag_id = uuid.uuid4()
+    mock_api.user_db.list_objects_for_tag.return_value = [
+        tarxiv_dto.TaggedObject(object_id="2024abc")
+    ]
+
+    response = client.get(
+        f"/tags/{tag_id}/objects?limit=10&offset=0",
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 200
+    assert response.json[0]["object_id"] == "2024abc"
 
 
 def test_assign_object_tag_success(mock_api, auth_token):
