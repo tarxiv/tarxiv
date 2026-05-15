@@ -22,15 +22,14 @@ from ..styles import ORCID_BUTTON_STYLE
 dash.register_page(
     __name__,
     path="/user",
-    title="TarXiv - User",
-    name="User",
+    title="TarXiv - Account",
+    name="Account",
     icon="mdi:user-outline",
 )
 
 
 PROFILE_FIELDS = [
     ("username", "Username"),
-    ("nickname", "Nickname"),
     ("forename", "Forename"),
     ("surname", "Surname"),
     ("email", "Email"),
@@ -43,6 +42,7 @@ def layout(**kwargs):
     token = unquote(request.cookies.get("tarxiv_token", ""))
     user_profile = None
     team_memberships = []
+    discovered_teams = []
     tags = []
     fetch_error = None
 
@@ -59,7 +59,6 @@ def layout(**kwargs):
     if user_profile:
         name = (
             user_profile.get("username")
-            or user_profile.get("nickname")
             or user_profile.get("forename")
             or user_profile.get("email")
             or "User"
@@ -76,6 +75,11 @@ def layout(**kwargs):
             dcc.Store(
                 id="user-teams-store", storage_type="memory", data=team_memberships
             ),
+            dcc.Store(
+                id="user-team-search-results-store",
+                storage_type="memory",
+                data=discovered_teams,
+            ),
             dcc.Store(id="user-profile-editing", storage_type="memory", data=False),
             dcc.Store(id="user-tag-create-open", storage_type="memory", data=False),
             dcc.Store(id="user-team-create-open", storage_type="memory", data=False),
@@ -86,14 +90,34 @@ def layout(**kwargs):
             ),
             dmc.Divider(label="Teams", labelPosition="left", my="sm"),
             dmc.Stack([
-                dmc.Group([
-                    dmc.Button("Create Team", id="add-team-button", n_clicks=0),
-                ]),
-                html.Div(id="user-team-create-panel"),
+                dmc.Text("Your Teams", fw=600),
                 html.Div(
                     id="user-teams-panel",
                     children=team_membership_block(team_memberships),
                 ),
+                dmc.Text("Discover Teams", fw=600, mt="sm"),
+                dmc.Text(
+                    "Search for teams to join or manage your current memberships.",
+                    size="sm",
+                    c="dimmed",
+                ),
+                dmc.Group([
+                    dmc.TextInput(
+                        id="team-search-input",
+                        placeholder="Search teams by name or description",
+                        style={"minWidth": "320px"},
+                    ),
+                    dmc.Button("Search", id="team-search-button", n_clicks=0),
+                ]),
+                html.Div(
+                    id="user-team-search-results-panel",
+                    children=team_search_results_block([]),
+                ),
+                dmc.Text("Create Team", fw=600, mt="sm"),
+                dmc.Group([
+                    dmc.Button("Create Team", id="add-team-button", n_clicks=0),
+                ]),
+                html.Div(id="user-team-create-panel"),
             ]),
             dmc.Divider(label="Tags", labelPosition="left", my="sm"),
             dmc.Stack([
@@ -350,7 +374,19 @@ def team_membership_block(memberships):
                                 ],
                                 gap=0,
                             ),
-                            dmc.Badge(item.get("role", "member"), variant="light"),
+                            dmc.Group([
+                                dmc.Badge(item.get("role", "member"), variant="light"),
+                                dmc.Button(
+                                    "Leave",
+                                    id={
+                                        "type": "leave-team-button",
+                                        "team_id": item.get("team_id"),
+                                    },
+                                    n_clicks=0,
+                                    variant="subtle",
+                                    color="red",
+                                ),
+                            ]),
                         ],
                         justify="space-between",
                     )
@@ -376,6 +412,57 @@ def tag_block(tags):
         sections.append(tag_section("Team tags", team_tags))
 
     return dmc.Stack(sections, gap="sm")
+
+
+def team_search_results_block(teams):
+    if not teams:
+        return dmc.Text("No team search results yet.", size="sm", c="dimmed")
+
+    return dmc.Stack(
+        [
+            dmc.Paper(
+                withBorder=True,
+                p="sm",
+                radius="md",
+                children=dmc.Group(
+                    [
+                        dmc.Stack(
+                            [
+                                dmc.Text(team.get("name") or "Unnamed team", fw=600),
+                                dmc.Text(
+                                    team.get("description") or "No description",
+                                    size="sm",
+                                    c="dimmed",
+                                ),
+                            ],
+                            gap=0,
+                        ),
+                        dmc.Group([
+                            dmc.Badge(
+                                "Member" if team.get("is_member") else "Not a member",
+                                variant="light",
+                            ),
+                            dmc.Button(
+                                "Leave" if team.get("is_member") else "Join",
+                                id={
+                                    "type": "team-membership-action",
+                                    "team_id": team.get("id"),
+                                    "action": "leave"
+                                    if team.get("is_member")
+                                    else "join",
+                                },
+                                n_clicks=0,
+                                variant="light",
+                            ),
+                        ]),
+                    ],
+                    justify="space-between",
+                ),
+            )
+            for team in teams
+        ],
+        gap="sm",
+    )
 
 
 def tag_section(title, tags):
@@ -477,6 +564,23 @@ def fetch_api_data(endpoint: str, token: str, logger):
     return response
 
 
+def delete_api_data(endpoint: str, token: str, logger):
+    host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
+    port = os.getenv("TARXIV_API_PORT", "9001")
+    api_url = os.getenv("TARXIV_INTERNAL_API_URL", f"http://{host}:{port}")
+    response = requests.delete(
+        url=f"{api_url}/{endpoint}",
+        timeout=10,
+        headers={
+            "accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    logger.info({"info": f"{endpoint} response status: {response.status_code}"})
+    return response
+
+
 def patch_api_data(endpoint: str, token: str, payload: dict, logger):
     host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
     port = os.getenv("TARXIV_API_PORT", "9001")
@@ -557,7 +661,6 @@ def cancel_profile_edit(n_clicks, profile):
     Input("user-profile-save-button", "n_clicks"),
     [
         State({"type": "user-profile-field", "field": "username"}, "value"),
-        State({"type": "user-profile-field", "field": "nickname"}, "value"),
         State({"type": "user-profile-field", "field": "forename"}, "value"),
         State({"type": "user-profile-field", "field": "surname"}, "value"),
         State({"type": "user-profile-field", "field": "email"}, "value"),
@@ -570,7 +673,6 @@ def cancel_profile_edit(n_clicks, profile):
 def save_profile(
     n_clicks,
     username,
-    nickname,
     forename,
     surname,
     email,
@@ -596,7 +698,6 @@ def save_profile(
 
     payload = {
         "username": username or None,
-        "nickname": nickname or None,
         "forename": forename or None,
         "surname": surname or None,
         "email": email or None,
@@ -626,6 +727,43 @@ def save_profile(
         False,
         create_message_banner("Profile updated.", "success"),
     )
+
+
+@callback(
+    [
+        Output("user-team-search-results-panel", "children"),
+        Output("user-team-search-results-store", "data"),
+        Output("user-page-banner", "children", allow_duplicate=True),
+    ],
+    Input("team-search-button", "n_clicks"),
+    State("team-search-input", "value"),
+    prevent_initial_call=True,
+)
+def search_teams(n_clicks, query):
+    if not n_clicks:
+        return no_update, no_update, no_update
+
+    logger = current_app.config["TXV_LOGGER"]
+    token = get_jwt_from_request(request)
+    normalized_query = (query or "").strip()
+    if not normalized_query:
+        return (
+            team_search_results_block([]),
+            [],
+            create_message_banner("Enter a team search query.", "warning"),
+        )
+
+    response = fetch_api_data(f"teams/search?q={normalized_query}", token, logger)
+    if response.status_code != 200:
+        error_message = "Could not search teams right now."
+        try:
+            error_message = response.json().get("error", error_message)
+        except ValueError:
+            pass
+        return no_update, no_update, create_message_banner(error_message, "error")
+
+    teams = response.json()
+    return team_search_results_block(teams), teams, html.Div()
 
 
 @callback(
@@ -777,6 +915,127 @@ def create_team(n_clicks, name, description, tag_form_open, tag_form_children):
         html.Div(),
         False,
         refreshed_tag_panel,
+    )
+
+
+@callback(
+    [
+        Output("user-teams-panel", "children", allow_duplicate=True),
+        Output("user-teams-store", "data", allow_duplicate=True),
+        Output("user-team-search-results-panel", "children", allow_duplicate=True),
+        Output("user-team-search-results-store", "data", allow_duplicate=True),
+        Output("user-page-banner", "children", allow_duplicate=True),
+    ],
+    Input(
+        {"type": "team-membership-action", "team_id": dash.ALL, "action": dash.ALL},
+        "n_clicks",
+    ),
+    [
+        State(
+            {"type": "team-membership-action", "team_id": dash.ALL, "action": dash.ALL},
+            "id",
+        ),
+        State("user-team-search-results-store", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def handle_team_membership_action(n_clicks, button_ids, current_search_results):
+    if not any(n_clicks or []):
+        return no_update, no_update, no_update, no_update, no_update
+
+    triggered = dash.ctx.triggered_id
+    if not triggered:
+        return no_update, no_update, no_update, no_update, no_update
+
+    team_id = triggered.get("team_id")
+    action = triggered.get("action")
+    logger = current_app.config["TXV_LOGGER"]
+    token = get_jwt_from_request(request)
+
+    if action == "join":
+        response = post_api_data(f"teams/{team_id}/join", token, {}, logger)
+        success_message = "Joined team."
+    else:
+        response = delete_api_data(f"user/teams/{team_id}", token, logger)
+        success_message = "Left team."
+
+    if response.status_code not in {200, 201}:
+        error_message = "Could not update team membership right now."
+        try:
+            error_message = response.json().get("error", error_message)
+        except ValueError:
+            pass
+        return (
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            create_message_banner(error_message, "error"),
+        )
+
+    updated_teams_response = fetch_api_data("user/teams", token, logger)
+    updated_teams = (
+        updated_teams_response.json()
+        if updated_teams_response.status_code == 200
+        else []
+    )
+
+    updated_results = current_search_results or []
+    if updated_results:
+        for team in updated_results:
+            if str(team.get("id")) == str(team_id):
+                team["is_member"] = action == "join"
+
+    return (
+        team_membership_block(updated_teams),
+        updated_teams,
+        team_search_results_block(updated_results),
+        updated_results,
+        create_message_banner(success_message, "success"),
+    )
+
+
+@callback(
+    [
+        Output("user-teams-panel", "children", allow_duplicate=True),
+        Output("user-teams-store", "data", allow_duplicate=True),
+        Output("user-page-banner", "children", allow_duplicate=True),
+    ],
+    Input({"type": "leave-team-button", "team_id": dash.ALL}, "n_clicks"),
+    State({"type": "leave-team-button", "team_id": dash.ALL}, "id"),
+    prevent_initial_call=True,
+)
+def leave_team_from_membership_list(n_clicks, button_ids):
+    if not any(n_clicks or []):
+        return no_update, no_update, no_update
+
+    triggered = dash.ctx.triggered_id
+    if not triggered:
+        return no_update, no_update, no_update
+
+    team_id = triggered.get("team_id")
+    logger = current_app.config["TXV_LOGGER"]
+    token = get_jwt_from_request(request)
+    response = delete_api_data(f"user/teams/{team_id}", token, logger)
+
+    if response.status_code != 200:
+        error_message = "Could not leave team right now."
+        try:
+            error_message = response.json().get("error", error_message)
+        except ValueError:
+            pass
+        return no_update, no_update, create_message_banner(error_message, "error")
+
+    updated_teams_response = fetch_api_data("user/teams", token, logger)
+    updated_teams = (
+        updated_teams_response.json()
+        if updated_teams_response.status_code == 200
+        else []
+    )
+    return (
+        team_membership_block(updated_teams),
+        updated_teams,
+        create_message_banner("Left team.", "success"),
     )
 
 
