@@ -19,7 +19,7 @@ from ..components import (
     format_cone_search_results,
     create_message_banner,
 )
-from ..schemas import ConeSearchResponseModel
+from ...dto import ConeSearchResponseModel
 
 dash.register_page(
     __name__,

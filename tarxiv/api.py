@@ -1,6 +1,7 @@
 import os
 import json
 import secrets
+from typing import cast
 
 from flask import Flask, Blueprint, request, make_response, redirect, session
 import cherrypy
@@ -8,7 +9,10 @@ from paste.translogger import TransLogger
 
 from .utils import TarxivModule
 from .database import TarxivDB
-from .auth import sign_token, PROVIDERS, validate_token, TokenStatus
+from .auth import sign_token, PROVIDERS, validate_token, TokenStatus, verify_token
+from .database_user import UserDB, DataLayerError, DuplicateValueError
+from . import dto
+from .openapi import build_openapi_spec
 
 
 class API(TarxivModule):
@@ -28,6 +32,11 @@ class API(TarxivModule):
         )
         # Get couchbase connection
         self.txv_db = TarxivDB("tns", "api", script_name, reporting_mode, debug)
+        self.user_db = UserDB(
+            script_name="user_db",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
 
         # Survey name/alias map (could write better, but fuck it)
         self.survey_source_map = {
@@ -82,11 +91,58 @@ class API(TarxivModule):
             "error": result["error"],
         }
 
+    def _require_authenticated_user_id(self, token: str | None) -> str:
+        validation = self.validate_token_request(token)
+        if not validation["is_valid"]:
+            if validation["status"] == TokenStatus.EXPIRED:
+                raise PermissionError("Session expired — please log in again.")
+            raise PermissionError("Invalid or missing token.")
+
+        payload = verify_token(token)
+        sub = payload.get("sub")
+        if not isinstance(sub, str) or not sub:
+            raise PermissionError("Invalid or missing token.")
+        return sub
+
     def routes(self):
         # Basic index route for testing server is running
         @self.app.route("/", methods=["GET"])
         def index():
             return server_response({"status": "TarXiv API is running"}, 200)
+
+        @self.app.route("/openapi.json", methods=["GET"])
+        def openapi_json():
+            return server_response(build_openapi_spec(), 200)
+
+        @self.app.route("/docs", methods=["GET"])
+        def swagger_docs():
+            html_content = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>TarXiv API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = function() {
+      SwaggerUIBundle({
+        url: '/openapi.json',
+        dom_id: '#swagger-ui',
+        presets: [SwaggerUIBundle.presets.apis],
+        layout: 'BaseLayout'
+      });
+    };
+  </script>
+</body>
+</html>
+"""
+            response = make_response(html_content)
+            response.mimetype = "text/html"
+            response.headers["Content-Type"] = "text/html; charset=utf-8"
+            return response
 
         @self.app.route("/auth/<string:provider>/login", methods=["GET"])
         def auth_login(provider):
@@ -134,18 +190,58 @@ class API(TarxivModule):
             self.logger.info(status, extra=status)
 
             try:
-                result = PROVIDERS[provider].complete_login(code)
+                login_result = PROVIDERS[provider].complete_login(code)
             except Exception as exc:
                 self.logger.error(
                     {"oauth_error": str(exc)}, extra={"oauth_error": str(exc)}
                 )
                 return server_response({"error": "Authentication failed"}, 502)
-            token = sign_token(
-                sub=result["sub"],
-                provider=result["provider"],
-                profile=result["profile"],
-            )
+
             dashboard_url = os.environ.get("TARXIV_DASHBOARD_URL", "/")
+            provider_profile = cast(dto.ProviderProfile, login_result.get("profile"))
+            provider_profile_json = cast(
+                dict | None, login_result.get("provider_profile_json")
+            )
+            sub = cast(str, login_result.get("sub"))
+            provider_name = cast(str, login_result.get("provider"))
+
+            if not provider_profile or not sub or not provider_name:
+                self.logger.error(
+                    {
+                        "oauth_error": "Provider did not return expected login payload",
+                        "provider": provider,
+                        "login_result": str(login_result),
+                    },
+                    extra={
+                        "oauth_error": "Provider did not return expected login payload",
+                        "provider": provider,
+                    },
+                )
+                return server_response({"error": "Authentication failed"}, 502)
+
+            try:
+                user_dto = self.user_db.get_or_create_user_from_identity(
+                    provider=provider_name,
+                    profile=provider_profile,
+                    provider_profile_json=provider_profile_json,
+                )
+            except DataLayerError:
+                log = {
+                    "dashboard_url": dashboard_url,
+                    "status": "user sync failed",
+                    "provider": provider_name,
+                    "provider_user_id": sub,
+                }
+                self.logger.info(log, extra=log)
+                return redirect(f"{dashboard_url.rstrip('/')}")
+
+            token_profile = user_dto.model_dump(mode="json", exclude_none=True)
+
+            token = sign_token(
+                sub=str(user_dto.id),
+                provider=provider_name,
+                profile=token_profile,
+            )
             status = {
                 "status": "authentication successful, redirecting to dashboard with token",
                 "dashboard_url": dashboard_url,
@@ -153,6 +249,283 @@ class API(TarxivModule):
             }
             self.logger.info(status, extra=status)
             return redirect(f"{dashboard_url.rstrip('/')}/?token={token}")
+
+        @self.app.route("/user", methods=["GET"])
+        def get_user_profile():
+            token = request.headers.get("Authorization")
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                user = self.user_db.get_user(user_id)
+                if user is None:
+                    return server_response({"error": "User not found"}, 404)
+                return server_response(user.model_dump(mode="json"), 200)
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/user", methods=["PATCH"])
+        def update_user_profile():
+            token = request.headers.get("Authorization")
+            request_json = request.get_json(silent=True) or {}
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                profile_update = dto.UserProfileUpdate.model_validate(request_json)
+                user = self.user_db.update_user_profile(user_id, profile_update)
+                if user is None:
+                    return server_response({"error": "User not found"}, 404)
+                return server_response(user.model_dump(mode="json"), 200)
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DuplicateValueError as exc:
+                return server_response({"error": str(exc), "type": "validation"}, 409)
+            except ValueError as exc:
+                return server_response({"error": str(exc), "type": "validation"}, 400)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/users/search", methods=["GET"])
+        def search_users():
+            token = request.headers.get("Authorization")
+            query = request.args.get("q", "")
+            try:
+                self._require_authenticated_user_id(token)
+                users = self.user_db.search_users(query)
+                return server_response(
+                    [user.model_dump(mode="json") for user in users], 200
+                )
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/user/teams", methods=["GET"])
+        def list_user_teams():
+            token = request.headers.get("Authorization")
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                memberships = self.user_db.list_user_teams(user_id)
+                return server_response(
+                    [item.model_dump(mode="json") for item in memberships], 200
+                )
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/teams", methods=["POST"])
+        def create_team():
+            token = request.headers.get("Authorization")
+            request_json = request.get_json(silent=True) or {}
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                team = dto.TeamCreate.model_validate(request_json)
+                created_team = self.user_db.create_team(user_id, team)
+                return server_response(created_team.model_dump(mode="json"), 201)
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except ValueError as exc:
+                return server_response({"error": str(exc), "type": "validation"}, 400)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/teams/search", methods=["GET"])
+        def search_teams():
+            token = request.headers.get("Authorization")
+            query = request.args.get("q", "")
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                teams = self.user_db.search_teams(user_id, query)
+                return server_response(
+                    [team.model_dump(mode="json") for team in teams], 200
+                )
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/teams/<string:team_id>/join", methods=["POST"])
+        def join_team(team_id):
+            token = request.headers.get("Authorization")
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                membership = self.user_db.join_team(team_id, user_id)
+                return server_response(membership.model_dump(mode="json"), 201)
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/user/teams/<string:team_id>", methods=["DELETE"])
+        def leave_team(team_id):
+            token = request.headers.get("Authorization")
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                removed = self.user_db.leave_team(team_id, user_id)
+                if not removed:
+                    return server_response({"error": "Team membership not found"}, 404)
+                return server_response({"status": "left", "team_id": team_id}, 200)
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/teams/<string:team_id>/members", methods=["POST"])
+        def add_team_member(team_id):
+            token = request.headers.get("Authorization")
+            request_json = request.get_json(silent=True) or {}
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                membership = dto.TeamMembershipCreate.model_validate(request_json)
+                created_membership = self.user_db.add_user_to_team(
+                    team_id, user_id, membership
+                )
+                return server_response(created_membership.model_dump(mode="json"), 201)
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except ValueError as exc:
+                return server_response({"error": str(exc), "type": "validation"}, 400)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/tags", methods=["GET"])
+        def list_tags():
+            token = request.headers.get("Authorization")
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                tags = self.user_db.list_tags(user_id)
+                return server_response(
+                    [tag.model_dump(mode="json") for tag in tags], 200
+                )
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DataLayerError as exc:
+                self.logger.exception(
+                    "Failed to list tags for authenticated user.",
+                    extra={"route": "/tags", "user_id": token},
+                )
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/tags", methods=["POST"])
+        def create_tag():
+            token = request.headers.get("Authorization")
+            request_json = request.get_json(silent=True) or {}
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                tag = dto.TagCreate.model_validate(request_json)
+                created_tag = self.user_db.create_tag(user_id, tag)
+                return server_response(created_tag.model_dump(mode="json"), 201)
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except ValueError as exc:
+                return server_response({"error": str(exc), "type": "validation"}, 400)
+            except DataLayerError as exc:
+                self.logger.exception(
+                    "Failed to create tag.",
+                    extra={
+                        "route": "/tags",
+                        "user_id": token,
+                        "request_json": request_json,
+                    },
+                )
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/objects/<string:object_id>/tags", methods=["GET"])
+        def list_object_tags(object_id):
+            token = request.headers.get("Authorization")
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                tags = self.user_db.list_object_tags_for_user(object_id, user_id)
+                return server_response(
+                    [tag.model_dump(mode="json") for tag in tags], 200
+                )
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DataLayerError as exc:
+                self.logger.exception(
+                    "Failed to list object tags.",
+                    extra={
+                        "route": "/objects/<object_id>/tags",
+                        "object_id": object_id,
+                        "user_id": token,
+                    },
+                )
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/tags/<string:tag_id>/objects", methods=["GET"])
+        def list_objects_for_tag(tag_id):
+            token = request.headers.get("Authorization")
+            limit = request.args.get("limit", default=100, type=int)
+            offset = request.args.get("offset", default=0, type=int)
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                objects = self.user_db.list_objects_for_tag(
+                    tag_id, user_id, limit=limit, offset=offset
+                )
+                return server_response(
+                    [item.model_dump(mode="json") for item in objects], 200
+                )
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/objects/<string:object_id>/tags", methods=["POST"])
+        def assign_object_tag(object_id):
+            token = request.headers.get("Authorization")
+            request_json = request.get_json(silent=True) or {}
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                assignment = dto.ObjectTagAssignmentCreate.model_validate(request_json)
+                created_assignment = self.user_db.assign_tag_to_object(
+                    object_id, user_id, assignment
+                )
+                return server_response(created_assignment.model_dump(mode="json"), 201)
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except ValueError as exc:
+                return server_response({"error": str(exc), "type": "validation"}, 400)
+            except DataLayerError as exc:
+                self.logger.exception(
+                    "Failed to assign object tag.",
+                    extra={
+                        "route": "/objects/<object_id>/tags",
+                        "object_id": object_id,
+                        "user_id": token,
+                        "request_json": request_json,
+                    },
+                )
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route(
+            "/objects/<string:object_id>/tags/<string:assignment_id>",
+            methods=["DELETE"],
+        )
+        def remove_object_tag(object_id, assignment_id):
+            token = request.headers.get("Authorization")
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                removed = self.user_db.remove_object_tag_assignment(
+                    assignment_id, user_id
+                )
+                if not removed:
+                    return server_response({"error": "Tag assignment not found"}, 404)
+                return server_response(
+                    {"status": "deleted", "object_id": object_id}, 200
+                )
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DataLayerError as exc:
+                self.logger.exception(
+                    "Failed to delete object tag.",
+                    extra={
+                        "route": "/objects/<object_id>/tags/<assignment_id>",
+                        "object_id": object_id,
+                        "assignment_id": assignment_id,
+                        "user_id": token,
+                    },
+                )
+                return server_response({"error": str(exc), "type": "server"}, 500)
 
         # HFS - 2025-05-28: These self.app.route things are Flask decorators which become
         # endpoints for the API
@@ -243,15 +616,16 @@ class API(TarxivModule):
 
         @self.app.route("/tns_alerts", methods=["POST"])
         def tns_alerts():
-            request_json = request.get_json()
+            request_json = request.get_json() or {}
             token = request.headers.get("Authorization")
             # Start log
             log = {
                 "query_type": "tns_alerts",
                 "query_ip": request.remote_addr,
                 "token": token,
-                "n_rows": request_json["n_rows"],
-                "offset": request_json["offset"],
+                "n_rows": request_json.get("n_rows"),
+                "offset": request_json.get("offset"),
+                "tag_ids": request_json.get("tag_ids", []),
             }
             try:
                 # Return error if bad token
@@ -261,10 +635,37 @@ class API(TarxivModule):
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
-                if not isinstance(request_json["n_rows"], int) or not isinstance(
-                    request_json["offset"], int
+                if not isinstance(request_json.get("n_rows"), int) or not isinstance(
+                    request_json.get("offset"), int
                 ):
                     raise ValueError("n_rows/offset must be an integer")
+                if not isinstance(request_json.get("tag_ids", []), list):
+                    raise ValueError("tag_ids must be a list")
+
+                user_id = self._require_authenticated_user_id(token)
+                tag_ids = request_json.get("tag_ids", [])
+                tagged_object_ids: list[str] | None = None
+                if tag_ids:
+                    tagged_object_ids = self.user_db.list_tagged_object_ids_for_user(
+                        user_id, tag_ids
+                    )
+                    if not tagged_object_ids:
+                        result = []
+                        status_code = 200
+                        log["status"] = "Success"
+                        self.logger.info(log, extra=log)
+                        return server_response(result, status_code)
+
+                object_filter = ""
+                if tagged_object_ids is not None:
+                    escaped_ids = [
+                        object_id.replace("\\", "\\\\").replace('"', '\\"')
+                        for object_id in tagged_object_ids
+                    ]
+                    object_list = ", ".join(
+                        f'"{object_id}"' for object_id in escaped_ids
+                    )
+                    object_filter = f" AND META().id IN [{object_list}]"
 
                 query = f"""SELECT
                               `objects`.`internal`.`insert_date` AS date_received,
@@ -277,6 +678,7 @@ class API(TarxivModule):
                               IFMISSING(`objects`.`redshift`[0].`value`, "") AS redshift
                             FROM tarxiv.tns.objects
                             WHERE `objects`.`internal`.`insert_date` IS NOT MISSING
+                            {object_filter}
                             ORDER BY `objects`.`internal`.`insert_date` DESC
                             LIMIT {request_json["n_rows"]} OFFSET {request_json["offset"]}"""
                 result = list(self.txv_db.query(query))

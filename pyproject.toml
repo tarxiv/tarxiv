@@ -45,7 +45,10 @@ dependencies = [
     "lasair",
     "fink_client",
     "confluent_kafka",
-    "pyspark"
+    "pyspark",
+    "sqlalchemy>=2.0.48",
+    "psycopg2-binary>=2.9.11",
+    "alembic>=1.16.5",
 ]
 requires-python = ">=3.11,<3.14"
 
@@ -55,7 +58,8 @@ dev = [
     "pytest-cov",
     "ruff",
     "ipython",
-    "jupyter"
+    "jupyter",
+    "testcontainers[postgres]>=4.8.2",
 ]
 
 [tool.setuptools.packages]
