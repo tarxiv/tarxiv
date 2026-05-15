@@ -96,8 +96,14 @@ def build_openapi_spec() -> dict:
                             "name": "provider",
                             "in": "path",
                             "required": True,
-                            "schema": {"type": "string"},
-                            "description": "Authentication provider, currently orcid.",
+                            "schema": {
+                                "type": "string",
+                                "enum": ["orcid"],
+                            },
+                            "description": (
+                                "Authentication provider. TarXiv currently supports "
+                                "`orcid`; additional providers may be added later."
+                            ),
                         }
                     ],
                     "responses": {
@@ -117,7 +123,14 @@ def build_openapi_spec() -> dict:
                             "name": "provider",
                             "in": "path",
                             "required": True,
-                            "schema": {"type": "string"},
+                            "schema": {
+                                "type": "string",
+                                "enum": ["orcid"],
+                            },
+                            "description": (
+                                "Authentication provider. TarXiv currently supports "
+                                "`orcid`; additional providers may be added later."
+                            ),
                         },
                         {
                             "name": "state",
