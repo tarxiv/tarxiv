@@ -1,4 +1,6 @@
 import os
+import random
+import re
 from urllib.parse import quote, unquote
 
 import dash
@@ -95,108 +97,37 @@ def layout(**kwargs):
                 storage_type="memory",
                 data={},
             ),
+            dcc.Store(
+                id="user-team-members-store",
+                storage_type="memory",
+                data={},
+            ),
             dmc.Box(id="user-page-banner"),
-            dmc.Stack(
-                id="user-profile-panel",
-                children=render_profile_panel(user_profile, False),
-            ),
-            dmc.Divider(label="Teams", labelPosition="left", my="sm"),
-            dmc.Stack([
-                dmc.Text("Your Teams", fw=600),
-                html.Div(
-                    id="user-teams-panel",
-                    children=team_membership_block(team_memberships),
-                ),
-                dmc.Text("Discover Teams", fw=600, mt="sm"),
-                dmc.Text(
-                    "Search for teams to join or manage your current memberships.",
-                    size="sm",
-                    c="dimmed",
-                ),
-                dmc.Group([
-                    dmc.TextInput(
-                        id="team-search-input",
-                        placeholder="Search teams by name or description",
-                        style={"minWidth": "320px"},
-                    ),
-                    dmc.Button("Search", id="team-search-button", n_clicks=0),
-                ]),
-                html.Div(
-                    id="user-team-search-results-panel",
-                    children=team_search_results_block([]),
-                ),
-                dmc.Text("Create Team", fw=600, mt="sm"),
-                dmc.Group([
-                    dmc.Button("Create Team", id="add-team-button", n_clicks=0),
-                ]),
-                html.Div(id="user-team-create-panel"),
-            ]),
-            dmc.Divider(label="Tags", labelPosition="left", my="sm"),
-            dmc.Stack([
-                dmc.Text(
-                    "Your tags include personal tags and tags owned by teams you belong to.",
-                    size="sm",
-                    c="dimmed",
-                ),
-                dmc.Group([
-                    dmc.Button("Add Tag", id="add-tag-button", n_clicks=0),
-                ]),
-                html.Div(id="user-tag-create-panel"),
-                html.Div(
-                    id="user-tags-panel",
-                    children=tag_block(tags),
-                ),
-            ]),
-            (
-                dmc.Alert(
-                    fetch_error,
-                    color="yellow",
-                    title="Partial profile load",
-                    variant="light",
-                )
-                if fetch_error
-                else None
-            ),
-            dmc.Group(
-                id="auth-user-chip",
+            dmc.Tabs(
+                value="profile",
                 children=[
-                    dmc.Group(id="auth-avatar-wrapper", children=avatar),
-                    dmc.Stack(
-                        [
-                            dmc.Text(name, id="auth-user-name", fw=600, size="sm"),
-                            dmc.Text(
-                                email,
-                                id="auth-user-email",
-                                size="xs",
-                                c="dimmed",
-                            ),
-                        ],
-                        gap=0,
-                    ),
-                    dmc.Button(
-                        "Logout",
-                        id="auth-logout-button",
-                        n_clicks=0,
-                        variant="light",
-                        color="red",
-                    ),
-                ],
-                justify="space-between",
-                mt="md",
-            ),
-            dmc.Group(
-                id="api-token-group",
-                children=[
-                    dmc.Text("Your API token:", size="sm", fw=500),
-                    dmc.Group([
-                        dmc.Text(
-                            token,
-                            size="xs",
-                            c="dimmed",
-                            id="api-token",
-                            truncate=True,
-                        )
+                    dmc.TabsList([
+                        dmc.TabsTab("Profile", value="profile"),
+                        dmc.TabsTab("Teams", value="teams"),
+                        dmc.TabsTab("Tags", value="tags"),
                     ]),
+                    dmc.TabsPanel(
+                        value="profile",
+                        pt="md",
+                        children=profile_tab(
+                            user_profile, avatar, name, email, token, fetch_error
+                        ),
+                    ),
+                    dmc.TabsPanel(
+                        value="teams",
+                        pt="md",
+                        children=teams_tab(team_memberships),
+                    ),
+                    dmc.TabsPanel(
+                        value="tags",
+                        pt="md",
+                        children=tags_tab(tags),
+                    ),
                 ],
             ),
         ])
@@ -230,14 +161,69 @@ def layout(**kwargs):
     )
 
 
+def profile_field_input(field_name, label, profile):
+    if field_name == "username":
+        return dmc.Group(
+            [
+                dmc.TextInput(
+                    id={"type": "user-profile-field", "field": "username"},
+                    label=label,
+                    value=profile.get("username") or "",
+                    style={"flex": 1},
+                ),
+                dmc.Button(
+                    "Suggest",
+                    id="user-username-suggest-button",
+                    n_clicks=0,
+                    variant="light",
+                    style={"alignSelf": "flex-end"},
+                ),
+            ],
+            align="flex-end",
+            gap="xs",
+        )
+
+    if field_name == "picture_url":
+        current = profile.get("picture_url") or ""
+        return dmc.Stack(
+            [
+                dmc.TextInput(
+                    id={"type": "user-profile-field", "field": "picture_url"},
+                    label=label,
+                    value=current,
+                    placeholder="https://example.com/avatar.png",
+                ),
+                html.Div(
+                    id="user-image-preview",
+                    children=image_preview(current),
+                ),
+            ],
+            gap="xs",
+        )
+
+    return dmc.TextInput(
+        id={"type": "user-profile-field", "field": field_name},
+        label=label,
+        value=profile.get(field_name) or "",
+    )
+
+
+def image_preview(url):
+    if not url:
+        return dmc.Text("No image URL set.", size="xs", c="dimmed")
+    return dmc.Group(
+        [
+            avatar_image(url),
+            dmc.Text("Preview", size="xs", c="dimmed"),
+        ],
+        gap="xs",
+    )
+
+
 def render_profile_panel(profile, editing):
     if editing:
         fields = [
-            dmc.TextInput(
-                id={"type": "user-profile-field", "field": field_name},
-                label=label,
-                value=profile.get(field_name) or "",
-            )
+            profile_field_input(field_name, label, profile)
             for field_name, label in PROFILE_FIELDS
         ]
         fields.append(
@@ -274,6 +260,134 @@ def render_profile_panel(profile, editing):
     return lines
 
 
+def profile_tab(user_profile, avatar, name, email, token, fetch_error):
+    return dmc.Stack([
+        dmc.Stack(
+            id="user-profile-panel",
+            children=render_profile_panel(user_profile, False),
+        ),
+        (
+            dmc.Alert(
+                fetch_error,
+                color="yellow",
+                title="Partial profile load",
+                variant="light",
+            )
+            if fetch_error
+            else None
+        ),
+        dmc.Group(
+            id="auth-user-chip",
+            children=[
+                dmc.Group(id="auth-avatar-wrapper", children=avatar),
+                dmc.Stack(
+                    [
+                        dmc.Text(name, id="auth-user-name", fw=600, size="sm"),
+                        dmc.Text(
+                            email,
+                            id="auth-user-email",
+                            size="xs",
+                            c="dimmed",
+                        ),
+                    ],
+                    gap=0,
+                ),
+                dmc.Button(
+                    "Logout",
+                    id="auth-logout-button",
+                    n_clicks=0,
+                    variant="light",
+                    color="red",
+                ),
+            ],
+            justify="space-between",
+            mt="md",
+        ),
+        # TODO: replace with real personal access tokens. This is currently the
+        # short-lived session JWT, not a durable API key.
+        dmc.Stack(
+            id="api-token-group",
+            gap="xs",
+            children=[
+                dmc.Text(
+                    "Session token (temporary, not a personal API key):",
+                    size="sm",
+                    fw=500,
+                ),
+                dmc.Group(
+                    [
+                        dmc.Text(
+                            token,
+                            size="xs",
+                            c="dimmed",
+                            id="api-token",
+                            truncate=True,
+                            style={"maxWidth": "420px"},
+                        ),
+                        dcc.Clipboard(
+                            target_id="api-token",
+                            title="Copy token",
+                            style={"cursor": "pointer", "fontSize": "1rem"},
+                        ),
+                    ],
+                    gap="xs",
+                ),
+            ],
+        ),
+    ])
+
+
+def teams_tab(team_memberships):
+    return dmc.Stack([
+        dmc.Text("Your Teams", fw=600),
+        html.Div(
+            id="user-teams-panel",
+            children=team_membership_block(team_memberships),
+        ),
+        dmc.Text("Discover Teams", fw=600, mt="sm"),
+        dmc.Text(
+            "Search for teams to join or manage your current memberships.",
+            size="sm",
+            c="dimmed",
+        ),
+        dmc.Group([
+            dmc.TextInput(
+                id="team-search-input",
+                placeholder="Search teams by name or description",
+                style={"minWidth": "320px"},
+            ),
+            dmc.Button("Search", id="team-search-button", n_clicks=0),
+        ]),
+        html.Div(
+            id="user-team-search-results-panel",
+            children=team_search_results_block([]),
+        ),
+        dmc.Text("Create Team", fw=600, mt="sm"),
+        dmc.Group([
+            dmc.Button("Create Team", id="add-team-button", n_clicks=0),
+        ]),
+        html.Div(id="user-team-create-panel"),
+    ])
+
+
+def tags_tab(tags):
+    return dmc.Stack([
+        dmc.Text(
+            "Your tags include personal tags and tags owned by teams you belong to.",
+            size="sm",
+            c="dimmed",
+        ),
+        dmc.Group([
+            dmc.Button("Add Tag", id="add-tag-button", n_clicks=0),
+        ]),
+        html.Div(id="user-tag-create-panel"),
+        html.Div(
+            id="user-tags-panel",
+            children=tag_block(tags),
+        ),
+    ])
+
+
 def render_tag_create_form(team_memberships):
     options = [{"value": "personal", "label": "Personal tag"}] + [
         {
@@ -294,10 +408,21 @@ def render_tag_create_form(team_memberships):
                 label="Description",
                 placeholder="Optional description",
             ),
-            dmc.TextInput(
+            dmc.ColorInput(
                 id="new-tag-color",
                 label="Color",
-                placeholder="#7c3aed",
+                value="#7c3aed",
+                format="hex",
+                swatches=[
+                    "#7c3aed",
+                    "#2563eb",
+                    "#059669",
+                    "#d97706",
+                    "#dc2626",
+                    "#db2777",
+                    "#0891b2",
+                    "#4b5563",
+                ],
             ),
             dmc.Select(
                 id="new-tag-owner",
@@ -359,6 +484,14 @@ def line(label, value):
 
 def can_manage_team_members(membership):
     return membership.get("role") in TEAM_MEMBER_MANAGER_ROLES
+
+
+def generate_username(forename, surname):
+    base = "".join(
+        part.strip().lower() for part in [forename or "", surname or ""] if part
+    )
+    base = re.sub(r"[^a-z0-9]", "", base) or "tarxiv"
+    return f"{base}{random.randint(100, 9999)}"
 
 
 def user_search_result_label(user):
@@ -429,13 +562,65 @@ def team_member_search_results_block(team_id, users):
     )
 
 
-def render_team_member_manager(team_id, users=None):
+def team_member_list_block(members):
+    if members is None:
+        return dmc.Text("Loading members...", size="sm", c="dimmed")
+
+    if not members:
+        return dmc.Text("This team has no members yet.", size="sm", c="dimmed")
+
     return dmc.Stack(
         [
+            dmc.Paper(
+                withBorder=True,
+                p="sm",
+                radius="md",
+                children=dmc.Group(
+                    [
+                        dmc.Stack(
+                            [
+                                dmc.Text(
+                                    member_display_label(member), fw=600, size="sm"
+                                ),
+                                dmc.Text(
+                                    member.get("email") or "No email",
+                                    size="xs",
+                                    c="dimmed",
+                                ),
+                            ],
+                            gap=0,
+                        ),
+                        dmc.Badge(member.get("role", "member"), variant="light"),
+                    ],
+                    justify="space-between",
+                ),
+            )
+            for member in members
+        ],
+        gap="xs",
+    )
+
+
+def member_display_label(member):
+    name = " ".join(
+        part for part in [member.get("forename"), member.get("surname")] if part
+    )
+    return member.get("username") or name or member.get("email") or "Unknown user"
+
+
+def render_team_member_manager(team_id, users=None, members=None):
+    return dmc.Stack(
+        [
+            dmc.Text("Current members", fw=600, size="sm"),
+            html.Div(
+                id={"type": "team-member-list", "team_id": team_id},
+                children=team_member_list_block(members),
+            ),
             dmc.Text(
                 "Add members to this team. New members are added with the member role.",
                 size="sm",
                 c="dimmed",
+                mt="sm",
             ),
             dmc.Group([
                 dmc.TextInput(
@@ -460,13 +645,17 @@ def render_team_member_manager(team_id, users=None):
 
 
 def team_membership_block(
-    memberships, manager_open_states=None, member_search_results=None
+    memberships,
+    manager_open_states=None,
+    member_search_results=None,
+    team_members=None,
 ):
     if not memberships:
         return dmc.Text("No team memberships yet.", size="sm", c="dimmed")
 
     manager_open_states = manager_open_states or {}
     member_search_results = member_search_results or {}
+    team_members = team_members or {}
 
     return dmc.Stack(
         [
@@ -532,6 +721,7 @@ def team_membership_block(
                         render_team_member_manager(
                             str(item.get("team_id")),
                             member_search_results.get(str(item.get("team_id"))),
+                            team_members.get(str(item.get("team_id"))),
                         )
                         if can_manage_team_members(item)
                         and manager_open_states.get(str(item.get("team_id")))
@@ -547,7 +737,24 @@ def team_membership_block(
 
 def tag_block(tags):
     if not tags:
-        return dmc.Text("No tags yet.", size="sm", c="dimmed")
+        return dmc.Paper(
+            withBorder=True,
+            p="md",
+            radius="md",
+            children=dmc.Stack(
+                [
+                    dmc.Text("You don't have any tags yet.", fw=600, size="sm"),
+                    dmc.Text(
+                        'Use "Add Tag" above to create a personal tag or a tag '
+                        "owned by one of your teams. Tags let you group objects "
+                        "and browse them from the Tagged page.",
+                        size="sm",
+                        c="dimmed",
+                    ),
+                ],
+                gap="xs",
+            ),
+        )
 
     personal_tags = [tag for tag in tags if tag.get("owner_type") == "user"]
     team_tags = [tag for tag in tags if tag.get("owner_type") == "team"]
@@ -782,6 +989,30 @@ def start_profile_edit(n_clicks, profile):
 
 
 @callback(
+    Output({"type": "user-profile-field", "field": "username"}, "value"),
+    Input("user-username-suggest-button", "n_clicks"),
+    [
+        State({"type": "user-profile-field", "field": "forename"}, "value"),
+        State({"type": "user-profile-field", "field": "surname"}, "value"),
+    ],
+    prevent_initial_call=True,
+)
+def suggest_username(n_clicks, forename, surname):
+    if not n_clicks:
+        return no_update
+    return generate_username(forename, surname)
+
+
+@callback(
+    Output("user-image-preview", "children"),
+    Input({"type": "user-profile-field", "field": "picture_url"}, "value"),
+    prevent_initial_call=True,
+)
+def update_image_preview(picture_url):
+    return image_preview(picture_url)
+
+
+@callback(
     [
         Output("user-profile-panel", "children", allow_duplicate=True),
         Output("user-profile-editing", "data", allow_duplicate=True),
@@ -900,7 +1131,9 @@ def search_teams(n_clicks, query):
             create_message_banner("Enter a team search query.", "warning"),
         )
 
-    response = fetch_api_data(f"teams/search?q={quote(normalized_query)}", token, logger)
+    response = fetch_api_data(
+        f"teams/search?q={quote(normalized_query)}", token, logger
+    )
     if response.status_code != 200:
         error_message = "Could not search teams right now."
         try:
@@ -917,34 +1150,54 @@ def search_teams(n_clicks, query):
     [
         Output("user-teams-panel", "children", allow_duplicate=True),
         Output("user-team-member-manager-store", "data"),
+        Output("user-team-members-store", "data", allow_duplicate=True),
     ],
     Input({"type": "toggle-team-member-manager", "team_id": dash.ALL}, "n_clicks"),
     [
         State("user-teams-store", "data"),
         State("user-team-member-manager-store", "data"),
         State("user-team-member-search-results-store", "data"),
+        State("user-team-members-store", "data"),
     ],
     prevent_initial_call=True,
 )
 def toggle_team_member_manager(
-    n_clicks, memberships, manager_open_states, member_search_results
+    n_clicks,
+    memberships,
+    manager_open_states,
+    member_search_results,
+    team_members,
 ):
     if not any(n_clicks or []):
-        return no_update, no_update
+        return no_update, no_update, no_update
 
     triggered = dash.ctx.triggered_id
     if not triggered:
-        return no_update, no_update
+        return no_update, no_update, no_update
 
     team_id = str(triggered.get("team_id"))
     updated_open_states = dict(manager_open_states or {})
-    updated_open_states[team_id] = not bool(updated_open_states.get(team_id))
+    is_opening = not bool(updated_open_states.get(team_id))
+    updated_open_states[team_id] = is_opening
+
+    updated_members = dict(team_members or {})
+    if is_opening:
+        logger = current_app.config["TXV_LOGGER"]
+        token = get_jwt_from_request(request)
+        response = fetch_api_data(f"teams/{team_id}/members", token, logger)
+        updated_members[team_id] = (
+            response.json() if response.status_code == 200 else []
+        )
 
     return (
         team_membership_block(
-            memberships or [], updated_open_states, member_search_results or {}
+            memberships or [],
+            updated_open_states,
+            member_search_results or {},
+            updated_members,
         ),
         updated_open_states,
+        updated_members,
     )
 
 
@@ -957,12 +1210,11 @@ def toggle_team_member_manager(
     Input({"type": "team-member-search-button", "team_id": dash.ALL}, "n_clicks"),
     [
         State({"type": "team-member-search-input", "team_id": dash.ALL}, "id"),
-        State(
-            {"type": "team-member-search-input", "team_id": dash.ALL}, "value"
-        ),
+        State({"type": "team-member-search-input", "team_id": dash.ALL}, "value"),
         State("user-teams-store", "data"),
         State("user-team-member-manager-store", "data"),
         State("user-team-member-search-results-store", "data"),
+        State("user-team-members-store", "data"),
     ],
     prevent_initial_call=True,
 )
@@ -973,6 +1225,7 @@ def search_team_members(
     memberships,
     manager_open_states,
     member_search_results,
+    team_members,
 ):
     if not any(n_clicks or []):
         return no_update, no_update, no_update
@@ -998,7 +1251,9 @@ def search_team_members(
 
     logger = current_app.config["TXV_LOGGER"]
     token = get_jwt_from_request(request)
-    response = fetch_api_data(f"users/search?q={quote(normalized_query)}", token, logger)
+    response = fetch_api_data(
+        f"users/search?q={quote(normalized_query)}", token, logger
+    )
     if response.status_code != 200:
         error_message = "Could not search users right now."
         try:
@@ -1011,7 +1266,10 @@ def search_team_members(
     updated_search_results[team_id] = response.json()
     return (
         team_membership_block(
-            memberships or [], manager_open_states or {}, updated_search_results
+            memberships or [],
+            manager_open_states or {},
+            updated_search_results,
+            team_members or {},
         ),
         updated_search_results,
         html.Div(),
@@ -1019,7 +1277,12 @@ def search_team_members(
 
 
 @callback(
-    Output("user-page-banner", "children", allow_duplicate=True),
+    [
+        Output("user-page-banner", "children", allow_duplicate=True),
+        Output("user-teams-panel", "children", allow_duplicate=True),
+        Output("user-team-members-store", "data", allow_duplicate=True),
+        Output("user-team-member-search-results-store", "data", allow_duplicate=True),
+    ],
     Input(
         {
             "type": "add-team-member-button",
@@ -1028,17 +1291,29 @@ def search_team_members(
         },
         "n_clicks",
     ),
+    [
+        State("user-teams-store", "data"),
+        State("user-team-member-manager-store", "data"),
+        State("user-team-member-search-results-store", "data"),
+        State("user-team-members-store", "data"),
+    ],
     prevent_initial_call=True,
 )
-def add_team_member(n_clicks):
+def add_team_member(
+    n_clicks,
+    memberships,
+    manager_open_states,
+    member_search_results,
+    team_members,
+):
     if not any(n_clicks or []):
-        return no_update
+        return no_update, no_update, no_update, no_update
 
     triggered = dash.ctx.triggered_id
     if not triggered:
-        return no_update
+        return no_update, no_update, no_update, no_update
 
-    team_id = triggered.get("team_id")
+    team_id = str(triggered.get("team_id"))
     user_id = triggered.get("user_id")
     logger = current_app.config["TXV_LOGGER"]
     token = get_jwt_from_request(request)
@@ -1055,9 +1330,49 @@ def add_team_member(n_clicks):
             error_message = response.json().get("error", error_message)
         except ValueError:
             pass
-        return create_message_banner(error_message, "error")
+        return (
+            create_message_banner(error_message, "error"),
+            no_update,
+            no_update,
+            no_update,
+        )
 
-    return create_message_banner("Team member added.", "success")
+    # Resolve a friendly name for the confirmation banner from the search results.
+    search_results = dict(member_search_results or {})
+    added_user = next(
+        (
+            user
+            for user in search_results.get(team_id, [])
+            if str(user.get("id")) == str(user_id)
+        ),
+        None,
+    )
+    added_label = user_search_result_label(added_user) if added_user else "Team member"
+
+    # Drop the added user from this team's search results.
+    search_results[team_id] = [
+        user
+        for user in search_results.get(team_id, [])
+        if str(user.get("id")) != str(user_id)
+    ]
+
+    # Refresh the team's member list from the backend.
+    updated_members = dict(team_members or {})
+    members_response = fetch_api_data(f"teams/{team_id}/members", token, logger)
+    if members_response.status_code == 200:
+        updated_members[team_id] = members_response.json()
+
+    return (
+        create_message_banner(f"{added_label} added to the team.", "success"),
+        team_membership_block(
+            memberships or [],
+            manager_open_states or {},
+            search_results,
+            updated_members,
+        ),
+        updated_members,
+        search_results,
+    )
 
 
 @callback(

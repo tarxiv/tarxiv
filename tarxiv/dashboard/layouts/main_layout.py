@@ -21,6 +21,61 @@ SETTING_DEFAULTS = {  # These defaults need to correspond with the PERMISSION_MA
 }
 
 
+def account_nav_hovercard(
+    user_icon, user_page, account_name, account_email, account_avatar
+):
+    """Wrap the Account nav link in a hover card showing a profile summary."""
+    nav_link = create_nav_link(
+        icon=user_icon,
+        label=user_page["name"],
+        href=user_page["relative_path"],
+        is_active=False,
+    )
+
+    if not account_name:
+        dropdown_children = [
+            dmc.Text("Not signed in", fw=600, size="sm"),
+            dmc.Anchor("Sign in", href=user_page["relative_path"], size="xs"),
+        ]
+    else:
+        dropdown_children = [
+            dmc.Group(
+                [
+                    account_avatar,
+                    dmc.Stack(
+                        [
+                            dmc.Text(account_name, fw=600, size="sm"),
+                            dmc.Text(
+                                account_email or "No email",
+                                size="xs",
+                                c="dimmed",
+                            ),
+                        ],
+                        gap=0,
+                    ),
+                ],
+                gap="xs",
+                wrap="nowrap",
+            ),
+            dmc.Anchor(
+                "View account", href=user_page["relative_path"], size="xs", mt="xs"
+            ),
+        ]
+
+    return dmc.HoverCard(
+        withArrow=True,
+        position="right",
+        shadow="md",
+        openDelay=150,
+        children=[
+            dmc.HoverCardTarget(nav_link),
+            dmc.HoverCardDropdown(
+                dmc.Stack(dropdown_children, gap="xs"),
+            ),
+        ],
+    )
+
+
 def create_layout() -> dmc.MantineProvider:
     """Create the main dashboard layout.
 
@@ -43,18 +98,25 @@ def create_layout() -> dmc.MantineProvider:
     # Check if user is authenticated and update layout
     user_profile = None
     user_icon = user_page.get("icon", "mdi:help-circle")
+    account_name = None
+    account_email = None
+    account_avatar = None
     if flask.has_request_context():
         user_profile = get_authenticated_user(flask.request)
         if user_profile:
             name = (
                 user_profile.get("username")
-                or user_profile.get("nickname")
                 or user_profile.get("forename")
                 or user_profile.get("email")
                 or "User"
             )
             avatar_src = user_profile.get("picture_url")
             user_icon = (
+                avatar_image(avatar_src) if avatar_src else avatar_fallback(name[:1])
+            )
+            account_name = name
+            account_email = user_profile.get("email")
+            account_avatar = (
                 avatar_image(avatar_src) if avatar_src else avatar_fallback(name[:1])
             )
 
@@ -122,13 +184,12 @@ def create_layout() -> dmc.MantineProvider:
                                 # The "Magic" bottom pin
                                 html.Div(
                                     children=[
-                                        create_nav_link(
-                                            icon=user_icon,
-                                            label=user_page["name"],
-                                            # label=page["title"],
-                                            href=user_page["relative_path"],
-                                            # is_active=(pathname == user_page["relative_path"]),
-                                            is_active=False,
+                                        account_nav_hovercard(
+                                            user_icon=user_icon,
+                                            user_page=user_page,
+                                            account_name=account_name,
+                                            account_email=account_email,
+                                            account_avatar=account_avatar,
                                         ),
                                         theme_switch,
                                     ],

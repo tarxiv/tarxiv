@@ -4,7 +4,7 @@ import pytest
 from testcontainers.postgres import PostgresContainer
 
 from tarxiv import dto
-from tarxiv.database_user import DuplicateValueError, UserDB
+from tarxiv.database_user import AccessDeniedError, DuplicateValueError, UserDB
 
 
 @pytest.mark.slow
@@ -252,3 +252,82 @@ def test_team_search_join_leave_and_username_uniqueness(monkeypatch):
                 joiner.id,
                 dto.UserProfileUpdate(username="owner_a"),
             )
+
+
+@pytest.mark.slow
+def test_list_team_members_visibility(monkeypatch):
+    pytest.importorskip("testcontainers")
+
+    workspace_root = Path(__file__).resolve().parents[2]
+    config_dir = workspace_root / "aux"
+
+    with PostgresContainer("postgres:15") as postgres:
+        sync_url = postgres.get_connection_url()
+        sqlalchemy_url = sync_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+        monkeypatch.setenv("TARXIV_POSTGRES_URL", sqlalchemy_url)
+        monkeypatch.setenv("TARXIV_CONFIG_DIR", str(config_dir))
+
+        from alembic import command
+        from alembic.config import Config
+
+        alembic_cfg = Config(str(workspace_root / "alembic.ini"))
+        command.upgrade(alembic_cfg, "head")
+
+        user_db = UserDB("integration", 0, debug=False)
+
+        owner = user_db.get_or_create_user_from_identity(
+            "orcid",
+            dto.ProviderProfile(
+                provider_user_id="0000-0002-0000-0001",
+                username="owner",
+                email="owner@example.com",
+                forename="Olive",
+                surname="Owner",
+            ),
+            {"orcid": "0000-0002-0000-0001"},
+        )
+        teammate = user_db.get_or_create_user_from_identity(
+            "orcid",
+            dto.ProviderProfile(
+                provider_user_id="0000-0002-0000-0002",
+                username="teammate",
+                email="teammate@example.com",
+            ),
+            {"orcid": "0000-0002-0000-0002"},
+        )
+        outsider = user_db.get_or_create_user_from_identity(
+            "orcid",
+            dto.ProviderProfile(
+                provider_user_id="0000-0002-0000-0003",
+                username="outsider",
+                email="outsider@example.com",
+            ),
+            {"orcid": "0000-0002-0000-0003"},
+        )
+
+        team = user_db.create_team(
+            owner.id,
+            dto.TeamCreate(name="team-members", description="Membership listing team"),
+        )
+        user_db.add_user_to_team(
+            team.id,
+            owner.id,
+            dto.TeamMembershipCreate(user_id=teammate.id, role="member"),
+        )
+
+        # A member can list the team's members (owner + teammate).
+        members = user_db.list_team_members(team.id, owner.id)
+        members_by_user = {str(member.user_id): member for member in members}
+        assert str(owner.id) in members_by_user
+        assert str(teammate.id) in members_by_user
+        assert members_by_user[str(owner.id)].role == "owner"
+        assert members_by_user[str(owner.id)].username == "owner"
+
+        # The teammate can also list members.
+        teammate_view = user_db.list_team_members(team.id, teammate.id)
+        assert len(teammate_view) == 2
+
+        # An outsider is denied.
+        with pytest.raises(AccessDeniedError):
+            user_db.list_team_members(team.id, outsider.id)

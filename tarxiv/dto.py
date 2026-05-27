@@ -198,6 +198,19 @@ class TeamMembership(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TeamMemberView(BaseModel):
+    team_id: UUID
+    user_id: UUID
+    role: str
+    created_at: datetime | None = None
+    username: str | None = None
+    forename: str | None = None
+    surname: str | None = None
+    email: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class Tag(BaseModel):
     id: UUID
     name: str

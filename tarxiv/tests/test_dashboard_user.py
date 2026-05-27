@@ -49,14 +49,18 @@ def flatten_children(component):
 
 
 def find_components(component, component_type):
-    return [item for item in flatten_children(component) if isinstance(item, component_type)]
+    return [
+        item for item in flatten_children(component) if isinstance(item, component_type)
+    ]
 
 
 def banner_title(component):
     return getattr(component, "title", None)
 
 
-def test_team_membership_block_shows_manage_members_for_owner(user_module, team_memberships):
+def test_team_membership_block_shows_manage_members_for_owner(
+    user_module, team_memberships
+):
     block = user_module.team_membership_block(team_memberships)
 
     buttons = find_components(block, dmc.Button)
@@ -97,29 +101,87 @@ def test_team_membership_block_renders_member_manager_when_open(
                 }
             ]
         },
+        team_members={
+            "team-owner": [{"user_id": "user-9", "username": "owner", "role": "owner"}]
+        },
     )
 
     buttons = find_components(block, dmc.Button)
     labels = [button.children for button in buttons]
+    texts = [getattr(t, "children", None) for t in find_components(block, dmc.Text)]
 
     assert "Hide Member Manager" in labels
     assert "Add to team" in labels
+    # The current-members list is rendered with the owner's username.
+    assert "Current members" in texts
+    assert "owner" in texts
 
 
-def test_toggle_team_member_manager_updates_open_state(user_module, team_memberships, monkeypatch):
-    monkeypatch.setattr(dash, "ctx", SimpleNamespace(triggered_id={"team_id": "team-owner"}))
+def test_team_member_list_block_empty_and_loading(user_module):
+    loading = user_module.team_member_list_block(None)
+    assert "Loading" in loading.children
 
-    panel, open_state = user_module.toggle_team_member_manager(
-        [1], team_memberships, {}, {}
+    empty = user_module.team_member_list_block([])
+    assert "no members" in empty.children.lower()
+
+
+def test_generate_username_uses_name_and_is_unique_ish(user_module):
+    name = user_module.generate_username("Ada", "Lovelace")
+    assert name.startswith("adalovelace")
+    assert name != "adalovelace"  # has a numeric suffix
+
+    fallback = user_module.generate_username("", "")
+    assert fallback.startswith("tarxiv")
+
+
+def test_tag_block_shows_empty_state(user_module):
+    block = user_module.tag_block([])
+    texts = [getattr(t, "children", "") for t in find_components(block, dmc.Text)]
+    assert any("don't have any tags" in str(text) for text in texts)
+
+
+def test_tag_create_form_uses_color_input(user_module):
+    form = user_module.render_tag_create_form([])
+    color_inputs = find_components(form, dmc.ColorInput)
+    assert len(color_inputs) == 1
+    assert color_inputs[0].id == "new-tag-color"
+
+
+def test_toggle_team_member_manager_updates_open_state(
+    user_module, team_memberships, monkeypatch
+):
+    monkeypatch.setattr(
+        dash, "ctx", SimpleNamespace(triggered_id={"team_id": "team-owner"})
+    )
+    monkeypatch.setattr(
+        user_module, "current_app", SimpleNamespace(config={"TXV_LOGGER": MagicMock()})
+    )
+    monkeypatch.setattr(user_module, "request", object())
+    monkeypatch.setattr(user_module, "get_jwt_from_request", lambda _request: "token")
+
+    response = MagicMock()
+    response.status_code = 200
+    response.json.return_value = [
+        {"user_id": "user-1", "username": "ada", "role": "owner"}
+    ]
+    fetch_api_data = MagicMock(return_value=response)
+    monkeypatch.setattr(user_module, "fetch_api_data", fetch_api_data)
+
+    panel, open_state, members = user_module.toggle_team_member_manager(
+        [1], team_memberships, {}, {}, {}
     )
 
     assert open_state == {"team-owner": True}
+    assert members["team-owner"][0]["username"] == "ada"
+    assert fetch_api_data.call_args.args[0] == "teams/team-owner/members"
     buttons = find_components(panel, dmc.Button)
     assert "Hide Member Manager" in [button.children for button in buttons]
 
 
 def test_search_team_members_requires_query(user_module, monkeypatch):
-    monkeypatch.setattr(dash, "ctx", SimpleNamespace(triggered_id={"team_id": "team-owner"}))
+    monkeypatch.setattr(
+        dash, "ctx", SimpleNamespace(triggered_id={"team_id": "team-owner"})
+    )
 
     panel, results, banner = user_module.search_team_members(
         [1],
@@ -128,6 +190,7 @@ def test_search_team_members_requires_query(user_module, monkeypatch):
         [],
         {"team-owner": True},
         {},
+        {},
     )
 
     assert panel is dash.no_update
@@ -135,9 +198,15 @@ def test_search_team_members_requires_query(user_module, monkeypatch):
     assert banner_title(banner) == "Enter a user search query."
 
 
-def test_search_team_members_updates_results(user_module, team_memberships, monkeypatch):
-    monkeypatch.setattr(dash, "ctx", SimpleNamespace(triggered_id={"team_id": "team-owner"}))
-    monkeypatch.setattr(user_module, "current_app", SimpleNamespace(config={"TXV_LOGGER": MagicMock()}))
+def test_search_team_members_updates_results(
+    user_module, team_memberships, monkeypatch
+):
+    monkeypatch.setattr(
+        dash, "ctx", SimpleNamespace(triggered_id={"team_id": "team-owner"})
+    )
+    monkeypatch.setattr(
+        user_module, "current_app", SimpleNamespace(config={"TXV_LOGGER": MagicMock()})
+    )
     monkeypatch.setattr(user_module, "request", object())
     monkeypatch.setattr(user_module, "get_jwt_from_request", lambda _request: "token")
 
@@ -161,6 +230,7 @@ def test_search_team_members_updates_results(user_module, team_memberships, monk
         ["ada lovelace"],
         team_memberships,
         {"team-owner": True},
+        {},
         {},
     )
 
@@ -189,7 +259,9 @@ def test_add_team_member_success(user_module, monkeypatch):
         "ctx",
         SimpleNamespace(triggered_id={"team_id": "team-owner", "user_id": "user-1"}),
     )
-    monkeypatch.setattr(user_module, "current_app", SimpleNamespace(config={"TXV_LOGGER": MagicMock()}))
+    monkeypatch.setattr(
+        user_module, "current_app", SimpleNamespace(config={"TXV_LOGGER": MagicMock()})
+    )
     monkeypatch.setattr(user_module, "request", object())
     monkeypatch.setattr(user_module, "get_jwt_from_request", lambda _request: "token")
 
@@ -199,9 +271,26 @@ def test_add_team_member_success(user_module, monkeypatch):
     post_api_data = MagicMock(return_value=response)
     monkeypatch.setattr(user_module, "post_api_data", post_api_data)
 
-    banner = user_module.add_team_member([1])
+    members_response = MagicMock()
+    members_response.status_code = 200
+    members_response.json.return_value = [
+        {"user_id": "user-1", "username": "ada", "role": "member"}
+    ]
+    fetch_api_data = MagicMock(return_value=members_response)
+    monkeypatch.setattr(user_module, "fetch_api_data", fetch_api_data)
 
-    assert banner_title(banner) == "Team member added."
+    search_results = {
+        "team-owner": [{"id": "user-1", "username": "ada", "email": "ada@example.com"}]
+    }
+    banner, panel, members, updated_results = user_module.add_team_member(
+        [1], [], {"team-owner": True}, search_results, {}
+    )
+
+    assert banner_title(banner) == "Ada added to the team."
+    # Added user is dropped from the search results for that team.
+    assert updated_results["team-owner"] == []
+    # Member list refreshed from the backend.
+    assert members["team-owner"][0]["username"] == "ada"
     post_api_data.assert_called_once_with(
         "teams/team-owner/members",
         "token",
@@ -216,7 +305,9 @@ def test_add_team_member_returns_error_banner(user_module, monkeypatch):
         "ctx",
         SimpleNamespace(triggered_id={"team_id": "team-owner", "user_id": "user-1"}),
     )
-    monkeypatch.setattr(user_module, "current_app", SimpleNamespace(config={"TXV_LOGGER": MagicMock()}))
+    monkeypatch.setattr(
+        user_module, "current_app", SimpleNamespace(config={"TXV_LOGGER": MagicMock()})
+    )
     monkeypatch.setattr(user_module, "request", object())
     monkeypatch.setattr(user_module, "get_jwt_from_request", lambda _request: "token")
 
@@ -225,6 +316,9 @@ def test_add_team_member_returns_error_banner(user_module, monkeypatch):
     response.json.return_value = {"error": "Already on the team."}
     monkeypatch.setattr(user_module, "post_api_data", MagicMock(return_value=response))
 
-    banner = user_module.add_team_member([1])
+    banner, panel, members, updated_results = user_module.add_team_member(
+        [1], [], {}, {}, {}
+    )
 
     assert banner_title(banner) == "Already on the team."
+    assert panel is dash.no_update

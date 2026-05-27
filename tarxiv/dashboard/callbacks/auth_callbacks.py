@@ -76,7 +76,6 @@ def register_auth_callbacks(app, logger):
         profile = payload.get("profile", {})
         name = (
             profile.get("username")
-            or profile.get("nickname")
             or profile.get("forename")
             or profile.get("email")
             or "ORCID user"

@@ -10,7 +10,12 @@ from paste.translogger import TransLogger
 from .utils import TarxivModule
 from .database import TarxivDB
 from .auth import sign_token, PROVIDERS, validate_token, TokenStatus, verify_token
-from .database_user import UserDB, DataLayerError, DuplicateValueError
+from .database_user import (
+    UserDB,
+    DataLayerError,
+    DuplicateValueError,
+    AccessDeniedError,
+)
 from . import dto
 from .openapi import build_openapi_spec
 
@@ -367,6 +372,22 @@ class API(TarxivModule):
                 return server_response({"status": "left", "team_id": team_id}, 200)
             except PermissionError as exc:
                 return server_response({"error": str(exc), "type": "token"}, 401)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/teams/<string:team_id>/members", methods=["GET"])
+        def list_team_members(team_id):
+            token = request.headers.get("Authorization")
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                members = self.user_db.list_team_members(team_id, user_id)
+                return server_response(
+                    [member.model_dump(mode="json") for member in members], 200
+                )
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except AccessDeniedError as exc:
+                return server_response({"error": str(exc), "type": "access"}, 403)
             except DataLayerError as exc:
                 return server_response({"error": str(exc), "type": "server"}, 500)
 

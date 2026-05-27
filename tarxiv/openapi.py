@@ -52,6 +52,9 @@ def build_openapi_spec() -> dict:
                 "TeamMembershipCreate": dto.TeamMembershipCreate.model_json_schema(
                     ref_template=ref_template
                 ),
+                "TeamMemberView": dto.TeamMemberView.model_json_schema(
+                    ref_template=ref_template
+                ),
                 "Tag": dto.Tag.model_json_schema(ref_template=ref_template),
                 "TagCreate": dto.TagCreate.model_json_schema(ref_template=ref_template),
                 "ObjectTagAssignmentCreate": (
@@ -363,6 +366,35 @@ def build_openapi_spec() -> dict:
                 }
             },
             "/teams/{team_id}/members": {
+                "get": {
+                    "summary": "List members of a team",
+                    "security": bearer_auth,
+                    "parameters": [
+                        {
+                            "name": "team_id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string", "format": "uuid"},
+                        }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Team members",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "array",
+                                        "items": {
+                                            "$ref": "#/components/schemas/TeamMemberView"
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "401": {"description": "Unauthorized"},
+                        "403": {"description": "Not a member of the team"},
+                    },
+                },
                 "post": {
                     "summary": "Add or update a team member",
                     "security": bearer_auth,
@@ -398,7 +430,7 @@ def build_openapi_spec() -> dict:
                         "400": {"description": "Validation error"},
                         "401": {"description": "Unauthorized"},
                     },
-                }
+                },
             },
             "/tags": {
                 "get": {

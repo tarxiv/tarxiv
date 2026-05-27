@@ -562,3 +562,33 @@ Current expectations for follow-on work:
 - add API tests for any new account-page/team discovery routes if the contract changes
 - keep integration coverage for join/leave, tagged object listing, and duplicate username conflicts
 - add dashboard-level tests later once the account and tagged pages settle
+
+
+
+# Summary of necessary changes before commit:
+From Jack:
+(Implementation detail and decisions recorded in `docs/orm-dashboard-polish-plan.md`.)
+  - [x] Team management
+    - [x] List team members on manage team members section
+          (new `GET /teams/<team_id>/members` + member list in the manager)
+    - [x] Confirmation of people being added to teams (success banner)
+    - [x] Search list updates on team member being added
+          (added user dropped from results, member list refreshed)
+    - [ ] Limit who can create teams? — DEFERRED (kept open creation)
+    - [ ] Invite rather than directly add people to teams? — DEFERRED (kept direct add)
+  - [x] Polishing UI
+    - [x] Colour wheel on tag colour (`dmc.ColorInput` with swatches)
+    - [~] Image/file selector on profile image url? — URL input polished with live
+          preview + validation; file upload DEFERRED (needs storage backend)
+    - [x] username generator (Suggest button on the username field)
+    - [x] Hiding of various sections on user page (Profile/Teams/Tags tabs)
+    - [~] API Token — relabelled as session token + copy button; real personal
+          access tokens DEFERRED (no backend yet)
+    - [x] Empty taglist option (friendly empty state)
+    - [x] Display banner in correct location (in-context, per active tab)
+  - [x] Remove tag filtering from Alerts
+  - [x] Split up account info, tags, and teams onto different pages? (tabs on `/user`)
+  - [x] Modal hover-over on Account button (`dmc.HoverCard` with profile summary)
+
+Deferred (future work): personal access tokens, team invite/approval workflow,
+team-creation limits, profile image upload, remove-member / change-role UI.

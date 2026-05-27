@@ -21,6 +21,10 @@ class DuplicateValueError(DataLayerError):
     """Raised when a unique field conflicts with an existing record."""
 
 
+class AccessDeniedError(DataLayerError):
+    """Raised when a user is not permitted to access the requested resource."""
+
+
 class UserDB(TarxivModule):
     """Relational access layer for TarXiv users and external identities."""
 
@@ -525,6 +529,41 @@ class UserDB(TarxivModule):
         finally:
             session.close()
 
+    def list_team_members(
+        self, team_id: UUID | str, requesting_user_id: UUID | str
+    ) -> list[dto.TeamMemberView]:
+        with self.get_session() as session:
+            try:
+                team_uuid = self._coerce_uuid(team_id)
+                requester_uuid = self._coerce_uuid(requesting_user_id)
+                self._ensure_team_membership(session, team_uuid, requester_uuid)
+
+                memberships = (
+                    session
+                    .query(orm.TeamMembership)
+                    .options(joinedload(orm.TeamMembership.user))
+                    .filter(orm.TeamMembership.team_id == team_uuid)
+                    .order_by(orm.TeamMembership.created_at.asc())
+                    .all()
+                )
+                return [
+                    dto.TeamMemberView(
+                        team_id=item.team_id,
+                        user_id=item.user_id,
+                        role=item.role,
+                        created_at=item.created_at,
+                        username=item.user.username if item.user else None,
+                        forename=item.user.forename if item.user else None,
+                        surname=item.user.surname if item.user else None,
+                        email=item.user.email if item.user else None,
+                    )
+                    for item in memberships
+                ]
+            except SQLAlchemyError as exc:
+                raise DataLayerError(
+                    "A system error occurred while loading team members."
+                ) from exc
+
     def list_tags(self, user_id: UUID | str) -> list[dto.Tag]:
         with self.get_session() as session:
             try:
@@ -747,7 +786,7 @@ class UserDB(TarxivModule):
             .first()
         )
         if membership is None:
-            raise DataLayerError("You are not a member of the requested team.")
+            raise AccessDeniedError("You are not a member of the requested team.")
 
     @staticmethod
     def _build_assignment_view(

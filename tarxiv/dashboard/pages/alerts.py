@@ -50,26 +50,6 @@ def layout(**kwargs):
             expressive_card(
                 title="Alerts",
                 children=[
-                    dcc.Store(
-                        id="alerts-visible-tags-store", storage_type="memory", data=[]
-                    ),
-                    dmc.Stack(
-                        [
-                            dmc.Text(
-                                "Optionally filter recent alerts by your tags.",
-                                c="dimmed",
-                            ),
-                            dmc.MultiSelect(
-                                id="alerts-tag-filter",
-                                placeholder="Filter by tags",
-                                data=[],
-                                value=[],
-                                clearable=True,
-                                searchable=True,
-                            ),
-                        ],
-                        gap="xs",
-                    ),
                     dmc.Box(
                         id="alerts-table-body",
                     ),
@@ -101,17 +81,10 @@ def layout(**kwargs):
 
 # callback for table search and results display
 @callback(
-    [
-        Output("alerts-table-body", "children"),
-        Output("alerts-visible-tags-store", "data"),
-        Output("alerts-tag-filter", "data"),
-    ],
-    [
-        Input("alerts-pagination", "value"),
-        Input("alerts-tag-filter", "value"),
-    ],
+    Output("alerts-table-body", "children"),
+    Input("alerts-pagination", "value"),
 )
-def update_alerts_table(page_number, selected_tag_ids):
+def update_alerts_table(page_number):
     if page_number is None:
         i = 0
     else:
@@ -119,46 +92,22 @@ def update_alerts_table(page_number, selected_tag_ids):
 
     items_per_page = 25
     token = get_jwt_from_request(request)
-    visible_tags = fetch_visible_tags(
-        token=token,
-        logger=current_app.config["TXV_LOGGER"],
-    )
-    tag_options = []
-    visible_tag_payload = []
-    if visible_tags.status_code == 200:
-        visible_tag_payload = visible_tags.json()
-        tag_options = [
-            {
-                "value": tag["id"],
-                "label": f"{tag['name']} ({tag['owner_type']})",
-            }
-            for tag in visible_tag_payload
-        ]
 
     response = fetch_api_data(
         "tns_alerts",
         n_rows=items_per_page,
         offset=i * items_per_page,
-        tag_ids=selected_tag_ids or [],
         token=token,
         logger=current_app.config["TXV_LOGGER"],
     )
 
     if response.status_code == 401:
-        return (
-            create_message_banner("Session expired. Please log in again.", "warning"),
-            visible_tag_payload,
-            tag_options,
-        )
+        return create_message_banner("Session expired. Please log in again.", "warning")
 
     if response.status_code != 200:
-        return (
-            create_message_banner(
-                f"Alerts request failed with status {response.status_code}.",
-                "error",
-            ),
-            visible_tag_payload,
-            tag_options,
+        return create_message_banner(
+            f"Alerts request failed with status {response.status_code}.",
+            "error",
         )
 
     try:
@@ -168,18 +117,10 @@ def update_alerts_table(page_number, selected_tag_ids):
             "error": "Failed to decode alerts API response",
             "response": response.text,
         })
-        return (
-            create_message_banner("Received an invalid alerts response.", "error"),
-            visible_tag_payload,
-            tag_options,
-        )
+        return create_message_banner("Received an invalid alerts response.", "error")
 
     if not alerts:
-        return (
-            create_message_banner("No alerts found.", "info"),
-            visible_tag_payload,
-            tag_options,
-        )
+        return create_message_banner("No alerts found.", "info")
 
     def display_value(value):
         if value in (None, ""):
@@ -213,40 +154,34 @@ def update_alerts_table(page_number, selected_tag_ids):
         for alert in alerts
     ]
 
-    return (
-        dmc.Table(
-            [
-                dmc.TableThead(
-                    dmc.TableTr([
-                        dmc.TableTh("Received"),
-                        dmc.TableTh("Object"),
-                        dmc.TableTh("TNS Link"),
-                        dmc.TableTh("Type"),
-                        dmc.TableTh("RA"),
-                        dmc.TableTh("Dec"),
-                        dmc.TableTh("Discovery Source"),
-                        dmc.TableTh("Reporting Group"),
-                        dmc.TableTh("Redshift"),
-                    ])
-                ),
-                dmc.TableTbody(rows),
-                dmc.TableCaption("Most recent alerts from the TarXiv alerts API."),
-            ],
-            striped=True,
-            highlightOnHover=True,
-            withTableBorder=True,
-            withColumnBorders=True,
-            horizontalSpacing="sm",
-            verticalSpacing="xs",
-        ),
-        visible_tag_payload,
-        tag_options,
+    return dmc.Table(
+        [
+            dmc.TableThead(
+                dmc.TableTr([
+                    dmc.TableTh("Received"),
+                    dmc.TableTh("Object"),
+                    dmc.TableTh("TNS Link"),
+                    dmc.TableTh("Type"),
+                    dmc.TableTh("RA"),
+                    dmc.TableTh("Dec"),
+                    dmc.TableTh("Discovery Source"),
+                    dmc.TableTh("Reporting Group"),
+                    dmc.TableTh("Redshift"),
+                ])
+            ),
+            dmc.TableTbody(rows),
+            dmc.TableCaption("Most recent alerts from the TarXiv alerts API."),
+        ],
+        striped=True,
+        highlightOnHover=True,
+        withTableBorder=True,
+        withColumnBorders=True,
+        horizontalSpacing="sm",
+        verticalSpacing="xs",
     )
 
 
-def fetch_api_data(
-    endpoint: str, n_rows: int, offset: int, tag_ids: list[str], token, logger
-):
+def fetch_api_data(endpoint: str, n_rows: int, offset: int, token, logger):
     """Helper to perform API requests."""
     # TODO: Refactor to use a shared API client module instead of hardcoding requests here
     host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
@@ -260,24 +195,7 @@ def fetch_api_data(
             "Content-Type": "application/json",
             "Authorization": f"Bearer {token}",
         },
-        json={"n_rows": n_rows, "offset": offset, "tag_ids": tag_ids},
+        json={"n_rows": n_rows, "offset": offset},
     )
     logger.info({"info": f"{endpoint} response status: {response.status_code}"})
-    return response
-
-
-def fetch_visible_tags(token, logger):
-    host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
-    port = os.getenv("TARXIV_API_PORT", "9001")
-    api_url = os.getenv("TARXIV_INTERNAL_API_URL", f"http://{host}:{port}")
-    response = requests.get(
-        url=f"{api_url}/tags",
-        timeout=10,
-        headers={
-            "accept": "application/json",
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {token}",
-        },
-    )
-    logger.info({"info": f"tags response status: {response.status_code}"})
     return response

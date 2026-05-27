@@ -289,6 +289,46 @@ def test_add_team_member_success(mock_api, auth_token):
     assert response.json["user_id"] == str(membership.user_id)
 
 
+def test_list_team_members_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    team_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    mock_api.user_db.list_team_members.return_value = [
+        tarxiv_dto.TeamMemberView.model_validate({
+            "team_id": team_id,
+            "user_id": user_id,
+            "role": "owner",
+            "username": "ada",
+            "email": "ada@example.com",
+        })
+    ]
+
+    response = client.get(
+        f"/teams/{team_id}/members", headers={"Authorization": auth_token}
+    )
+
+    assert response.status_code == 200
+    assert response.json[0]["username"] == "ada"
+    assert response.json[0]["role"] == "owner"
+
+
+def test_list_team_members_forbidden_for_non_member(mock_api, auth_token):
+    from tarxiv.database_user import AccessDeniedError
+
+    client = mock_api.app.test_client()
+    team_id = uuid.uuid4()
+    mock_api.user_db.list_team_members.side_effect = AccessDeniedError(
+        "You are not a member of the requested team."
+    )
+
+    response = client.get(
+        f"/teams/{team_id}/members", headers={"Authorization": auth_token}
+    )
+
+    assert response.status_code == 403
+    assert response.json["type"] == "access"
+
+
 def test_join_team_success(mock_api, auth_token):
     client = mock_api.app.test_client()
     membership = tarxiv_dto.TeamMembership.model_validate({
