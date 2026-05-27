@@ -6,6 +6,8 @@ This branch is intended to introduce a relational data layer for lightweight Tar
 
 The current branch state only partially implements that goal. This document records the intended architecture, the gaps in the current implementation, and a concrete rollout plan for finishing the work.
 
+For a current implementation snapshot and remaining work list, see `docs/orm-user-tags-status.md`.
+
 ## Current Direction
 
 The agreed direction is:
@@ -457,3 +459,106 @@ Unless later requirements change, the simplest good defaults are:
 - one internal user record with many external identities
 - provider defaults only fill empty local fields
 - Alembic for all schema evolution
+
+## Current Dashboard Follow-On Plan
+
+The current backend has now moved beyond the original minimal team/tag endpoints.
+
+Implemented since the original plan was written:
+
+- team creation and membership listing in the backend
+- tag creation/listing and object tag assignment/removal endpoints
+- alerts filtering by selected tags
+- user-page tag UI and object tagging UI on the lightcurve page
+- OpenAPI/Swagger docs for the current API surface
+- backend support for:
+  - `GET /users/search`
+  - `GET /teams/search`
+  - `POST /teams/<team_id>/join`
+  - `DELETE /user/teams/<team_id>`
+  - `GET /tags/<tag_id>/objects`
+  - friendly duplicate-username handling on `PATCH /user`
+
+The next dashboard work should build on those backend capabilities rather than inventing new flows in the UI.
+
+### Current Product Decisions
+
+- Keep the route path as `/user`, but rename the dashboard page label from `User` to `Account`.
+- Add a dedicated `Tagged` dashboard page.
+- Treat username uniqueness as a real product feature, not just a database implementation detail.
+- For now, use direct `Join team` and `Leave team` actions.
+- Do not implement join-request approval state yet.
+- Defer team member management UI until user search is available and the account page basics are stable.
+
+### Phase 1 Backend Scope
+
+This phase is now implemented in the backend and should be treated as the contract for the next UI pass:
+
+- `GET /users/search?q=...`
+  - searches by username, nickname, forename, surname, and email
+  - returns minimal user summary data
+- `GET /teams/search?q=...`
+  - searches teams by name and description
+  - returns whether the current user is already a member
+- `POST /teams/<team_id>/join`
+  - direct join flow for the authenticated user
+- `DELETE /user/teams/<team_id>`
+  - direct leave flow for the authenticated user
+- `GET /tags/<tag_id>/objects?limit=&offset=`
+  - lists objects associated with a visible tag
+- `PATCH /user`
+  - returns a clean conflict error when the username is already taken
+
+### Account Page Plan
+
+The current `/user` page should evolve into the account hub.
+
+Recommended next UI changes:
+
+1. Rename the page label from `User` to `Account` while keeping the path `/user`.
+2. Tidy the teams section into clearer subsections:
+   - `Your Teams`
+   - `Discover Teams`
+   - `Create Team`
+3. Keep creation forms hidden by default and reveal them only from explicit buttons.
+4. Add team discovery/search on the account page using `GET /teams/search`.
+5. Show join/leave actions in search results and current memberships.
+6. Keep member-management UI out of the dashboard for now.
+
+### Tagged Page Plan
+
+Add a new dashboard page called `Tagged`.
+
+Recommended first implementation:
+
+- load available tags with `GET /tags`
+- allow the user to select one tag at a time
+- load tagged objects with `GET /tags/<tag_id>/objects`
+- render object IDs as links to `/lightcurve/<object_id>`
+- keep the first pass simple and paginated rather than trying to expand all tags at once
+
+### Team Member Management Plan
+
+This remains a second-pass feature.
+
+Prerequisites now in place:
+
+- backend user search endpoint exists
+- backend add-member endpoint exists
+
+Recommended second-pass implementation:
+
+- expose member-management controls only to owners/admins
+- use `GET /users/search` to find users by username/name/email
+- add users to teams via `POST /teams/<team_id>/members`
+- decide later whether this should live on the account page or a dedicated team detail page
+
+### Current Testing Expectations
+
+The project now has both mocked API tests and real Postgres integration coverage for team/tag behavior.
+
+Current expectations for follow-on work:
+
+- add API tests for any new account-page/team discovery routes if the contract changes
+- keep integration coverage for join/leave, tagged object listing, and duplicate username conflicts
+- add dashboard-level tests later once the account and tagged pages settle
