@@ -304,13 +304,13 @@ def profile_tab(user_profile, avatar, name, email, token, fetch_error):
             mt="md",
         ),
         # TODO: replace with real personal access tokens. This is currently the
-        # short-lived session JWT, not a durable API key.
+        # short-lived session JWT, not a durable API key?
         dmc.Stack(
             id="api-token-group",
             gap="xs",
             children=[
                 dmc.Text(
-                    "Session token (temporary, not a personal API key):",
+                    "Session token (not a personal API key):",
                     size="sm",
                     fw=500,
                 ),
@@ -401,7 +401,7 @@ def render_tag_create_form(team_memberships):
         [
             dmc.Text("Create a new tag", fw=600),
             dmc.TextInput(
-                id="new-tag-name", label="Tag name", placeholder="interesting"
+                id="new-tag-name", label="Tag name", placeholder="Interesting"
             ),
             dmc.TextInput(
                 id="new-tag-description",

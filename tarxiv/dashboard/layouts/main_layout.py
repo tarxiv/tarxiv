@@ -89,7 +89,7 @@ def create_layout() -> dmc.MantineProvider:
     user_page = dash.page_registry.get(
         "tarxiv.dashboard.pages.user",
         {
-            "name": "Account",
+            "name": "Acc",
             "icon": "mdi:user-outline",
             "relative_path": "/user",
         },
