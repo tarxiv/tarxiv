@@ -1,5 +1,5 @@
 import os
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 import dash
 from dash import Input, Output, State, callback, dcc, html, no_update
@@ -36,6 +36,8 @@ PROFILE_FIELDS = [
     ("institution", "Institution"),
     ("picture_url", "Profile image URL"),
 ]
+
+TEAM_MEMBER_MANAGER_ROLES = {"owner", "admin"}
 
 
 def layout(**kwargs):
@@ -83,6 +85,16 @@ def layout(**kwargs):
             dcc.Store(id="user-profile-editing", storage_type="memory", data=False),
             dcc.Store(id="user-tag-create-open", storage_type="memory", data=False),
             dcc.Store(id="user-team-create-open", storage_type="memory", data=False),
+            dcc.Store(
+                id="user-team-member-manager-store",
+                storage_type="memory",
+                data={},
+            ),
+            dcc.Store(
+                id="user-team-member-search-results-store",
+                storage_type="memory",
+                data={},
+            ),
             dmc.Box(id="user-page-banner"),
             dmc.Stack(
                 id="user-profile-panel",
@@ -345,9 +357,116 @@ def line(label, value):
     )
 
 
-def team_membership_block(memberships):
+def can_manage_team_members(membership):
+    return membership.get("role") in TEAM_MEMBER_MANAGER_ROLES
+
+
+def user_search_result_label(user):
+    full_name = " ".join(
+        part for part in [user.get("forename"), user.get("surname")] if part
+    ).strip()
+    return user.get("username") or full_name or user.get("email") or "Unnamed user"
+
+
+def user_search_result_details(user):
+    label = user_search_result_label(user)
+    full_name = " ".join(
+        part for part in [user.get("forename"), user.get("surname")] if part
+    ).strip()
+    details = []
+    if full_name and full_name != label:
+        details.append(full_name)
+    if user.get("email") and user.get("email") != label:
+        details.append(user.get("email"))
+    return " | ".join(details) if details else str(user.get("id"))
+
+
+def team_member_search_results_block(team_id, users):
+    if users is None:
+        return dmc.Text(
+            "Search for a user to add them as a member.", size="sm", c="dimmed"
+        )
+
+    if not users:
+        return dmc.Text("No users found.", size="sm", c="dimmed")
+
+    return dmc.Stack(
+        [
+            dmc.Paper(
+                withBorder=True,
+                p="sm",
+                radius="md",
+                children=dmc.Group(
+                    [
+                        dmc.Stack(
+                            [
+                                dmc.Text(user_search_result_label(user), fw=600),
+                                dmc.Text(
+                                    user_search_result_details(user),
+                                    size="sm",
+                                    c="dimmed",
+                                ),
+                            ],
+                            gap=0,
+                        ),
+                        dmc.Button(
+                            "Add to team",
+                            id={
+                                "type": "add-team-member-button",
+                                "team_id": team_id,
+                                "user_id": user.get("id"),
+                            },
+                            n_clicks=0,
+                            variant="light",
+                        ),
+                    ],
+                    justify="space-between",
+                ),
+            )
+            for user in users
+        ],
+        gap="xs",
+    )
+
+
+def render_team_member_manager(team_id, users=None):
+    return dmc.Stack(
+        [
+            dmc.Text(
+                "Add members to this team. New members are added with the member role.",
+                size="sm",
+                c="dimmed",
+            ),
+            dmc.Group([
+                dmc.TextInput(
+                    id={"type": "team-member-search-input", "team_id": team_id},
+                    placeholder="Search users by username, name, or email",
+                    style={"minWidth": "320px"},
+                ),
+                dmc.Button(
+                    "Search",
+                    id={"type": "team-member-search-button", "team_id": team_id},
+                    n_clicks=0,
+                ),
+            ]),
+            html.Div(
+                id={"type": "team-member-search-results", "team_id": team_id},
+                children=team_member_search_results_block(team_id, users),
+            ),
+        ],
+        gap="sm",
+        mt="sm",
+    )
+
+
+def team_membership_block(
+    memberships, manager_open_states=None, member_search_results=None
+):
     if not memberships:
         return dmc.Text("No team memberships yet.", size="sm", c="dimmed")
+
+    manager_open_states = manager_open_states or {}
+    member_search_results = member_search_results or {}
 
     return dmc.Stack(
         [
@@ -376,6 +495,25 @@ def team_membership_block(memberships):
                             ),
                             dmc.Group([
                                 dmc.Badge(item.get("role", "member"), variant="light"),
+                                (
+                                    dmc.Button(
+                                        (
+                                            "Hide Member Manager"
+                                            if manager_open_states.get(
+                                                str(item.get("team_id"))
+                                            )
+                                            else "Manage Members"
+                                        ),
+                                        id={
+                                            "type": "toggle-team-member-manager",
+                                            "team_id": item.get("team_id"),
+                                        },
+                                        n_clicks=0,
+                                        variant="light",
+                                    )
+                                    if can_manage_team_members(item)
+                                    else None
+                                ),
                                 dmc.Button(
                                     "Leave",
                                     id={
@@ -389,7 +527,16 @@ def team_membership_block(memberships):
                             ]),
                         ],
                         justify="space-between",
-                    )
+                    ),
+                    (
+                        render_team_member_manager(
+                            str(item.get("team_id")),
+                            member_search_results.get(str(item.get("team_id"))),
+                        )
+                        if can_manage_team_members(item)
+                        and manager_open_states.get(str(item.get("team_id")))
+                        else None
+                    ),
                 ],
             )
             for item in memberships
@@ -753,7 +900,7 @@ def search_teams(n_clicks, query):
             create_message_banner("Enter a team search query.", "warning"),
         )
 
-    response = fetch_api_data(f"teams/search?q={normalized_query}", token, logger)
+    response = fetch_api_data(f"teams/search?q={quote(normalized_query)}", token, logger)
     if response.status_code != 200:
         error_message = "Could not search teams right now."
         try:
@@ -764,6 +911,153 @@ def search_teams(n_clicks, query):
 
     teams = response.json()
     return team_search_results_block(teams), teams, html.Div()
+
+
+@callback(
+    [
+        Output("user-teams-panel", "children", allow_duplicate=True),
+        Output("user-team-member-manager-store", "data"),
+    ],
+    Input({"type": "toggle-team-member-manager", "team_id": dash.ALL}, "n_clicks"),
+    [
+        State("user-teams-store", "data"),
+        State("user-team-member-manager-store", "data"),
+        State("user-team-member-search-results-store", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def toggle_team_member_manager(
+    n_clicks, memberships, manager_open_states, member_search_results
+):
+    if not any(n_clicks or []):
+        return no_update, no_update
+
+    triggered = dash.ctx.triggered_id
+    if not triggered:
+        return no_update, no_update
+
+    team_id = str(triggered.get("team_id"))
+    updated_open_states = dict(manager_open_states or {})
+    updated_open_states[team_id] = not bool(updated_open_states.get(team_id))
+
+    return (
+        team_membership_block(
+            memberships or [], updated_open_states, member_search_results or {}
+        ),
+        updated_open_states,
+    )
+
+
+@callback(
+    [
+        Output("user-teams-panel", "children", allow_duplicate=True),
+        Output("user-team-member-search-results-store", "data"),
+        Output("user-page-banner", "children", allow_duplicate=True),
+    ],
+    Input({"type": "team-member-search-button", "team_id": dash.ALL}, "n_clicks"),
+    [
+        State({"type": "team-member-search-input", "team_id": dash.ALL}, "id"),
+        State(
+            {"type": "team-member-search-input", "team_id": dash.ALL}, "value"
+        ),
+        State("user-teams-store", "data"),
+        State("user-team-member-manager-store", "data"),
+        State("user-team-member-search-results-store", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def search_team_members(
+    n_clicks,
+    search_input_ids,
+    search_input_values,
+    memberships,
+    manager_open_states,
+    member_search_results,
+):
+    if not any(n_clicks or []):
+        return no_update, no_update, no_update
+
+    triggered = dash.ctx.triggered_id
+    if not triggered:
+        return no_update, no_update, no_update
+
+    team_id = str(triggered.get("team_id"))
+    query_by_team_id = {
+        str(component_id.get("team_id")): value
+        for component_id, value in zip(
+            search_input_ids or [], search_input_values or [], strict=False
+        )
+    }
+    normalized_query = (query_by_team_id.get(team_id) or "").strip()
+    if not normalized_query:
+        return (
+            no_update,
+            no_update,
+            create_message_banner("Enter a user search query.", "warning"),
+        )
+
+    logger = current_app.config["TXV_LOGGER"]
+    token = get_jwt_from_request(request)
+    response = fetch_api_data(f"users/search?q={quote(normalized_query)}", token, logger)
+    if response.status_code != 200:
+        error_message = "Could not search users right now."
+        try:
+            error_message = response.json().get("error", error_message)
+        except ValueError:
+            pass
+        return no_update, no_update, create_message_banner(error_message, "error")
+
+    updated_search_results = dict(member_search_results or {})
+    updated_search_results[team_id] = response.json()
+    return (
+        team_membership_block(
+            memberships or [], manager_open_states or {}, updated_search_results
+        ),
+        updated_search_results,
+        html.Div(),
+    )
+
+
+@callback(
+    Output("user-page-banner", "children", allow_duplicate=True),
+    Input(
+        {
+            "type": "add-team-member-button",
+            "team_id": dash.ALL,
+            "user_id": dash.ALL,
+        },
+        "n_clicks",
+    ),
+    prevent_initial_call=True,
+)
+def add_team_member(n_clicks):
+    if not any(n_clicks or []):
+        return no_update
+
+    triggered = dash.ctx.triggered_id
+    if not triggered:
+        return no_update
+
+    team_id = triggered.get("team_id")
+    user_id = triggered.get("user_id")
+    logger = current_app.config["TXV_LOGGER"]
+    token = get_jwt_from_request(request)
+    response = post_api_data(
+        f"teams/{team_id}/members",
+        token,
+        {"user_id": user_id, "role": "member"},
+        logger,
+    )
+
+    if response.status_code != 201:
+        error_message = "Could not add team member right now."
+        try:
+            error_message = response.json().get("error", error_message)
+        except ValueError:
+            pass
+        return create_message_banner(error_message, "error")
+
+    return create_message_banner("Team member added.", "success")
 
 
 @callback(
