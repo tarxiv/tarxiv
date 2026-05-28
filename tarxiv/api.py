@@ -675,6 +675,58 @@ class API(TarxivModule):
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
 
+        @self.app.route("/citations", methods=["POST"])
+        def citations():
+            request_json = request.get_json()
+            token = request.headers.get("Authorization")
+            # Start log
+            log = {
+                "query_type": "tns_alerts",
+                "query_ip": request.remote_addr,
+                "token": token,
+                "sources": request_json["sources"],
+            }
+            try:
+                # Return error if bad token
+                validation = self.validate_token_request(token)
+                if not validation["is_valid"]:
+                    if validation["status"] == "expired":
+                        raise PermissionError("Session expired — please log in again.")
+                    else:
+                        raise PermissionError("Invalid or missing token.")
+
+                # Get all relevant citations
+                citations = []
+                for source in request_json["sources"]:
+                    with open(
+                        os.path.join(self.config_dir, "citations", f"{source}.bib"),
+                        mode="r",
+                    ) as f:
+                        citations.append(f.read())
+
+                # Return as one big printable string
+                citation_str = "\n".join(citations)
+                result = {"citations": citation_str}
+
+                # Normal return
+                status_code = 200
+                log["status"] = "Success"
+            except PermissionError as e:
+                result = {"error": str(e), "type": "token"}
+                status_code = 401
+                log["status"] = "PermissionError"
+            except LookupError as e:
+                result = {"error": str(e), "type": "lookup"}
+                status_code = 404
+                log["status"] = "LookupError"
+            except Exception as e:
+                result = {"error": str(e), "type": "server"}
+                status_code = 500
+                log["status"] = "ServerError"
+
+            self.logger.info(log, extra=log)
+            return server_response(result, status_code)
+
         @self.app.route("/tns_alerts", methods=["POST"])
         def tns_alerts():
             request_json = request.get_json() or {}
@@ -743,9 +795,6 @@ class API(TarxivModule):
                             ORDER BY `objects`.`internal`.`insert_date` DESC
                             LIMIT {request_json["n_rows"]} OFFSET {request_json["offset"]}"""
                 result = list(self.txv_db.query(query))
-
-                if result is None:
-                    raise LookupError("bad lookup")
 
                 # Normal return
                 status_code = 200
