@@ -21,6 +21,13 @@ dash.register_page(
 )
 
 
+def tag_option_label(tag):
+    if tag.get("owner_type") == "team":
+        team_name = tag.get("owner_name") or "team"
+        return f"{tag['name']} (team: {team_name})"
+    return f"{tag['name']} (personal)"
+
+
 def layout(**kwargs):
     logger = current_app.config["TXV_LOGGER"]
     token = get_jwt_from_request(request)
@@ -41,7 +48,7 @@ def layout(**kwargs):
             tag_options = [
                 {
                     "value": tag["id"],
-                    "label": f"{tag['name']} ({tag['owner_type']})",
+                    "label": tag_option_label(tag),
                 }
                 for tag in tags
             ]

@@ -300,7 +300,7 @@ def profile_tab(user_profile, avatar, name, email, token, fetch_error):
                     color="red",
                 ),
             ],
-            justify="space-between",
+            justify="center",
             mt="md",
         ),
         # TODO: replace with real personal access tokens. This is currently the
@@ -762,15 +762,26 @@ def tag_block(tags):
     sections = []
     if personal_tags:
         sections.append(tag_section("Personal tags", personal_tags))
-    if team_tags:
-        sections.append(tag_section("Team tags", team_tags))
+
+    # Group team tags by their owning team so each team has its own subsection.
+    teams_by_id = {}
+    for tag in team_tags:
+        owner_id = str(tag.get("owner_id"))
+        teams_by_id.setdefault(owner_id, []).append(tag)
+
+    for _owner_id, owned in sorted(
+        teams_by_id.items(),
+        key=lambda item: (item[1][0].get("owner_name") or "").lower(),
+    ):
+        team_name = owned[0].get("owner_name") or "Team"
+        sections.append(tag_section(f"{team_name} (team)", owned))
 
     return dmc.Stack(sections, gap="sm")
 
 
 def team_search_results_block(teams):
     if not teams:
-        return dmc.Text("No team search results yet.", size="sm", c="dimmed")
+        return dmc.Text("", size="sm", c="dimmed")
 
     return dmc.Stack(
         [
