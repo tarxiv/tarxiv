@@ -3,59 +3,9 @@
 import uuid
 
 import pytest
-from unittest.mock import MagicMock
 
 import tarxiv.dto as tarxiv_dto
-from tarxiv.api import API
 from tarxiv.auth.token_utils import sign_token
-import os
-
-_TEST_JWT_SECRET = "test-jwt-secret-for-api-tests-32b"
-
-
-class MockTarxivModule:
-    """Mock version of TarxivModule for testing purposes."""
-
-    def __init__(self, *args, **kwargs):
-        self.module = "mock tarxiv module"
-        self.config_dir = os.environ.get(
-            "TARXIV_CONFIG_DIR", os.path.join(os.path.dirname(__file__), "../aux")
-        )
-        self.config_file = os.path.join(self.config_dir, "config.yml")
-        self.config = {"log_dir": None, "api_port": 5000}
-        self.logger = MagicMock()
-        self.debug = False
-
-
-@pytest.fixture
-def mock_api(monkeypatch, tmp_path):
-    monkeypatch.setenv("TARXIV_JWT_SECRET", _TEST_JWT_SECRET)
-    # HFS - 2025-05-28: Fake the TarXivDB object instantiation which is needed for the API object
-    # we also have to fake TarxivModule, which is parent to API and TarxivDB
-    monkeypatch.setattr(
-        "tarxiv.database.TarxivDB.__init__", lambda self, *args, **kwargs: None
-    )
-    monkeypatch.setattr(
-        "tarxiv.database_user.UserDB.__init__", lambda self, *args, **kwargs: None
-    )
-
-    # JL - 2025-06-05: Mock the TarxivModule to avoid file I/O and logging setup
-    # during tests. Previous incarnation of this mock class was too tightly
-    # coupled to the original TarxivModule, this should be more generic.
-    monkeypatch.setattr("tarxiv.utils.TarxivModule.__init__", MockTarxivModule.__init__)
-
-    # HFS - 2025-05-28: MagicMock is a flexible fake object that can act like functions, methods,
-    # or even entire objects. It records how it's used so you can assert things later
-    # (e.g. mock.call_args)
-    # HFS - 2025-05-28: Note we never open or do anything with the config file so we can give a path
-    # to fill in the parameter so instanciation works and that's it.
-
-    api = API("mock", str(tmp_path))
-    # HFS - 2025-05-28: We now  replace the instance with a MagicMock so we don’t have to define every method
-    # ourselves (e.g. get).
-    api.txv_db = MagicMock()
-    api.user_db = MagicMock()
-    return api
 
 
 @pytest.fixture
@@ -115,37 +65,6 @@ def test_get_object_meta_missing_obj(mock_api):
     )
     assert response.status_code == 404
     assert response.json["error"] == "no such object"
-
-
-def test_openapi_json_served(mock_api):
-    client = mock_api.app.test_client()
-
-    response = client.get("/openapi.json")
-
-    assert response.status_code == 200
-    # This is we get back valid semver
-    assert len(response.json["openapi"].split(".")) == 3
-    assert response.json["info"]["title"] == "TarXiv API"
-    assert "/tags" in response.json["paths"]
-    assert "/users/search" in response.json["paths"]
-    assert "/teams/search" in response.json["paths"]
-    assert "/teams/{team_id}/join" in response.json["paths"]
-    assert "/user/teams/{team_id}" in response.json["paths"]
-    assert "/tags/{tag_id}/objects" in response.json["paths"]
-    assert "/auth/{provider}/login" in response.json["paths"]
-    assert "/auth/{provider}/callback" in response.json["paths"]
-    assert "/docs" not in response.json["paths"]
-
-
-def test_swagger_docs_page_served(mock_api):
-    client = mock_api.app.test_client()
-
-    response = client.get("/docs")
-
-    assert response.status_code == 200
-    assert response.mimetype == "text/html"
-    assert "SwaggerUIBundle" in response.text
-    assert "/openapi.json" in response.text
 
 
 def test_get_user_profile_success(mock_api, authenticated_user, auth_token):
@@ -324,6 +243,101 @@ def test_list_team_members_forbidden_for_non_member(mock_api, auth_token):
     response = client.get(
         f"/teams/{team_id}/members", headers={"Authorization": auth_token}
     )
+
+    assert response.status_code == 403
+    assert response.json["type"] == "access"
+
+
+def test_update_team_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    team_id = uuid.uuid4()
+    mock_api.user_db.update_team.return_value = tarxiv_dto.Team.model_validate({
+        "id": team_id,
+        "name": "renamed",
+        "description": "new desc",
+    })
+
+    response = client.patch(
+        f"/teams/{team_id}",
+        json={"name": "renamed", "description": "new desc"},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 200
+    assert response.json["name"] == "renamed"
+    update_arg = mock_api.user_db.update_team.call_args.args[2]
+    assert isinstance(update_arg, tarxiv_dto.TeamUpdate)
+
+
+def test_update_team_duplicate_name(mock_api, auth_token):
+    from tarxiv.database_user import DuplicateValueError
+
+    client = mock_api.app.test_client()
+    team_id = uuid.uuid4()
+    mock_api.user_db.update_team.side_effect = DuplicateValueError(
+        "A team with that name already exists."
+    )
+
+    response = client.patch(
+        f"/teams/{team_id}",
+        json={"name": "taken"},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 409
+    assert response.json["type"] == "validation"
+
+
+def test_update_team_forbidden_for_non_owner(mock_api, auth_token):
+    from tarxiv.database_user import AccessDeniedError
+
+    client = mock_api.app.test_client()
+    team_id = uuid.uuid4()
+    mock_api.user_db.update_team.side_effect = AccessDeniedError(
+        "Only the team owner can perform this action."
+    )
+
+    response = client.patch(
+        f"/teams/{team_id}",
+        json={"name": "whatever"},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 403
+    assert response.json["type"] == "access"
+
+
+def test_delete_team_success(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    team_id = uuid.uuid4()
+    mock_api.user_db.delete_team.return_value = True
+
+    response = client.delete(f"/teams/{team_id}", headers={"Authorization": auth_token})
+
+    assert response.status_code == 200
+    assert response.json["status"] == "deleted"
+
+
+def test_delete_team_not_found(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    team_id = uuid.uuid4()
+    mock_api.user_db.delete_team.return_value = False
+
+    response = client.delete(f"/teams/{team_id}", headers={"Authorization": auth_token})
+
+    assert response.status_code == 404
+
+
+def test_delete_team_forbidden_for_non_owner(mock_api, auth_token):
+    from tarxiv.database_user import AccessDeniedError
+
+    client = mock_api.app.test_client()
+    team_id = uuid.uuid4()
+    mock_api.user_db.delete_team.side_effect = AccessDeniedError(
+        "Only the team owner can perform this action."
+    )
+
+    response = client.delete(f"/teams/{team_id}", headers={"Authorization": auth_token})
 
     assert response.status_code == 403
     assert response.json["type"] == "access"

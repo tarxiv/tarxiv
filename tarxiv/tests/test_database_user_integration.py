@@ -338,3 +338,97 @@ def test_list_team_members_visibility(monkeypatch):
         # An outsider is denied.
         with pytest.raises(AccessDeniedError):
             user_db.list_team_members(team.id, outsider.id)
+
+
+@pytest.mark.slow
+def test_update_and_delete_team(monkeypatch):
+    pytest.importorskip("testcontainers")
+
+    workspace_root = Path(__file__).resolve().parents[2]
+    config_dir = workspace_root / "aux"
+
+    with PostgresContainer("postgres:15") as postgres:
+        sync_url = postgres.get_connection_url()
+        sqlalchemy_url = sync_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+        monkeypatch.setenv("TARXIV_POSTGRES_URL", sqlalchemy_url)
+        monkeypatch.setenv("TARXIV_CONFIG_DIR", str(config_dir))
+
+        from alembic import command
+        from alembic.config import Config
+
+        alembic_cfg = Config(str(workspace_root / "alembic.ini"))
+        command.upgrade(alembic_cfg, "head")
+
+        user_db = UserDB("integration", 0, debug=False)
+
+        owner = user_db.get_or_create_user_from_identity(
+            "orcid",
+            dto.ProviderProfile(
+                provider_user_id="0000-0003-0000-0001",
+                username="team-owner",
+                email="owner@example.com",
+            ),
+            {"orcid": "0000-0003-0000-0001"},
+        )
+        member = user_db.get_or_create_user_from_identity(
+            "orcid",
+            dto.ProviderProfile(
+                provider_user_id="0000-0003-0000-0002",
+                username="team-member",
+                email="member@example.com",
+            ),
+            {"orcid": "0000-0003-0000-0002"},
+        )
+
+        team = user_db.create_team(
+            owner.id, dto.TeamCreate(name="editable-team", description="Original")
+        )
+        user_db.add_user_to_team(
+            team.id,
+            owner.id,
+            dto.TeamMembershipCreate(user_id=member.id, role="member"),
+        )
+        # Create a second team to collide with when testing rename uniqueness.
+        user_db.create_team(
+            owner.id, dto.TeamCreate(name="taken-name", description="Other")
+        )
+
+        # Owner can update name + description.
+        updated = user_db.update_team(
+            team.id,
+            owner.id,
+            dto.TeamUpdate(name="renamed-team", description="Updated"),
+        )
+        assert updated.name == "renamed-team"
+        assert updated.description == "Updated"
+
+        # Non-owner members cannot update.
+        with pytest.raises(AccessDeniedError):
+            user_db.update_team(team.id, member.id, dto.TeamUpdate(description="nope"))
+
+        # Renaming to an existing team name is rejected.
+        with pytest.raises(DuplicateValueError):
+            user_db.update_team(team.id, owner.id, dto.TeamUpdate(name="taken-name"))
+
+        # A team tag plus an assignment, to verify cascade on delete.
+        team_tag = user_db.create_tag(
+            owner.id,
+            dto.TagCreate(name="team-tag", owner_team_id=team.id),
+        )
+        user_db.assign_tag_to_object(
+            "2024xyz",
+            owner.id,
+            dto.ObjectTagAssignmentCreate(tag_id=team_tag.id),
+        )
+        assert any(tag.name == "team-tag" for tag in user_db.list_tags(owner.id))
+
+        # Non-owner cannot delete.
+        with pytest.raises(AccessDeniedError):
+            user_db.delete_team(team.id, member.id)
+
+        # Owner deletes the team; its tags (and assignments) cascade away.
+        assert user_db.delete_team(team.id, owner.id) is True
+        remaining_tag_names = {tag.name for tag in user_db.list_tags(owner.id)}
+        assert "team-tag" not in remaining_tag_names
+        assert user_db.list_objects_for_tag(team_tag.id, owner.id, 50, 0) == []

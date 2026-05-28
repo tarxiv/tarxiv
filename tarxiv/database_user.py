@@ -476,6 +476,66 @@ class UserDB(TarxivModule):
         finally:
             session.close()
 
+    def update_team(
+        self,
+        team_id: UUID | str,
+        acting_user_id: UUID | str,
+        team_update: dto.TeamUpdate,
+    ) -> dto.Team | None:
+        session = self.get_session()
+        try:
+            team_uuid = self._coerce_uuid(team_id)
+            actor_uuid = self._coerce_uuid(acting_user_id)
+            self._ensure_team_owner(session, team_uuid, actor_uuid)
+
+            team = session.get(orm.Team, team_uuid)
+            if team is None:
+                return None
+
+            updates = team_update.model_dump(exclude_unset=True)
+            if "name" in updates and not (updates["name"] or "").strip():
+                raise ValueError("Team name cannot be empty.")
+            for field_name, value in updates.items():
+                if field_name == "name":
+                    value = value.strip()
+                setattr(team, field_name, value)
+
+            session.commit()
+            session.refresh(team)
+            return dto.Team.model_validate(team)
+        except IntegrityError as exc:
+            session.rollback()
+            raise DuplicateValueError("A team with that name already exists.") from exc
+        except SQLAlchemyError as exc:
+            session.rollback()
+            raise DataLayerError(
+                "A system error occurred while updating the team."
+            ) from exc
+        finally:
+            session.close()
+
+    def delete_team(self, team_id: UUID | str, acting_user_id: UUID | str) -> bool:
+        session = self.get_session()
+        try:
+            team_uuid = self._coerce_uuid(team_id)
+            actor_uuid = self._coerce_uuid(acting_user_id)
+            self._ensure_team_owner(session, team_uuid, actor_uuid)
+
+            team = session.get(orm.Team, team_uuid)
+            if team is None:
+                return False
+
+            session.delete(team)
+            session.commit()
+            return True
+        except SQLAlchemyError as exc:
+            session.rollback()
+            raise DataLayerError(
+                "A system error occurred while deleting the team."
+            ) from exc
+        finally:
+            session.close()
+
     def add_user_to_team(
         self,
         team_id: UUID | str,
@@ -787,6 +847,18 @@ class UserDB(TarxivModule):
         )
         if membership is None:
             raise AccessDeniedError("You are not a member of the requested team.")
+
+    @staticmethod
+    def _ensure_team_owner(session: Session, team_id: UUID, user_id: UUID) -> None:
+        membership = (
+            session
+            .query(orm.TeamMembership)
+            .filter(orm.TeamMembership.team_id == team_id)
+            .filter(orm.TeamMembership.user_id == user_id)
+            .first()
+        )
+        if membership is None or membership.role != "owner":
+            raise AccessDeniedError("Only the team owner can perform this action.")
 
     @staticmethod
     def _build_assignment_view(

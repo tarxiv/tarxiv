@@ -46,6 +46,9 @@ def build_openapi_spec() -> dict:
                 "TeamCreate": dto.TeamCreate.model_json_schema(
                     ref_template=ref_template
                 ),
+                "TeamUpdate": dto.TeamUpdate.model_json_schema(
+                    ref_template=ref_template
+                ),
                 "TeamMembership": dto.TeamMembership.model_json_schema(
                     ref_template=ref_template
                 ),
@@ -337,6 +340,61 @@ def build_openapi_spec() -> dict:
                         "401": {"description": "Unauthorized"},
                     },
                 }
+            },
+            "/teams/{team_id}": {
+                "patch": {
+                    "summary": "Update a team (owner only)",
+                    "security": bearer_auth,
+                    "parameters": [
+                        {
+                            "name": "team_id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string", "format": "uuid"},
+                        }
+                    ],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/TeamUpdate"}
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Updated team",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/Team"}
+                                }
+                            },
+                        },
+                        "400": {"description": "Validation error"},
+                        "401": {"description": "Unauthorized"},
+                        "403": {"description": "Not the team owner"},
+                        "404": {"description": "Team not found"},
+                        "409": {"description": "Team name already taken"},
+                    },
+                },
+                "delete": {
+                    "summary": "Delete a team (owner only)",
+                    "security": bearer_auth,
+                    "parameters": [
+                        {
+                            "name": "team_id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string", "format": "uuid"},
+                        }
+                    ],
+                    "responses": {
+                        "200": {"description": "Team deleted"},
+                        "401": {"description": "Unauthorized"},
+                        "403": {"description": "Not the team owner"},
+                        "404": {"description": "Team not found"},
+                    },
+                },
             },
             "/teams/{team_id}/join": {
                 "post": {

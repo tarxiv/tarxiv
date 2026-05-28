@@ -230,6 +230,11 @@ class TeamCreate(BaseModel):
     description: str | None = None
 
 
+class TeamUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
 class TeamMembershipCreate(BaseModel):
     user_id: UUID
     role: str = "member"

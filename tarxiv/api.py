@@ -375,6 +375,44 @@ class API(TarxivModule):
             except DataLayerError as exc:
                 return server_response({"error": str(exc), "type": "server"}, 500)
 
+        @self.app.route("/teams/<string:team_id>", methods=["PATCH"])
+        def update_team(team_id):
+            token = request.headers.get("Authorization")
+            request_json = request.get_json(silent=True) or {}
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                team_update = dto.TeamUpdate.model_validate(request_json)
+                team = self.user_db.update_team(team_id, user_id, team_update)
+                if team is None:
+                    return server_response({"error": "Team not found"}, 404)
+                return server_response(team.model_dump(mode="json"), 200)
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except DuplicateValueError as exc:
+                return server_response({"error": str(exc), "type": "validation"}, 409)
+            except AccessDeniedError as exc:
+                return server_response({"error": str(exc), "type": "access"}, 403)
+            except ValueError as exc:
+                return server_response({"error": str(exc), "type": "validation"}, 400)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        @self.app.route("/teams/<string:team_id>", methods=["DELETE"])
+        def delete_team(team_id):
+            token = request.headers.get("Authorization")
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                removed = self.user_db.delete_team(team_id, user_id)
+                if not removed:
+                    return server_response({"error": "Team not found"}, 404)
+                return server_response({"status": "deleted", "team_id": team_id}, 200)
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except AccessDeniedError as exc:
+                return server_response({"error": str(exc), "type": "access"}, 403)
+            except DataLayerError as exc:
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
         @self.app.route("/teams/<string:team_id>/members", methods=["GET"])
         def list_team_members(team_id):
             token = request.headers.get("Authorization")

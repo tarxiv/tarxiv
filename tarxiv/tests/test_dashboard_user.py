@@ -351,3 +351,127 @@ def test_add_team_member_returns_error_banner(user_module, monkeypatch):
 
     assert banner_title(banner) == "Already on the team."
     assert panel is dash.no_update
+
+
+def test_team_card_shows_edit_delete_for_owner_only(user_module, team_memberships):
+    block = user_module.team_membership_block(team_memberships)
+    labels = [button.children for button in find_components(block, dmc.Button)]
+    # Two owner-only actions appear once each (only team-owner is an owner).
+    assert labels.count("Edit") == 1
+    assert labels.count("Delete") == 1
+
+
+def test_is_team_owner(user_module):
+    assert user_module.is_team_owner({"role": "owner"}) is True
+    assert user_module.is_team_owner({"role": "admin"}) is False
+    assert user_module.is_team_owner({"role": "member"}) is False
+
+
+def test_open_team_edit_modal_prefills(user_module, team_memberships, monkeypatch):
+    monkeypatch.setattr(
+        dash, "ctx", SimpleNamespace(triggered_id={"team_id": "team-owner"})
+    )
+
+    name, description, target, message, opened = user_module.open_team_edit_modal(
+        [1], team_memberships
+    )
+
+    assert name == "Owners"
+    assert description == "Owner-managed team"
+    assert target == {"team_id": "team-owner"}
+    assert opened is True
+
+
+def test_save_team_edit_success(user_module, monkeypatch):
+    monkeypatch.setattr(
+        user_module, "current_app", SimpleNamespace(config={"TXV_LOGGER": MagicMock()})
+    )
+    monkeypatch.setattr(user_module, "request", object())
+    monkeypatch.setattr(user_module, "get_jwt_from_request", lambda _request: "token")
+
+    patch_response = MagicMock()
+    patch_response.status_code = 200
+    patch_api_data = MagicMock(return_value=patch_response)
+    monkeypatch.setattr(user_module, "patch_api_data", patch_api_data)
+
+    list_response = MagicMock()
+    list_response.status_code = 200
+    list_response.json.return_value = []
+    monkeypatch.setattr(
+        user_module, "fetch_api_data", MagicMock(return_value=list_response)
+    )
+
+    result = user_module.save_team_edit(
+        1, "Renamed", "New description", {"team_id": "team-owner"}
+    )
+    banner = result[4]
+    opened = result[6]
+
+    assert banner_title(banner) == "Team updated."
+    assert opened is False
+    assert patch_api_data.call_args.args[0] == "teams/team-owner"
+
+
+def test_save_team_edit_duplicate_keeps_modal_open(user_module, monkeypatch):
+    monkeypatch.setattr(
+        user_module, "current_app", SimpleNamespace(config={"TXV_LOGGER": MagicMock()})
+    )
+    monkeypatch.setattr(user_module, "request", object())
+    monkeypatch.setattr(user_module, "get_jwt_from_request", lambda _request: "token")
+
+    patch_response = MagicMock()
+    patch_response.status_code = 409
+    patch_response.json.return_value = {
+        "error": "A team with that name already exists."
+    }
+    monkeypatch.setattr(
+        user_module, "patch_api_data", MagicMock(return_value=patch_response)
+    )
+
+    result = user_module.save_team_edit(1, "Taken", "desc", {"team_id": "team-owner"})
+
+    # Panels are not refreshed and the modal stays open (no_update) on error.
+    assert result[0] is dash.no_update
+    assert result[6] is dash.no_update
+    assert banner_title(result[5]) == "A team with that name already exists."
+
+
+def test_open_team_delete_modal_sets_target(user_module, team_memberships, monkeypatch):
+    monkeypatch.setattr(
+        dash, "ctx", SimpleNamespace(triggered_id={"team_id": "team-owner"})
+    )
+
+    target, body, message, opened = user_module.open_team_delete_modal(
+        [1], team_memberships
+    )
+
+    assert target == {"team_id": "team-owner"}
+    assert opened is True
+    body_text = [getattr(t, "children", "") for t in find_components(body, dmc.Text)]
+    assert any("Owners" in str(text) for text in body_text)
+
+
+def test_confirm_team_delete_success(user_module, monkeypatch):
+    monkeypatch.setattr(
+        user_module, "current_app", SimpleNamespace(config={"TXV_LOGGER": MagicMock()})
+    )
+    monkeypatch.setattr(user_module, "request", object())
+    monkeypatch.setattr(user_module, "get_jwt_from_request", lambda _request: "token")
+
+    delete_response = MagicMock()
+    delete_response.status_code = 200
+    delete_api_data = MagicMock(return_value=delete_response)
+    monkeypatch.setattr(user_module, "delete_api_data", delete_api_data)
+
+    list_response = MagicMock()
+    list_response.status_code = 200
+    list_response.json.return_value = []
+    monkeypatch.setattr(
+        user_module, "fetch_api_data", MagicMock(return_value=list_response)
+    )
+
+    result = user_module.confirm_team_delete(1, {"team_id": "team-owner"})
+
+    assert banner_title(result[4]) == "Team deleted."
+    assert result[6] is False
+    assert delete_api_data.call_args.args[0] == "teams/team-owner"

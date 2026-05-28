@@ -367,7 +367,88 @@ def teams_tab(team_memberships):
             dmc.Button("Create Team", id="add-team-button", n_clicks=0),
         ]),
         html.Div(id="user-team-create-panel"),
+        dcc.Store(id="user-team-edit-target", storage_type="memory"),
+        dcc.Store(id="user-team-delete-target", storage_type="memory"),
+        render_team_edit_modal(),
+        render_team_delete_modal(),
     ])
+
+
+def render_team_edit_modal():
+    return dmc.Modal(
+        id="user-team-edit-modal",
+        title="Edit team",
+        opened=False,
+        centered=True,
+        children=[
+            dmc.Stack(
+                [
+                    dmc.TextInput(id="edit-team-name", label="Team name"),
+                    dmc.Textarea(
+                        id="edit-team-description",
+                        label="Description",
+                        minRows=3,
+                        autosize=True,
+                    ),
+                    html.Div(id="user-team-edit-message"),
+                    dmc.Group(
+                        [
+                            dmc.Button(
+                                "Cancel",
+                                id="cancel-team-edit-button",
+                                variant="light",
+                                n_clicks=0,
+                            ),
+                            dmc.Button("Save", id="save-team-edit-button", n_clicks=0),
+                        ],
+                        justify="flex-end",
+                    ),
+                ],
+                gap="sm",
+            ),
+        ],
+    )
+
+
+def render_team_delete_modal():
+    return dmc.Modal(
+        id="user-team-delete-modal",
+        title="Delete team",
+        opened=False,
+        centered=True,
+        children=[
+            dmc.Stack(
+                [
+                    html.Div(id="user-team-delete-body"),
+                    dmc.Text(
+                        "This permanently removes the team, its tags, and all of "
+                        "those tags' object assignments. This cannot be undone.",
+                        size="sm",
+                        c="dimmed",
+                    ),
+                    html.Div(id="user-team-delete-message"),
+                    dmc.Group(
+                        [
+                            dmc.Button(
+                                "Cancel",
+                                id="cancel-team-delete-button",
+                                variant="light",
+                                n_clicks=0,
+                            ),
+                            dmc.Button(
+                                "Delete",
+                                id="confirm-team-delete-button",
+                                color="red",
+                                n_clicks=0,
+                            ),
+                        ],
+                        justify="flex-end",
+                    ),
+                ],
+                gap="sm",
+            ),
+        ],
+    )
 
 
 def tags_tab(tags):
@@ -484,6 +565,10 @@ def line(label, value):
 
 def can_manage_team_members(membership):
     return membership.get("role") in TEAM_MEMBER_MANAGER_ROLES
+
+
+def is_team_owner(membership):
+    return membership.get("role") == "owner"
 
 
 def generate_username(forename, surname):
@@ -706,6 +791,19 @@ def team_membership_block(
                                     if can_manage_team_members(item)
                                     else None
                                 ),
+                                (
+                                    dmc.Button(
+                                        "Edit",
+                                        id={
+                                            "type": "edit-team-button",
+                                            "team_id": item.get("team_id"),
+                                        },
+                                        n_clicks=0,
+                                        variant="light",
+                                    )
+                                    if is_team_owner(item)
+                                    else None
+                                ),
                                 dmc.Button(
                                     "Leave",
                                     id={
@@ -715,6 +813,20 @@ def team_membership_block(
                                     n_clicks=0,
                                     variant="subtle",
                                     color="red",
+                                ),
+                                (
+                                    dmc.Button(
+                                        "Delete",
+                                        id={
+                                            "type": "delete-team-button",
+                                            "team_id": item.get("team_id"),
+                                        },
+                                        n_clicks=0,
+                                        variant="subtle",
+                                        color="red",
+                                    )
+                                    if is_team_owner(item)
+                                    else None
                                 ),
                             ]),
                         ],
@@ -934,6 +1046,16 @@ def fetch_api_data(endpoint: str, token: str, logger):
     )
     logger.info({"info": f"{endpoint} response status: {response.status_code}"})
     return response
+
+
+def _fetch_user_teams(token, logger):
+    response = fetch_api_data("user/teams", token, logger)
+    return response.json() if response.status_code == 200 else []
+
+
+def _fetch_user_tags(token, logger):
+    response = fetch_api_data("tags", token, logger)
+    return response.json() if response.status_code == 200 else []
 
 
 def delete_api_data(endpoint: str, token: str, logger):
@@ -1663,6 +1785,217 @@ def leave_team_from_membership_list(n_clicks, button_ids):
         team_membership_block(updated_teams),
         updated_teams,
         create_message_banner("Left team.", "success"),
+    )
+
+
+@callback(
+    [
+        Output("edit-team-name", "value"),
+        Output("edit-team-description", "value"),
+        Output("user-team-edit-target", "data"),
+        Output("user-team-edit-message", "children"),
+        Output("user-team-edit-modal", "opened"),
+    ],
+    Input({"type": "edit-team-button", "team_id": dash.ALL}, "n_clicks"),
+    State("user-teams-store", "data"),
+    prevent_initial_call=True,
+)
+def open_team_edit_modal(n_clicks, memberships):
+    if not any(n_clicks or []):
+        return no_update, no_update, no_update, no_update, no_update
+
+    triggered = dash.ctx.triggered_id
+    if not triggered:
+        return no_update, no_update, no_update, no_update, no_update
+
+    team_id = str(triggered.get("team_id"))
+    team = next(
+        (item for item in (memberships or []) if str(item.get("team_id")) == team_id),
+        None,
+    )
+    if team is None:
+        return no_update, no_update, no_update, no_update, no_update
+
+    return (
+        team.get("team_name") or "",
+        team.get("team_description") or "",
+        {"team_id": team_id},
+        html.Div(),
+        True,
+    )
+
+
+@callback(
+    Output("user-team-edit-modal", "opened", allow_duplicate=True),
+    Input("cancel-team-edit-button", "n_clicks"),
+    prevent_initial_call=True,
+)
+def cancel_team_edit(n_clicks):
+    if not n_clicks:
+        return no_update
+    return False
+
+
+@callback(
+    [
+        Output("user-teams-panel", "children", allow_duplicate=True),
+        Output("user-teams-store", "data", allow_duplicate=True),
+        Output("user-tags-panel", "children", allow_duplicate=True),
+        Output("user-tags-store", "data", allow_duplicate=True),
+        Output("user-page-banner", "children", allow_duplicate=True),
+        Output("user-team-edit-message", "children", allow_duplicate=True),
+        Output("user-team-edit-modal", "opened", allow_duplicate=True),
+    ],
+    Input("save-team-edit-button", "n_clicks"),
+    [
+        State("edit-team-name", "value"),
+        State("edit-team-description", "value"),
+        State("user-team-edit-target", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def save_team_edit(n_clicks, name, description, target):
+    no_op = (no_update,) * 7
+    if not n_clicks or not target:
+        return no_op
+
+    if not name or not str(name).strip():
+        return (
+            *(no_update,) * 5,
+            create_message_banner("Team name is required.", "warning"),
+            no_update,
+        )
+
+    team_id = target.get("team_id")
+    logger = current_app.config["TXV_LOGGER"]
+    token = get_jwt_from_request(request)
+    response = patch_api_data(
+        f"teams/{team_id}",
+        token,
+        {"name": str(name).strip(), "description": description or None},
+        logger,
+    )
+
+    if response.status_code != 200:
+        error_message = "Could not update team right now."
+        try:
+            error_message = response.json().get("error", error_message)
+        except ValueError:
+            pass
+        # Keep the modal open and show the error inline so the user can retry.
+        return (
+            *(no_update,) * 5,
+            create_message_banner(error_message, "error"),
+            no_update,
+        )
+
+    updated_teams = _fetch_user_teams(token, logger)
+    updated_tags = _fetch_user_tags(token, logger)
+    return (
+        team_membership_block(updated_teams),
+        updated_teams,
+        tag_block(updated_tags),
+        updated_tags,
+        create_message_banner("Team updated.", "success"),
+        html.Div(),
+        False,
+    )
+
+
+@callback(
+    [
+        Output("user-team-delete-target", "data"),
+        Output("user-team-delete-body", "children"),
+        Output("user-team-delete-message", "children"),
+        Output("user-team-delete-modal", "opened"),
+    ],
+    Input({"type": "delete-team-button", "team_id": dash.ALL}, "n_clicks"),
+    State("user-teams-store", "data"),
+    prevent_initial_call=True,
+)
+def open_team_delete_modal(n_clicks, memberships):
+    if not any(n_clicks or []):
+        return no_update, no_update, no_update, no_update
+
+    triggered = dash.ctx.triggered_id
+    if not triggered:
+        return no_update, no_update, no_update, no_update
+
+    team_id = str(triggered.get("team_id"))
+    team = next(
+        (item for item in (memberships or []) if str(item.get("team_id")) == team_id),
+        None,
+    )
+    team_name = team.get("team_name") if team else None
+
+    return (
+        {"team_id": team_id},
+        dmc.Text(
+            f'Delete the team "{team_name or team_id}"?',
+            fw=600,
+        ),
+        html.Div(),
+        True,
+    )
+
+
+@callback(
+    Output("user-team-delete-modal", "opened", allow_duplicate=True),
+    Input("cancel-team-delete-button", "n_clicks"),
+    prevent_initial_call=True,
+)
+def cancel_team_delete(n_clicks):
+    if not n_clicks:
+        return no_update
+    return False
+
+
+@callback(
+    [
+        Output("user-teams-panel", "children", allow_duplicate=True),
+        Output("user-teams-store", "data", allow_duplicate=True),
+        Output("user-tags-panel", "children", allow_duplicate=True),
+        Output("user-tags-store", "data", allow_duplicate=True),
+        Output("user-page-banner", "children", allow_duplicate=True),
+        Output("user-team-delete-message", "children", allow_duplicate=True),
+        Output("user-team-delete-modal", "opened", allow_duplicate=True),
+    ],
+    Input("confirm-team-delete-button", "n_clicks"),
+    State("user-team-delete-target", "data"),
+    prevent_initial_call=True,
+)
+def confirm_team_delete(n_clicks, target):
+    no_op = (no_update,) * 7
+    if not n_clicks or not target:
+        return no_op
+
+    team_id = target.get("team_id")
+    logger = current_app.config["TXV_LOGGER"]
+    token = get_jwt_from_request(request)
+    response = delete_api_data(f"teams/{team_id}", token, logger)
+
+    if response.status_code != 200:
+        error_message = "Could not delete team right now."
+        try:
+            error_message = response.json().get("error", error_message)
+        except ValueError:
+            pass
+        return (
+            *(no_update,) * 5,
+            create_message_banner(error_message, "error"),
+            no_update,
+        )
+
+    updated_teams = _fetch_user_teams(token, logger)
+    updated_tags = _fetch_user_tags(token, logger)
+    return (
+        team_membership_block(updated_teams),
+        updated_teams,
+        tag_block(updated_tags),
+        updated_tags,
+        create_message_banner("Team deleted.", "success"),
+        html.Div(),
+        False,
     )
 
 
