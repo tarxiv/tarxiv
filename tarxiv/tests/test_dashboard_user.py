@@ -86,35 +86,20 @@ def test_team_membership_block_hides_manage_members_for_non_admin(user_module):
     assert "Manage Members" not in labels
 
 
-def test_team_membership_block_renders_member_manager_when_open(
-    user_module, team_memberships
-):
-    block = user_module.team_membership_block(
-        team_memberships,
-        manager_open_states={"team-owner": True},
-        member_search_results={
-            "team-owner": [
-                {
-                    "id": "user-1",
-                    "username": "ada",
-                    "email": "ada@example.com",
-                }
-            ]
-        },
-        team_members={
-            "team-owner": [{"user_id": "user-9", "username": "owner", "role": "owner"}]
-        },
-    )
+def test_team_membership_block_manage_button_opens_modal(user_module, team_memberships):
+    # The card no longer renders an inline manager; the "Manage Members" button
+    # just opens the singleton modal (keyed by team so the open callback knows
+    # which team to load).
+    block = user_module.team_membership_block(team_memberships)
 
-    buttons = find_components(block, dmc.Button)
-    labels = [button.children for button in buttons]
-    texts = [getattr(t, "children", None) for t in find_components(block, dmc.Text)]
-
-    assert "Hide Member Manager" in labels
-    assert "Add to team" in labels
-    # The current-members list is rendered with the owner's username.
-    assert "Current members" in texts
-    assert "owner" in texts
+    manage_buttons = [
+        button
+        for button in find_components(block, dmc.Button)
+        if isinstance(button.id, dict) and button.id.get("type") == "open-team-manage"
+    ]
+    assert len(manage_buttons) == 1
+    assert manage_buttons[0].id["team_id"] == "team-owner"
+    assert manage_buttons[0].children == "Manage Members"
 
 
 def test_team_member_list_block_empty_and_loading(user_module):
@@ -130,9 +115,7 @@ def test_member_search_results_disable_existing_members(user_module):
         {"id": "user-1", "username": "already", "email": "a@example.com"},
         {"id": "user-2", "username": "newbie", "email": "b@example.com"},
     ]
-    block = user_module.team_member_search_results_block(
-        "team-owner", users, member_ids=["user-1"]
-    )
+    block = user_module.team_member_search_results_block(users, member_ids=["user-1"])
     button_user_ids = {
         button.id["user_id"]
         for button in find_components(block, dmc.Button)
@@ -148,23 +131,22 @@ def test_member_search_results_disable_existing_members(user_module):
 
 
 def test_add_team_member_rejects_existing_member(user_module, monkeypatch):
+    # The add button is keyed only by user_id; the team comes from the target store.
     monkeypatch.setattr(
-        dash,
-        "ctx",
-        SimpleNamespace(triggered_id={"team_id": "team-owner", "user_id": "user-1"}),
+        dash, "ctx", SimpleNamespace(triggered_id={"user_id": "user-1"})
     )
     post_api_data = MagicMock()
     monkeypatch.setattr(user_module, "post_api_data", post_api_data)
 
-    team_members = {"team-owner": [{"user_id": "user-1", "username": "already"}]}
-    banner, panel, members, results = user_module.add_team_member(
-        [1], [], {}, {}, team_members
-    )
+    target = {"team_id": "team-owner", "team_name": "Owners"}
+    members = [{"user_id": "user-1", "username": "already"}]
+    # Returns (members_store, list_children, results_store, results_children, message).
+    result = user_module.add_team_member([1], target, [], members)
 
-    assert banner_title(banner) == "That user is already a member of the team."
+    assert banner_title(result[4]) == "That user is already a member of the team."
     # The client guard must short-circuit before calling the API.
     post_api_data.assert_not_called()
-    assert panel is dash.no_update
+    assert result[0] is dash.no_update
 
 
 def test_generate_username_uses_name_and_is_unique_ish(user_module):
@@ -218,7 +200,7 @@ def test_tag_create_form_uses_color_input(user_module):
     assert color_inputs[0].id == "new-tag-color"
 
 
-def test_toggle_team_member_manager_updates_open_state(
+def test_open_team_manage_modal_loads_members(
     user_module, team_memberships, monkeypatch
 ):
     monkeypatch.setattr(
@@ -238,52 +220,38 @@ def test_toggle_team_member_manager_updates_open_state(
     fetch_api_data = MagicMock(return_value=response)
     monkeypatch.setattr(user_module, "fetch_api_data", fetch_api_data)
 
-    panel, open_state, members = user_module.toggle_team_member_manager(
-        [1], team_memberships, {}, {}, {}
-    )
+    # Returns: (target, team_name, members_store, list_children, results_store,
+    #           results_children, search_input_value, message, opened).
+    result = user_module.open_team_manage_modal([1], team_memberships)
 
-    assert open_state == {"team-owner": True}
-    assert members["team-owner"][0]["username"] == "ada"
+    target, members_store, opened = result[0], result[2], result[8]
+    assert target == {"team_id": "team-owner", "team_name": "Owners"}
+    assert members_store[0]["username"] == "ada"
+    assert opened is True
+    # Member list is loaded from the backend on open.
     assert fetch_api_data.call_args.args[0] == "teams/team-owner/members"
-    buttons = find_components(panel, dmc.Button)
-    assert "Hide Member Manager" in [button.children for button in buttons]
 
 
-def test_search_team_members_requires_query(user_module, monkeypatch):
-    monkeypatch.setattr(
-        dash, "ctx", SimpleNamespace(triggered_id={"team_id": "team-owner"})
+def test_search_team_members_requires_query(user_module):
+    # Blank query -> no API call, just a warning message in the modal.
+    # Returns (results_store, results_children, message).
+    results_store, results_children, message = user_module.search_team_members(
+        1, "   ", []
     )
 
-    panel, results, banner = user_module.search_team_members(
-        [1],
-        [{"team_id": "team-owner"}],
-        ["   "],
-        [],
-        {"team-owner": True},
-        {},
-        {},
-    )
-
-    assert panel is dash.no_update
-    assert results is dash.no_update
-    assert banner_title(banner) == "Enter a user search query."
+    assert results_store is dash.no_update
+    assert results_children is dash.no_update
+    assert banner_title(message) == "Enter a user search query."
 
 
-def test_search_team_members_updates_results(
-    user_module, team_memberships, monkeypatch
-):
-    monkeypatch.setattr(
-        dash, "ctx", SimpleNamespace(triggered_id={"team_id": "team-owner"})
-    )
+def test_search_team_members_updates_results(user_module, monkeypatch):
     monkeypatch.setattr(
         user_module, "current_app", SimpleNamespace(config={"TXV_LOGGER": MagicMock()})
     )
     monkeypatch.setattr(user_module, "request", object())
     monkeypatch.setattr(user_module, "get_jwt_from_request", lambda _request: "token")
 
-    response = MagicMock()
-    response.status_code = 200
-    response.json.return_value = [
+    found_users = [
         {
             "id": "user-1",
             "username": "ada",
@@ -292,43 +260,29 @@ def test_search_team_members_updates_results(
             "surname": "Lovelace",
         }
     ]
+    response = MagicMock()
+    response.status_code = 200
+    response.json.return_value = found_users
     fetch_api_data = MagicMock(return_value=response)
     monkeypatch.setattr(user_module, "fetch_api_data", fetch_api_data)
 
-    panel, results, banner = user_module.search_team_members(
-        [1],
-        [{"team_id": "team-owner"}],
-        ["ada lovelace"],
-        team_memberships,
-        {"team-owner": True},
-        {},
-        {},
+    # members State is empty here, so the result is addable.
+    results_store, results_children, message = user_module.search_team_members(
+        1, "ada lovelace", []
     )
 
-    assert results == {
-        "team-owner": [
-            {
-                "id": "user-1",
-                "username": "ada",
-                "email": "ada@example.com",
-                "forename": "Ada",
-                "surname": "Lovelace",
-            }
-        ]
-    }
-    assert banner.__class__.__name__ == "Div"
+    assert results_store == found_users
+    assert message.__class__.__name__ == "Div"
     fetch_api_data.assert_called_once()
     assert fetch_api_data.call_args.args[0] == "users/search?q=ada%20lovelace"
 
-    buttons = find_components(panel, dmc.Button)
+    buttons = find_components(results_children, dmc.Button)
     assert "Add to team" in [button.children for button in buttons]
 
 
 def test_add_team_member_success(user_module, monkeypatch):
     monkeypatch.setattr(
-        dash,
-        "ctx",
-        SimpleNamespace(triggered_id={"team_id": "team-owner", "user_id": "user-1"}),
+        dash, "ctx", SimpleNamespace(triggered_id={"user_id": "user-1"})
     )
     monkeypatch.setattr(
         user_module, "current_app", SimpleNamespace(config={"TXV_LOGGER": MagicMock()})
@@ -350,18 +304,18 @@ def test_add_team_member_success(user_module, monkeypatch):
     fetch_api_data = MagicMock(return_value=members_response)
     monkeypatch.setattr(user_module, "fetch_api_data", fetch_api_data)
 
-    search_results = {
-        "team-owner": [{"id": "user-1", "username": "ada", "email": "ada@example.com"}]
-    }
-    banner, panel, members, updated_results = user_module.add_team_member(
-        [1], [], {"team-owner": True}, search_results, {}
+    target = {"team_id": "team-owner", "team_name": "Owners"}
+    search_results = [{"id": "user-1", "username": "ada", "email": "ada@example.com"}]
+    # Returns (members_store, list_children, results_store, results_children, message).
+    members, _list, updated_results, _results_children, message = (
+        user_module.add_team_member([1], target, search_results, [])
     )
 
-    assert banner_title(banner) == "Ada added to the team."
-    # Added user is dropped from the search results for that team.
-    assert updated_results["team-owner"] == []
+    assert banner_title(message) == "Ada added to the team."
+    # Added user is dropped from the search results.
+    assert updated_results == []
     # Member list refreshed from the backend.
-    assert members["team-owner"][0]["username"] == "ada"
+    assert members[0]["username"] == "ada"
     post_api_data.assert_called_once_with(
         "teams/team-owner/members",
         "token",
@@ -370,11 +324,9 @@ def test_add_team_member_success(user_module, monkeypatch):
     )
 
 
-def test_add_team_member_returns_error_banner(user_module, monkeypatch):
+def test_add_team_member_returns_error_message(user_module, monkeypatch):
     monkeypatch.setattr(
-        dash,
-        "ctx",
-        SimpleNamespace(triggered_id={"team_id": "team-owner", "user_id": "user-1"}),
+        dash, "ctx", SimpleNamespace(triggered_id={"user_id": "user-1"})
     )
     monkeypatch.setattr(
         user_module, "current_app", SimpleNamespace(config={"TXV_LOGGER": MagicMock()})
@@ -387,12 +339,12 @@ def test_add_team_member_returns_error_banner(user_module, monkeypatch):
     response.json.return_value = {"error": "Already on the team."}
     monkeypatch.setattr(user_module, "post_api_data", MagicMock(return_value=response))
 
-    banner, panel, members, updated_results = user_module.add_team_member(
-        [1], [], {}, {}, {}
-    )
+    target = {"team_id": "team-owner", "team_name": "Owners"}
+    result = user_module.add_team_member([1], target, [], [])
 
-    assert banner_title(banner) == "Already on the team."
-    assert panel is dash.no_update
+    # On error, only the message slot is set; stores/children stay untouched.
+    assert banner_title(result[4]) == "Already on the team."
+    assert result[0] is dash.no_update
 
 
 def test_team_card_shows_edit_delete_for_owner_only(user_module, team_memberships):

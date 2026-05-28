@@ -1,4 +1,27 @@
-"""HFS - created with help from GPT 4o"""
+"""API route tests. (Originally drafted with help from GPT-4o.)
+
+These are *route-layer* tests, not database tests. The ``mock_api`` fixture
+(in ``conftest.py``) builds a real ``API`` Flask app but replaces ``api.user_db``
+and ``api.txv_db`` with ``MagicMock``s. So a test exercises everything the HTTP
+layer does -- auth/token checking, JSON request parsing, DTO validation,
+response serialization, and the mapping of data-layer exceptions to HTTP status
+codes -- while the data layer itself is faked. The real ``user_db`` behaviour is
+covered separately by ``test_database_user_integration.py``.
+
+Because ``user_db`` is a mock, calling e.g. ``user_db.create_team(...)`` returns a
+bare ``MagicMock`` by default, which the route could not serialize. Each test
+therefore stubs the seam:
+
+* ``user_db.<method>.return_value = <DTO>`` -- pretend the data layer succeeded
+  and returned this object, so we can assert the route serializes it correctly
+  and returns the right success status.
+* ``user_db.<method>.side_effect = <SomeError>`` -- pretend the data layer
+  raised, so we can assert the route translates that error into the right HTTP
+  status (e.g. ``DuplicateValueError`` -> 409, ``AccessDeniedError`` -> 403).
+
+``user_db.<method>.call_args`` / ``assert_called_once_with(...)`` are then used to
+check the route forwarded the right (parsed) arguments to the data layer.
+"""
 
 import uuid
 
@@ -10,6 +33,7 @@ from tarxiv.auth.token_utils import sign_token
 
 @pytest.fixture
 def authenticated_user():
+    # A representative persisted user; tests use its id to build a matching token.
     return tarxiv_dto.User.model_validate({
         "id": uuid.uuid4(),
         "username": "ada",
@@ -21,6 +45,8 @@ def authenticated_user():
 
 @pytest.fixture
 def auth_token(authenticated_user):
+    # A validly signed JWT for that user, so requests carrying it pass the API's
+    # auth check (`_require_authenticated_user_id`) and reach the route body.
     return sign_token(
         str(authenticated_user.id),
         "orcid",
@@ -29,13 +55,9 @@ def auth_token(authenticated_user):
 
 
 def test_get_object_meta_success(mock_api):
-    # HFS - 2025-05-28: The .app stuff comes from Flask and it returns a client object
-    # that can do .post .get .put etc.. and send requests through
-    # Flask routes that Kyle defined in the API class
-    # the client objetc can also return response objects like
-    # .status_code, .json
-    # TL;DR: .app.test_client() is a fake browaser hitting
-    # the self.app.route functions in API object
+    # `app.test_client()` is a fake browser that drives the real Flask routes and
+    # returns response objects (`.status_code`, `.json`). Here we stub the object
+    # store to "find" a document and assert the route returns it verbatim.
     client = mock_api.app.test_client()
     mock_api.txv_db.get.return_value = {"foo": "bar"}
     token = sign_token("test-user", "orcid", {})
@@ -48,6 +70,7 @@ def test_get_object_meta_success(mock_api):
 
 
 def test_get_object_meta_bad_token(mock_api):
+    # No valid token -> the auth check rejects the request before any DB call.
     client = mock_api.app.test_client()
     response = client.post(
         "/get_object_meta/test_obj", json={}, headers={"Authorization": "WRONG"}
@@ -57,6 +80,7 @@ def test_get_object_meta_bad_token(mock_api):
 
 
 def test_get_object_meta_missing_obj(mock_api):
+    # Data layer returns None (no such object) -> route should map that to 404.
     client = mock_api.app.test_client()
     mock_api.txv_db.get.return_value = None
     token = sign_token("test-user", "orcid", {})
@@ -68,6 +92,8 @@ def test_get_object_meta_missing_obj(mock_api):
 
 
 def test_get_user_profile_success(mock_api, authenticated_user, auth_token):
+    # Stub the lookup to return our user, then assert the route serializes it and
+    # that it passed the token's `sub` (the user id) through to `get_user`.
     client = mock_api.app.test_client()
     mock_api.user_db.get_user.return_value = authenticated_user
 
@@ -79,6 +105,9 @@ def test_get_user_profile_success(mock_api, authenticated_user, auth_token):
 
 
 def test_patch_user_profile_success(mock_api, authenticated_user, auth_token):
+    # Stub the update to echo back a modified user. Beyond the 200/serialization
+    # check, we inspect `call_args` to confirm the route parsed the JSON body into
+    # a `UserProfileUpdate` DTO (not a raw dict) before handing it to the data layer.
     client = mock_api.app.test_client()
     updated_user = authenticated_user.model_copy(update={"bio": "First programmer."})
     mock_api.user_db.update_user_profile.return_value = updated_user
@@ -97,6 +126,8 @@ def test_patch_user_profile_success(mock_api, authenticated_user, auth_token):
 
 
 def test_patch_user_profile_duplicate_username(mock_api, auth_token):
+    # Simulate the data layer hitting the unique-username constraint; the route
+    # must translate that domain error into a 409 Conflict.
     client = mock_api.app.test_client()
     from tarxiv.database_user import DuplicateValueError
 
@@ -115,6 +146,7 @@ def test_patch_user_profile_duplicate_username(mock_api, auth_token):
 
 
 def test_list_user_teams_success(mock_api, auth_token):
+    # Stub a one-team membership list and assert it is serialized to JSON.
     client = mock_api.app.test_client()
     team_id = uuid.uuid4()
     user_id = uuid.uuid4()
@@ -133,6 +165,7 @@ def test_list_user_teams_success(mock_api, auth_token):
 
 
 def test_create_team_success(mock_api, auth_token):
+    # 201 + serialization, and confirm the JSON body was parsed into a TeamCreate DTO.
     client = mock_api.app.test_client()
     created_team = tarxiv_dto.Team.model_validate({
         "id": uuid.uuid4(),
@@ -154,6 +187,8 @@ def test_create_team_success(mock_api, auth_token):
 
 
 def test_search_users_success(mock_api, auth_token):
+    # Assert the `q` query-string param is forwarded to `search_users` and results
+    # are serialized.
     client = mock_api.app.test_client()
     mock_api.user_db.search_users.return_value = [
         tarxiv_dto.UserSummary.model_validate({
@@ -171,6 +206,7 @@ def test_search_users_success(mock_api, auth_token):
 
 
 def test_search_teams_success(mock_api, auth_token):
+    # Team search results (including the `is_member` flag) are serialized as JSON.
     client = mock_api.app.test_client()
     mock_api.user_db.search_teams.return_value = [
         tarxiv_dto.TeamSummary.model_validate({
@@ -190,6 +226,7 @@ def test_search_teams_success(mock_api, auth_token):
 
 
 def test_add_team_member_success(mock_api, auth_token):
+    # Happy path: data layer returns the new membership, route returns 201.
     client = mock_api.app.test_client()
     membership = tarxiv_dto.TeamMembership.model_validate({
         "team_id": uuid.uuid4(),
@@ -209,6 +246,8 @@ def test_add_team_member_success(mock_api, auth_token):
 
 
 def test_add_team_member_duplicate_returns_conflict(mock_api, auth_token):
+    # The data layer rejects re-adding an existing member (the demotion bug guard);
+    # the route must surface that as 409, not a 500.
     from tarxiv.database_user import DuplicateValueError
 
     client = mock_api.app.test_client()
@@ -228,6 +267,7 @@ def test_add_team_member_duplicate_returns_conflict(mock_api, auth_token):
 
 
 def test_list_team_members_success(mock_api, auth_token):
+    # Member list (with joined user fields) is serialized as JSON.
     client = mock_api.app.test_client()
     team_id = uuid.uuid4()
     user_id = uuid.uuid4()
@@ -251,6 +291,7 @@ def test_list_team_members_success(mock_api, auth_token):
 
 
 def test_list_team_members_forbidden_for_non_member(mock_api, auth_token):
+    # Non-members are blocked in the data layer; the route maps that to 403.
     from tarxiv.database_user import AccessDeniedError
 
     client = mock_api.app.test_client()
@@ -268,6 +309,8 @@ def test_list_team_members_forbidden_for_non_member(mock_api, auth_token):
 
 
 def test_update_team_success(mock_api, auth_token):
+    # 200 + serialization, and confirm the body parsed into a TeamUpdate DTO
+    # (call_args.args[2] because update_team(team_id, acting_user_id, team_update)).
     client = mock_api.app.test_client()
     team_id = uuid.uuid4()
     mock_api.user_db.update_team.return_value = tarxiv_dto.Team.model_validate({
@@ -289,6 +332,7 @@ def test_update_team_success(mock_api, auth_token):
 
 
 def test_update_team_duplicate_name(mock_api, auth_token):
+    # Renaming to an existing team name -> unique-constraint error -> 409.
     from tarxiv.database_user import DuplicateValueError
 
     client = mock_api.app.test_client()
@@ -308,6 +352,7 @@ def test_update_team_duplicate_name(mock_api, auth_token):
 
 
 def test_update_team_forbidden_for_non_owner(mock_api, auth_token):
+    # Editing is owner-only; a non-owner attempt raises AccessDeniedError -> 403.
     from tarxiv.database_user import AccessDeniedError
 
     client = mock_api.app.test_client()
@@ -327,6 +372,7 @@ def test_update_team_forbidden_for_non_owner(mock_api, auth_token):
 
 
 def test_delete_team_success(mock_api, auth_token):
+    # delete_team returns True (a row was deleted) -> 200 with a "deleted" status.
     client = mock_api.app.test_client()
     team_id = uuid.uuid4()
     mock_api.user_db.delete_team.return_value = True
@@ -338,6 +384,7 @@ def test_delete_team_success(mock_api, auth_token):
 
 
 def test_delete_team_not_found(mock_api, auth_token):
+    # delete_team returns False (nothing matched) -> route maps that to 404.
     client = mock_api.app.test_client()
     team_id = uuid.uuid4()
     mock_api.user_db.delete_team.return_value = False
@@ -348,6 +395,7 @@ def test_delete_team_not_found(mock_api, auth_token):
 
 
 def test_delete_team_forbidden_for_non_owner(mock_api, auth_token):
+    # Deleting is owner-only; a non-owner attempt raises AccessDeniedError -> 403.
     from tarxiv.database_user import AccessDeniedError
 
     client = mock_api.app.test_client()
@@ -363,6 +411,7 @@ def test_delete_team_forbidden_for_non_owner(mock_api, auth_token):
 
 
 def test_join_team_success(mock_api, auth_token):
+    # Self-join returns the new membership -> 201.
     client = mock_api.app.test_client()
     membership = tarxiv_dto.TeamMembership.model_validate({
         "team_id": uuid.uuid4(),
@@ -382,6 +431,7 @@ def test_join_team_success(mock_api, auth_token):
 
 
 def test_leave_team_success(mock_api, auth_token):
+    # leave_team returns True (membership removed) -> 200 with the team id echoed back.
     client = mock_api.app.test_client()
     team_id = uuid.uuid4()
     mock_api.user_db.leave_team.return_value = True
@@ -397,6 +447,7 @@ def test_leave_team_success(mock_api, auth_token):
 
 
 def test_list_tags_success(mock_api, auth_token):
+    # The authenticated user's visible tags are serialized as JSON.
     client = mock_api.app.test_client()
     mock_api.user_db.list_tags.return_value = [
         tarxiv_dto.Tag.model_validate({
@@ -414,6 +465,7 @@ def test_list_tags_success(mock_api, auth_token):
 
 
 def test_list_objects_for_tag_success(mock_api, auth_token):
+    # Objects carrying a given tag are serialized; limit/offset come from the query string.
     client = mock_api.app.test_client()
     tag_id = uuid.uuid4()
     mock_api.user_db.list_objects_for_tag.return_value = [
@@ -430,6 +482,8 @@ def test_list_objects_for_tag_success(mock_api, auth_token):
 
 
 def test_assign_object_tag_success(mock_api, auth_token):
+    # Assigning a tag to an object returns the nested assignment view (201), so we
+    # also check the embedded tag serializes.
     client = mock_api.app.test_client()
     tag = tarxiv_dto.Tag.model_validate({
         "id": uuid.uuid4(),
@@ -458,6 +512,7 @@ def test_assign_object_tag_success(mock_api, auth_token):
 
 
 def test_list_object_tags_success(mock_api, auth_token):
+    # The tags visible to this user on a given object are serialized.
     client = mock_api.app.test_client()
     tag = tarxiv_dto.Tag.model_validate({
         "id": uuid.uuid4(),
@@ -484,6 +539,7 @@ def test_list_object_tags_success(mock_api, auth_token):
 
 
 def test_delete_object_tag_success(mock_api, auth_token):
+    # Removing an assignment returns True -> 200 with a "deleted" status.
     client = mock_api.app.test_client()
     mock_api.user_db.remove_object_tag_assignment.return_value = True
 
