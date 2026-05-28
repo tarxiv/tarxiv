@@ -96,7 +96,7 @@ def account_nav_hovercard(
                 "Logout",
                 variant="outline",
                 size="xs",
-                id="auth-logout-button"
+                id="nav-logout-button",
             ),
         ]
 

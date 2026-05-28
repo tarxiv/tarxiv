@@ -11,6 +11,7 @@ def tagged_module(monkeypatch):
 
     return importlib.reload(tagged)
 
+# TODO: These are heavily coupled to the current implementation and of questionable value.
 
 def test_tag_option_label_team_uses_team_name(tagged_module):
     label = tagged_module.tag_option_label({
