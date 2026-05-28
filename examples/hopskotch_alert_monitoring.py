@@ -1,7 +1,6 @@
 ####################################################################################
 # Sample Script that will allow users to monitor tarxiv events via hopskotch alerts
 ####################################################################################
-from fontTools.misc.psOperators import ps_string
 from hop.auth import Auth
 from hop import Stream
 import datetime
