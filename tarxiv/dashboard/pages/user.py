@@ -673,11 +673,14 @@ def team_membership_block(
                                         or f"Team {item.get('team_id')}",
                                         fw=600,
                                     ),
-                                    dmc.Text(
-                                        item.get("team_description")
-                                        or str(item.get("team_id")),
-                                        size="sm",
-                                        c="dimmed",
+                                    (
+                                        dmc.Text(
+                                            item.get("team_description"),
+                                            size="sm",
+                                            c="dimmed",
+                                        )
+                                        if item.get("team_description")
+                                        else None
                                     ),
                                 ],
                                 gap=0,
@@ -851,10 +854,14 @@ def tag_section(title, tags):
                                             ),
                                             variant="light",
                                         ),
-                                        dmc.Text(
-                                            tag.get("description") or "No description",
-                                            size="sm",
-                                            c="dimmed",
+                                        (
+                                            dmc.Text(
+                                                tag.get("description"),
+                                                size="sm",
+                                                c="dimmed",
+                                            )
+                                            if tag.get("description")
+                                            else None
                                         ),
                                     ],
                                     gap="xs",
