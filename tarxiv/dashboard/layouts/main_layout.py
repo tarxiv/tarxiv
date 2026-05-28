@@ -1,9 +1,12 @@
 """Main dashboard layout."""
 
+import os
+
 from dash import html, dcc
 import dash
 import flask
 import dash_mantine_components as dmc
+import requests
 from ..components import (
     get_theme_components,
     footer_card,
@@ -12,7 +15,36 @@ from ..components import (
     avatar_fallback,
     avatar_image,
 )
-from ...auth import get_authenticated_user
+from ...auth import get_authenticated_user, get_jwt_from_request
+
+
+def _fetch_live_profile(token):
+    """Fetch the current profile from the API.
+
+    The JWT ``profile`` claim is a snapshot taken at login, so fields edited
+    afterwards (e.g. email) can be stale. This reads the live record and falls
+    back to ``None`` on any error so the caller can use the JWT snapshot.
+    """
+    if not token:
+        return None
+    host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
+    port = os.getenv("TARXIV_API_PORT", "9001")
+    api_url = os.getenv("TARXIV_INTERNAL_API_URL", f"http://{host}:{port}")
+    try:
+        response = requests.get(
+            url=f"{api_url}/user",
+            timeout=5,
+            headers={
+                "accept": "application/json",
+                "Authorization": f"Bearer {token}",
+            },
+        )
+    except requests.RequestException:
+        return None
+    if response.status_code != 200:
+        return None
+    return response.json()
+
 
 SETTING_DEFAULTS = {  # These defaults need to correspond with the PERMISSION_MAP in cookie_callbacks.py
     "theme": "tarxiv_light",
@@ -60,6 +92,12 @@ def account_nav_hovercard(
             dmc.Anchor(
                 "View account", href=user_page["relative_path"], size="xs", mt="xs"
             ),
+            dmc.Button(
+                "Logout",
+                variant="outline",
+                size="xs",
+                id="auth-logout-button"
+            ),
         ]
 
     return dmc.HoverCard(
@@ -67,8 +105,15 @@ def account_nav_hovercard(
         position="right",
         shadow="md",
         openDelay=150,
+        closeDelay=500,
         children=[
-            dmc.HoverCardTarget(nav_link),
+            dmc.HoverCardTarget(
+                nav_link,
+                # Here we have to pass style props to the dmc.Box wrapper using
+                # boxWrapperProps (see https://www.dash-mantine-components.com/components/hovercard
+                # and https://www.dash-mantine-components.com/style-props)
+                boxWrapperProps={"w": "100%"},
+            ),
             dmc.HoverCardDropdown(
                 dmc.Stack(dropdown_children, gap="xs"),
             ),
@@ -104,18 +149,21 @@ def create_layout() -> dmc.MantineProvider:
     if flask.has_request_context():
         user_profile = get_authenticated_user(flask.request)
         if user_profile:
+            # Prefer the live record (the JWT snapshot can be stale, e.g. email).
+            live_profile = _fetch_live_profile(get_jwt_from_request(flask.request))
+            profile = {**user_profile, **(live_profile or {})}
             name = (
-                user_profile.get("username")
-                or user_profile.get("forename")
-                or user_profile.get("email")
+                profile.get("username")
+                or profile.get("forename")
+                or profile.get("email")
                 or "User"
             )
-            avatar_src = user_profile.get("picture_url")
+            avatar_src = profile.get("picture_url")
             user_icon = (
                 avatar_image(avatar_src) if avatar_src else avatar_fallback(name[:1])
             )
             account_name = name
-            account_email = user_profile.get("email")
+            account_email = profile.get("email")
             account_avatar = (
                 avatar_image(avatar_src) if avatar_src else avatar_fallback(name[:1])
             )
