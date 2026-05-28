@@ -815,6 +815,11 @@ class UserDB(TarxivModule):
         if owner_id is None:
             raise DataLayerError("Invalid tag owner state.")
 
+        if owner_type == "team":
+            owner_name = tag.owner_team.name if tag.owner_team is not None else None
+        else:
+            owner_name = tag.owner_user.username if tag.owner_user is not None else None
+
         return dto.Tag(
             id=tag.id,
             name=tag.name,
@@ -822,6 +827,7 @@ class UserDB(TarxivModule):
             color=tag.color,
             owner_type=owner_type,
             owner_id=owner_id,
+            owner_name=owner_name,
             created_at=tag.created_at,
             updated_at=tag.updated_at,
         )

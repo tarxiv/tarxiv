@@ -140,6 +140,35 @@ def test_tag_block_shows_empty_state(user_module):
     assert any("don't have any tags" in str(text) for text in texts)
 
 
+def test_tag_block_groups_team_tags_by_team(user_module):
+    tags = [
+        {"id": "t1", "name": "alpha", "owner_type": "user", "owner_id": "u1"},
+        {
+            "id": "t2",
+            "name": "beta",
+            "owner_type": "team",
+            "owner_id": "team-a",
+            "owner_name": "Alpha Team",
+        },
+        {
+            "id": "t3",
+            "name": "gamma",
+            "owner_type": "team",
+            "owner_id": "team-b",
+            "owner_name": "Beta Team",
+        },
+    ]
+    block = user_module.tag_block(tags)
+    section_titles = [
+        getattr(t, "children", "")
+        for t in find_components(block, dmc.Text)
+        if getattr(t, "fw", None) == 600
+    ]
+    assert "Personal tags" in section_titles
+    assert "Alpha Team (team)" in section_titles
+    assert "Beta Team (team)" in section_titles
+
+
 def test_tag_create_form_uses_color_input(user_module):
     form = user_module.render_tag_create_form([])
     color_inputs = find_components(form, dmc.ColorInput)

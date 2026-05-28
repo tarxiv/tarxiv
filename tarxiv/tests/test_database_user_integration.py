@@ -139,6 +139,13 @@ def test_tag_round_trip_and_visibility(monkeypatch):
         assert {tag.name for tag in teammate_tags} == {"follow-up"}
         assert outsider_tags == []
 
+        # Tags carry their owner's display name for grouping in the UI.
+        owner_tags_by_name = {tag.name: tag for tag in owner_tags}
+        assert owner_tags_by_name["follow-up"].owner_type == "team"
+        assert owner_tags_by_name["follow-up"].owner_name == "team-alpha"
+        assert owner_tags_by_name["interesting"].owner_type == "user"
+        assert owner_tags_by_name["interesting"].owner_name == "owner"
+
         personal_assignment = user_db.assign_tag_to_object(
             "2024abc",
             owner.id,

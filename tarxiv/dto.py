@@ -218,6 +218,7 @@ class Tag(BaseModel):
     color: str | None = None
     owner_type: str
     owner_id: UUID
+    owner_name: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
