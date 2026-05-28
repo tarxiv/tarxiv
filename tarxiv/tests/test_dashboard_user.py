@@ -125,6 +125,48 @@ def test_team_member_list_block_empty_and_loading(user_module):
     assert "no members" in empty.children.lower()
 
 
+def test_member_search_results_disable_existing_members(user_module):
+    users = [
+        {"id": "user-1", "username": "already", "email": "a@example.com"},
+        {"id": "user-2", "username": "newbie", "email": "b@example.com"},
+    ]
+    block = user_module.team_member_search_results_block(
+        "team-owner", users, member_ids=["user-1"]
+    )
+    button_user_ids = {
+        button.id["user_id"]
+        for button in find_components(block, dmc.Button)
+        if isinstance(button.id, dict)
+        and button.id.get("type") == "add-team-member-button"
+    }
+    badge_texts = [badge.children for badge in find_components(block, dmc.Badge)]
+
+    # Existing member gets a badge, not an add button; only the newbie is addable.
+    assert "user-2" in button_user_ids
+    assert "user-1" not in button_user_ids
+    assert "Already a member" in badge_texts
+
+
+def test_add_team_member_rejects_existing_member(user_module, monkeypatch):
+    monkeypatch.setattr(
+        dash,
+        "ctx",
+        SimpleNamespace(triggered_id={"team_id": "team-owner", "user_id": "user-1"}),
+    )
+    post_api_data = MagicMock()
+    monkeypatch.setattr(user_module, "post_api_data", post_api_data)
+
+    team_members = {"team-owner": [{"user_id": "user-1", "username": "already"}]}
+    banner, panel, members, results = user_module.add_team_member(
+        [1], [], {}, {}, team_members
+    )
+
+    assert banner_title(banner) == "That user is already a member of the team."
+    # The client guard must short-circuit before calling the API.
+    post_api_data.assert_not_called()
+    assert panel is dash.no_update
+
+
 def test_generate_username_uses_name_and_is_unique_ish(user_module):
     name = user_module.generate_username("Ada", "Lovelace")
     assert name.startswith("adalovelace")

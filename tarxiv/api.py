@@ -442,6 +442,8 @@ class API(TarxivModule):
                 return server_response(created_membership.model_dump(mode="json"), 201)
             except PermissionError as exc:
                 return server_response({"error": str(exc), "type": "token"}, 401)
+            except DuplicateValueError as exc:
+                return server_response({"error": str(exc), "type": "validation"}, 409)
             except ValueError as exc:
                 return server_response({"error": str(exc), "type": "validation"}, 400)
             except DataLayerError as exc:

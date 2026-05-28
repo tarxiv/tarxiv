@@ -105,6 +105,8 @@ class Team(TimestampMixin, Base):
     owned_tags: Mapped[list["Tag"]] = relationship(
         back_populates="owner_team",
         foreign_keys="Tag.owner_team_id",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
 

@@ -389,6 +389,22 @@ def test_update_and_delete_team(monkeypatch):
             owner.id,
             dto.TeamMembershipCreate(user_id=member.id, role="member"),
         )
+
+        # Re-adding an existing member is rejected.
+        with pytest.raises(DuplicateValueError):
+            user_db.add_user_to_team(
+                team.id,
+                owner.id,
+                dto.TeamMembershipCreate(user_id=member.id, role="member"),
+            )
+        # The owner cannot be demoted via a re-add either.
+        with pytest.raises(DuplicateValueError):
+            user_db.add_user_to_team(
+                team.id,
+                owner.id,
+                dto.TeamMembershipCreate(user_id=owner.id, role="member"),
+            )
+
         # Create a second team to collide with when testing rename uniqueness.
         user_db.create_team(
             owner.id, dto.TeamCreate(name="taken-name", description="Other")

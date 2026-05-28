@@ -508,6 +508,10 @@ class UserDB(TarxivModule):
             raise DuplicateValueError("A team with that name already exists.") from exc
         except SQLAlchemyError as exc:
             session.rollback()
+            self.logger.error(
+                {"status": f"Database error while updating team {team_id}: {exc}"},
+                exc_info=True,
+            )
             raise DataLayerError(
                 "A system error occurred while updating the team."
             ) from exc
@@ -530,6 +534,10 @@ class UserDB(TarxivModule):
             return True
         except SQLAlchemyError as exc:
             session.rollback()
+            self.logger.error(
+                {"status": f"Database error while deleting team {team_id}: {exc}"},
+                exc_info=True,
+            )
             raise DataLayerError(
                 "A system error occurred while deleting the team."
             ) from exc
@@ -561,28 +569,35 @@ class UserDB(TarxivModule):
             }:
                 raise DataLayerError("You do not have permission to add team members.")
 
-            team_membership = (
+            existing_membership = (
                 session
                 .query(orm.TeamMembership)
                 .filter(orm.TeamMembership.team_id == team_uuid)
                 .filter(orm.TeamMembership.user_id == target_user_uuid)
                 .first()
             )
-            if team_membership is None:
-                team_membership = orm.TeamMembership(
-                    team_id=team_uuid,
-                    user_id=target_user_uuid,
-                    role=membership.role,
-                )
-                session.add(team_membership)
-            else:
-                team_membership.role = membership.role
+            # Re-adding an existing member would overwrite their role (e.g. demote
+            # an owner to member, potentially leaving the team owner-less). Reject
+            # it instead; this is not a role-change endpoint.
+            if existing_membership is not None:
+                raise DuplicateValueError("This user is already a member of the team.")
+
+            team_membership = orm.TeamMembership(
+                team_id=team_uuid,
+                user_id=target_user_uuid,
+                role=membership.role,
+            )
+            session.add(team_membership)
 
             session.commit()
             session.refresh(team_membership)
             return dto.TeamMembership.model_validate(team_membership)
         except SQLAlchemyError as exc:
             session.rollback()
+            self.logger.error(
+                {"status": f"Database error while adding team member: {exc}"},
+                exc_info=True,
+            )
             raise DataLayerError(
                 "A system error occurred while updating team membership."
             ) from exc

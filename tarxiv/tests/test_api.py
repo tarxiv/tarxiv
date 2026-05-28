@@ -208,6 +208,25 @@ def test_add_team_member_success(mock_api, auth_token):
     assert response.json["user_id"] == str(membership.user_id)
 
 
+def test_add_team_member_duplicate_returns_conflict(mock_api, auth_token):
+    from tarxiv.database_user import DuplicateValueError
+
+    client = mock_api.app.test_client()
+    team_id = uuid.uuid4()
+    mock_api.user_db.add_user_to_team.side_effect = DuplicateValueError(
+        "This user is already a member of the team."
+    )
+
+    response = client.post(
+        f"/teams/{team_id}/members",
+        json={"user_id": str(uuid.uuid4()), "role": "member"},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 409
+    assert response.json["type"] == "validation"
+
+
 def test_list_team_members_success(mock_api, auth_token):
     client = mock_api.app.test_client()
     team_id = uuid.uuid4()

@@ -599,7 +599,7 @@ def user_search_result_details(user):
     return " | ".join(details) if details else str(user.get("id"))
 
 
-def team_member_search_results_block(team_id, users):
+def team_member_search_results_block(team_id, users, member_ids=None):
     if users is None:
         return dmc.Text(
             "Search for a user to add them as a member.", size="sm", c="dimmed"
@@ -607,6 +607,25 @@ def team_member_search_results_block(team_id, users):
 
     if not users:
         return dmc.Text("No users found.", size="sm", c="dimmed")
+
+    # Convert member_ids to strings for easier comparison, since user IDs from search results are strings
+    member_ids = {str(member_id) for member_id in (member_ids or [])}
+
+    def add_control(user):
+        if str(user.get("id")) in member_ids:
+            # Already in the team; show a disabled state instead of an Add button
+            # so the owner cannot re-add (which would overwrite their role).
+            return dmc.Badge("Already a member", variant="light", color="gray")
+        return dmc.Button(
+            "Add to team",
+            id={
+                "type": "add-team-member-button",
+                "team_id": team_id,
+                "user_id": user.get("id"),
+            },
+            n_clicks=0,
+            variant="light",
+        )
 
     return dmc.Stack(
         [
@@ -627,16 +646,7 @@ def team_member_search_results_block(team_id, users):
                             ],
                             gap=0,
                         ),
-                        dmc.Button(
-                            "Add to team",
-                            id={
-                                "type": "add-team-member-button",
-                                "team_id": team_id,
-                                "user_id": user.get("id"),
-                            },
-                            n_clicks=0,
-                            variant="light",
-                        ),
+                        add_control(user),
                     ],
                     justify="space-between",
                 ),
@@ -721,12 +731,18 @@ def render_team_member_manager(team_id, users=None, members=None):
             ]),
             html.Div(
                 id={"type": "team-member-search-results", "team_id": team_id},
-                children=team_member_search_results_block(team_id, users),
+                children=team_member_search_results_block(
+                    team_id, users, _member_user_ids(members)
+                ),
             ),
         ],
         gap="sm",
         mt="sm",
     )
+
+
+def _member_user_ids(members):
+    return [member.get("user_id") for member in (members or [])]
 
 
 def team_membership_block(
@@ -1455,6 +1471,22 @@ def add_team_member(
 
     team_id = str(triggered.get("team_id"))
     user_id = triggered.get("user_id")
+
+    # Client-side guard: never re-add an existing member (this would overwrite
+    # their role and can leave the team owner-less). The backend rejects this too.
+    existing_member_ids = {
+        str(member.get("user_id")) for member in (team_members or {}).get(team_id, [])
+    }
+    if str(user_id) in existing_member_ids:
+        return (
+            create_message_banner(
+                "That user is already a member of the team.", "warning"
+            ),
+            no_update,
+            no_update,
+            no_update,
+        )
+
     logger = current_app.config["TXV_LOGGER"]
     token = get_jwt_from_request(request)
     response = post_api_data(
