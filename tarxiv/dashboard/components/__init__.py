@@ -6,7 +6,6 @@ from .auth import (
 )
 from .plots import (
     create_lightcurve_plot,
-    create_sky_plot,
 )
 from .cards import (
     format_object_metadata,
@@ -33,7 +32,6 @@ __all__ = [
     "avatar_fallback",
     "avatar_image",
     "create_lightcurve_plot",
-    "create_sky_plot",
     "format_object_metadata",
     "format_cone_search_results",
     "expressive_card",

@@ -2,7 +2,17 @@ import os
 from typing import cast
 
 import dash
-from dash import html, Input, Output, State, no_update, callback, dcc, ctx
+from dash import (
+    html,
+    Input,
+    Output,
+    State,
+    no_update,
+    callback,
+    clientside_callback,
+    dcc,
+    ctx,
+)
 import dash_mantine_components as dmc
 from dash_extensions import Keyboard
 from astropy.coordinates import Angle
@@ -28,6 +38,97 @@ dash.register_page(
     name="Cone Search",
     order=2,
     icon="lucide:cone",
+)
+
+
+# Initialise the Aladin Lite widget for the cone-search results and overlay a
+# marker per found object. Triggered whenever the cone-search store updates.
+# Hover-linking (result card -> marker highlight) is attached best-effort; if
+# the Aladin Lite marker API differs, the widget and markers still render.
+clientside_callback(
+    """
+    function(storeData) {
+        if (!storeData || !storeData.results) {
+            return "No cone search results";
+        }
+
+        const ra = storeData.ra;
+        const dec = storeData.dec;
+        const results = storeData.results;
+        const radiusArcsec = storeData.radius || 60;
+        // FOV in degrees: encompass the search radius with padding (min 0.02 deg).
+        const fov = Math.max((radiusArcsec / 3600) * 3, 0.02);
+
+        function initAladin() {
+            const container = document.getElementById('cone-aladin-div');
+            if (!container || !window.A) {
+                setTimeout(initAladin, 100);
+                return;
+            }
+
+            window.A.init.then(() => {
+                container.innerHTML = '';
+                const aladin = window.A.aladin('#cone-aladin-div', {
+                    survey: 'P/PanSTARRS/DR1/color-z-zg-g',
+                    target: ra + ' ' + dec,
+                    fov: fov,
+                });
+
+                try {
+                    // Search-centre marker.
+                    const centreCat = window.A.catalog({
+                        name: 'Search centre', sourceSize: 16, color: 'red',
+                    });
+                    aladin.addCatalog(centreCat);
+                    centreCat.addSources([
+                        window.A.marker(ra, dec, {popupTitle: 'Search centre'}),
+                    ]);
+
+                    // One marker per result.
+                    const resultCat = window.A.catalog({
+                        name: 'Results', sourceSize: 12, color: '#1c7ed6',
+                    });
+                    aladin.addCatalog(resultCat);
+                    resultCat.addSources(results.map((o) =>
+                        window.A.marker(o.ra, o.dec, {
+                            popupTitle: o.obj_name,
+                            popupDesc: 'RA ' + o.ra + ', Dec ' + o.dec,
+                        })
+                    ));
+
+                    // Best-effort hover-linking: hovering a result card highlights
+                    // the matching marker. Cards render in result order, so index
+                    // by document position.
+                    const highlightCat = window.A.catalog({
+                        name: 'Highlight', sourceSize: 20, color: 'orange',
+                    });
+                    aladin.addCatalog(highlightCat);
+                    const cards = document.querySelectorAll('[id*="object-card"]');
+                    results.forEach((o, i) => {
+                        const card = cards[i];
+                        if (!card) return;
+                        card.addEventListener('mouseenter', () => {
+                            highlightCat.removeAll();
+                            highlightCat.addSources([
+                                window.A.marker(o.ra, o.dec, {popupTitle: o.obj_name}),
+                            ]);
+                        });
+                        card.addEventListener('mouseleave', () => {
+                            highlightCat.removeAll();
+                        });
+                    });
+                } catch (err) {
+                    console.warn('Aladin marker overlay failed:', err);
+                }
+            });
+        }
+
+        initAladin();
+        return "Aladin cone init";
+    }
+    """,
+    Output("cone-aladin-status", "children"),
+    Input("cone-search-store", "data"),
 )
 
 
@@ -322,7 +423,12 @@ def handle_cone_search(
         )
         logger.info({"info": f"Cone search found {len(results)} objects."})
 
-        store_data = {"results": results, "ra": ra, "dec": dec}
+        store_data = {
+            "results": results,
+            "ra": ra,
+            "dec": dec,
+            "radius": radius,
+        }
 
         return result, status_msg, success_banner, store_data, settings
     except Unauthorized as e:

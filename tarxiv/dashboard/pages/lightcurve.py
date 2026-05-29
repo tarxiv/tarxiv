@@ -48,7 +48,6 @@ def layout(id=None, **kwargs):
         results, status, banner, lc_store, aladin_store = perform_search(
             id, token, logger
         )
-        print(f"aladin_store: {aladin_store}")
     elif id and not user:
         validation = validate_token(token)
 
@@ -223,31 +222,60 @@ clientside_callback(
 )
 
 
-def _extract_tns_coordinate(meta, field_name):
-    entries = meta.get(field_name, [])
-    if not isinstance(entries, list):
-        entries = [entries]
+# Map source-keyed metadata source names to citation .bib file stems.
+# New-schema source keys use underscores (e.g. asas_sn) while the bib files
+# in aux/citations use hyphens (asas-sn.bib); this bridges the two.
+SOURCE_TO_BIB = {
+    "tns": "tns",
+    "ztf": "ztf",
+    "atlas": "atlas",
+    "atlas_twb": "atlas_twb",
+    "fink": "fink",
+    "mangrove": "mangrove",
+    "sherlock": "sherlock",
+    "asas_sn": "asas-sn",
+    "asas-sn": "asas-sn",
+    "asas_sn_skypatrol": "asas-sn_skypatrol",
+    "asas-sn_skypatrol": "asas-sn_skypatrol",
+    "lasair": "lasair",
+    "lsst": "lsst",
+}
 
-    for entry in entries:
-        if (
-            isinstance(entry, dict)
-            and entry.get("source") == "tns"
-            and "value" in entry
-        ):
-            return entry["value"]
 
-    return None
+def _extract_object_coordinates(meta):
+    """Return (ra, dec) for the Aladin target from source-keyed metadata.
+
+    Prefers TNS decimal coordinates, then any source providing
+    ``ra_deg``/``dec_deg``, and finally the top-level HMS/DMS strings (Aladin
+    accepts sexagesimal targets too). Returns (None, None) if nothing usable
+    is found.
+    """
+    data_sources = meta.get("data_sources") or {}
+
+    preferred = ["tns"] + [key for key in data_sources if key != "tns"]
+    for source in preferred:
+        payload = data_sources.get(source) or {}
+        ra = payload.get("ra_deg")
+        dec = payload.get("dec_deg")
+        if ra is not None and dec is not None:
+            return ra, dec
+
+    ra = meta.get("ra")
+    dec = meta.get("dec")
+    if ra and dec:
+        return ra, dec
+
+    return None, None
 
 
 def _build_aladin_store(meta):
-    ra_tns = _extract_tns_coordinate(meta, "ra_deg")
-    dec_tns = _extract_tns_coordinate(meta, "dec_deg")
-    if ra_tns is None or dec_tns is None:
+    ra, dec = _extract_object_coordinates(meta)
+    if ra is None or dec is None:
         return None
     return {
         "source": "tns",
-        "ra_deg": ra_tns,
-        "dec_deg": dec_tns,
+        "ra_deg": ra,
+        "dec_deg": dec,
     }
 
 
@@ -296,6 +324,54 @@ def get_metadata_data(object_id, token, logger):
     logger.error({
         "error": f"Metadata request failed for object {object_id}: "
         f"Status {response.status_code}"
+    })
+    return None
+
+
+def get_citations_data(sources, token, logger):
+    """Fetch concatenated BibTeX citations for a list of metadata source keys.
+
+    The ``/citations`` endpoint takes a JSON body of bib-file stems and returns
+    ``{"citations": "<concatenated bibtex>"}``. Source keys with no matching
+    .bib file are skipped. Returns the citation string, or None on failure /
+    when no sources resolve to a citation.
+    """
+    bib_names = []
+    for source in sources or []:
+        bib = SOURCE_TO_BIB.get(source)
+        if bib and bib not in bib_names:
+            bib_names.append(bib)
+    if not bib_names:
+        return None
+
+    host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
+    port = os.getenv("TARXIV_API_PORT", "9001")
+    api_url = os.getenv("TARXIV_INTERNAL_API_URL", f"http://{host}:{port}")
+    try:
+        response = requests.post(
+            url=f"{api_url}/citations",
+            json={"sources": bib_names},
+            timeout=10,
+            headers={
+                "accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}",
+            },
+        )
+    except requests.RequestException as e:
+        logger.error({"error": f"Citations request failed: {str(e)}"})
+        return None
+
+    logger.info({"info": f"citations response status: {response.status_code}"})
+    if response.status_code == 200:
+        try:
+            return response.json().get("citations")
+        except ValueError as e:
+            logger.error({"error": f"Failed to parse citations response: {str(e)}"})
+            return None
+
+    logger.warning({
+        "warning": f"Citations request returned status {response.status_code}"
     })
     return None
 
@@ -362,8 +438,13 @@ def perform_search(object_id, token, logger):
     # Fetch Lightcurve
     lc_data = get_lightcurve_data(object_id, token, logger)
 
+    # Fetch citations for the sources present in the metadata.
+    citation_str = get_citations_data(
+        list((meta.get("data_sources") or {}).keys()), token, logger
+    )
+
     # Display metadata
-    result = format_object_metadata(object_id, meta, logger)
+    result = format_object_metadata(object_id, meta, citation_str, logger)
     success_banner = create_message_banner(
         f"Successfully loaded object: {object_id}", "success"
     )

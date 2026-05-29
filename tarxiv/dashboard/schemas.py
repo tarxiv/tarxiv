@@ -48,23 +48,20 @@ class Detection(PropertyValue):
 
 
 class MetadataResponseModel(BaseModel):
-    """Schema for the metadata response from an object query."""
+    """Schema for the metadata response from an object query.
 
-    sources: list[Source]
-    identifiers: list[Identifier]
-    ra_deg: list[PropertyValue] | None = None
-    dec_deg: list[PropertyValue] | None = None
-    ra_hms: list[PropertyValue] | None = None
-    dec_dms: list[PropertyValue] | None = None
-    object_type: list[PropertyValue] | None = None
-    discovery_date: list[PropertyValue] | None = None
-    reporting_group: list[PropertyValue] | None = None
-    discovery_data_source: list[PropertyValue] | None = None
-    redshift: list[PropertyValue] | None = None
-    peak_mag: list[Detection] | None = None
-    latest_detection: list[Detection] | None = None
-    latest_nondetection: list[Detection] | None = None
-    latest_change: Optional[list[Detection]] = Field(default_factory=list)
+    The metadata is source-keyed: every per-source payload lives under
+    ``data_sources[<source>]`` and each source carries its own field set
+    (e.g. ``tns`` provides discovery info, ``sherlock`` provides host
+    associations, survey sources provide photometry arrays). The shape of
+    each source dict therefore varies, so ``data_sources`` is kept permissive.
+    """
+
+    tarxiv_id: str
+    source: str | None = None
+    ra: str | None = None  # top-level HMS string
+    dec: str | None = None  # top-level DMS string
+    data_sources: dict[str, dict] = Field(default_factory=dict)
 
 
 class LightcurveResponseSingle(BaseModel):
