@@ -31,7 +31,7 @@ from ..components import (
     build_cone_result_cards_page,
     create_message_banner,
 )
-from ..schemas import ConeSearchResponseModel
+from ...dto import ConeSearchResponseModel
 
 dash.register_page(
     __name__,

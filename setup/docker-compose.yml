@@ -156,7 +156,6 @@ services:
       POSTGRES_PASSWORD: ${TARXIV_POSTGRES_PASSWORD:-tarxiv}
     volumes:
       - ${TARXIV_POSTGRES_DATA_DIR:-.data/postgres/db}:/var/lib/postgresql/data:Z
-      - ./postgres-init.sql:/docker-entrypoint-initdb.d/postgres-init.sql:ro
     networks:
       - tarxiv_net
     restart: unless-stopped
@@ -175,6 +174,29 @@ services:
     depends_on:
       - postgres
     restart: unless-stopped
+
+  tarxiv-migrate:
+    profiles:
+      - tarxiv
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:${TARXIV_IMAGE_TAG:-latest}
+    command: uv run alembic upgrade head
+    volumes:
+      - ../bin:/app/bin:Z
+      - ../tarxiv:/app/tarxiv:Z
+      - ../aux/config.yml:/app/aux/config.yml:Z
+      - ../examples:/app/examples:Z
+      - ../scripts:/app/scripts:Z
+    environment:
+      TARXIV_CONFIG_DIR: /app/aux
+      TARXIV_POSTGRES_URL: ${TARXIV_POSTGRES_URL:-postgresql+psycopg2://tarxiv:password_postgres@postgres:5432/tarxiv}
+    networks:
+      - tarxiv_net
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   tarxiv-api:
     profiles:
@@ -216,6 +238,7 @@ services:
       TARXIV_API_SECRET_KEY: ${TARXIV_API_SECRET_KEY:-}
       TARXIV_JWT_SECRET: ${TARXIV_JWT_SECRET}
       TARXIV_DASHBOARD_URL: ${TARXIV_DASHBOARD_URL:-}
+      TARXIV_POSTGRES_URL: ${TARXIV_POSTGRES_URL:-postgresql+psycopg2://tarxiv:tarxiv@postgres:5432/tarxiv}
       VIRTUAL_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.tarxiv.com}
       VIRTUAL_PORT: ${TARXIV_PORT:-9001}
       LETSENCRYPT_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.tarxiv.com}

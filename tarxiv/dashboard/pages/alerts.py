@@ -91,11 +91,13 @@ def update_alerts_table(page_number):
         i = page_number - 1
 
     items_per_page = 25
+    token = get_jwt_from_request(request)
+
     response = fetch_api_data(
         "tns_alerts",
         n_rows=items_per_page,
         offset=i * items_per_page,
-        token=get_jwt_from_request(request),
+        token=token,
         logger=current_app.config["TXV_LOGGER"],
     )
 
