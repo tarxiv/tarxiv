@@ -507,11 +507,15 @@ def _build_metadata_tabs(data_sources: dict):
     )
 
 
-def _build_citation_card(citation_str: str):
-    """Build a copyable BibTeX citation card with a copy button."""
-    return expressive_card(
-        title="Citations",
-        children=html.Div(
+def _build_citation_component(citation_str: str | None):
+    """Build a copyable BibTeX citation card with a copy button.
+
+    The card is rendered even when ``citation_str`` is empty/None so the failure
+    mode is visible: an empty citations card with a fallback message means the
+    /citations call returned nothing.
+    """
+    if citation_str:
+        body = html.Div(
             [
                 dcc.Clipboard(
                     target_id="citation-bibtex",
@@ -537,8 +541,13 @@ def _build_citation_card(citation_str: str):
                 ),
             ],
             style={"position": "relative"},
-        ),
-    )
+        )
+    else:
+        body = dmc.Text(
+            "Could not load citations for this object — check the /citations API logs.",
+            c="dimmed",
+        )
+    return body
 
 
 def format_object_metadata(object_id, meta, citation_str=None, logger=None):
@@ -557,6 +566,7 @@ def format_object_metadata(object_id, meta, citation_str=None, logger=None):
     data_sources = meta.get("data_sources") or {}
 
     metadata_component = _build_metadata_tabs(data_sources)
+    citations_component = _build_citation_component(citation_str)
 
     # Lightcurve and Aladin sky-plot sit side-by-side in a 3:1 grid.
     lightcurve_card = expressive_card(
@@ -580,22 +590,26 @@ def format_object_metadata(object_id, meta, citation_str=None, logger=None):
     sections = [
         dmc.Grid(
             [
-                dmc.GridCol(lightcurve_card, span=9),  # 3/4 width
-                dmc.GridCol(aladin_card, span=3),  # 1/4 width
+                dmc.GridCol(lightcurve_card, span=6),
+                dmc.GridCol(aladin_card, span=6),
             ],
             gutter="md",
         ),
     ]
-
-    # Citations card (copyable BibTeX) below the plots.
-    if citation_str:
-        sections.append(_build_citation_card(citation_str))
 
     # Per-source metadata tabs.
     sections.append(
         expressive_card(
             children=metadata_component,
             title=f"Object Metadata: {object_id}",
+        )
+    )
+
+    # Citations card (copyable BibTeX).
+    sections.append(
+        expressive_card(
+            children=citations_component,
+            title=f"Citations: {object_id}",
         )
     )
 

@@ -306,9 +306,7 @@ USE_DUMMY_META_ENDPOINT = True
 
 def get_metadata_data(object_id, token, logger):
     """Fetch metadata for an object."""
-    endpoint = (
-        "get_object_meta_dummy" if USE_DUMMY_META_ENDPOINT else "get_object_meta"
-    )
+    endpoint = "get_object_meta_dummy" if USE_DUMMY_META_ENDPOINT else "get_object_meta"
     response = fetch_api_data(endpoint, object_id, token, logger)
 
     if response.status_code == 200:
@@ -346,10 +344,17 @@ def get_citations_data(sources, token, logger):
     when no sources resolve to a citation.
     """
     bib_names = []
+    unmapped = []
     for source in sources or []:
         bib = SOURCE_TO_BIB.get(source)
-        if bib and bib not in bib_names:
-            bib_names.append(bib)
+        if bib:
+            if bib not in bib_names:
+                bib_names.append(bib)
+        else:
+            unmapped.append(source)
+    if unmapped:
+        logger.warning({"warning": f"No citation .bib mapping for sources: {unmapped}"})
+    logger.info({"info": f"Citations: requesting bib files for {bib_names}"})
     if not bib_names:
         return None
 
@@ -374,13 +379,20 @@ def get_citations_data(sources, token, logger):
     logger.info({"info": f"citations response status: {response.status_code}"})
     if response.status_code == 200:
         try:
-            return response.json().get("citations")
+            citation_str = response.json().get("citations")
         except ValueError as e:
             logger.error({"error": f"Failed to parse citations response: {str(e)}"})
             return None
+        logger.info({
+            "info": f"Citations: received {len(citation_str or '')} chars from API"
+        })
+        return citation_str or None
 
     logger.warning({
-        "warning": f"Citations request returned status {response.status_code}"
+        "warning": (
+            f"Citations request returned status {response.status_code}: "
+            f"{response.text[:200]}"
+        )
     })
     return None
 
