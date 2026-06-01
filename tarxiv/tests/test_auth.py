@@ -180,10 +180,12 @@ class TestSignToken:
         assert "exp" in payload
         assert payload["profile"] == valid_profile
 
-    def test_sign_token_default_ttl_is_24h(self, jwt_secret, valid_profile):
+    def test_sign_token_default_ttl_is_seven_days(self, jwt_secret, valid_profile):
+        # Default TTL is 7 days (604800s) unless TARXIV_TOKEN_TTL overrides it.
         token = sign_token("sub", "orcid", valid_profile)
         payload = pyjwt.decode(token, jwt_secret, algorithms=["HS256"])
-        assert 86390 <= payload["exp"] - payload["iat"] <= 86410
+        seven_days = 7 * 86400
+        assert seven_days - 10 <= payload["exp"] - payload["iat"] <= seven_days + 10
 
     def test_sign_token_custom_ttl(self, jwt_secret, valid_profile):
         token = sign_token("sub", "orcid", valid_profile, ttl=3600)
@@ -227,7 +229,7 @@ class TestVerifyToken:
         token = sign_token("test-sub", "orcid", valid_profile)
         payload = verify_token(token)
         assert before <= payload["iat"] <= before + 2
-        assert payload["exp"] == payload["iat"] + 86400
+        assert payload["exp"] == payload["iat"] + 7 * 86400
 
     def test_verify_token_expired_raises(self, jwt_secret, valid_profile):
         # ttl=-1 produces exp = now - 1, which is immediately expired

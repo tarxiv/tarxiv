@@ -13,6 +13,7 @@ from dash import (
 from flask import request, has_request_context
 
 from ...auth import verify_token
+from ...auth.token_utils import _DEFAULT_TTL as TOKEN_TTL_SECONDS
 from ..components import create_message_banner
 
 
@@ -91,7 +92,7 @@ def register_auth_callbacks(app, logger):
             httponly=True,
             secure=is_secure,
             samesite="Lax",
-            max_age=86400,
+            max_age=TOKEN_TTL_SECONDS,
         )
 
         return banner, pathname or "/"

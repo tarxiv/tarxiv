@@ -12,7 +12,10 @@ from flask import Request
 import jwt as pyjwt
 
 _ALGORITHM = "HS256"
-_DEFAULT_TTL = 86400  # 24 hours
+# Session lifetime in seconds. Overridable via TARXIV_TOKEN_TTL; defaults to
+# 7 days. Both the JWT 'exp' claim and the dashboard's auth cookie 'max_age'
+# read from this value so the cookie isn't dropped before the JWT expires.
+_DEFAULT_TTL = int(os.environ.get("TARXIV_TOKEN_TTL", 7 * 86400))
 
 
 class TokenStatus:
