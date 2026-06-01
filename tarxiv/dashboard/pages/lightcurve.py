@@ -298,9 +298,18 @@ def fetch_api_data(endpoint, object_id, token, logger):
     return response
 
 
+# TEMPORARY: point the object page at the dummy endpoint that serves the new
+# source-keyed schema (see api.py:get_object_meta_dummy). Flip to False once the
+# real /get_object_meta endpoint emits the new schema.
+USE_DUMMY_META_ENDPOINT = True
+
+
 def get_metadata_data(object_id, token, logger):
     """Fetch metadata for an object."""
-    response = fetch_api_data("get_object_meta", object_id, token, logger)
+    endpoint = (
+        "get_object_meta_dummy" if USE_DUMMY_META_ENDPOINT else "get_object_meta"
+    )
+    response = fetch_api_data(endpoint, object_id, token, logger)
 
     if response.status_code == 200:
         try:

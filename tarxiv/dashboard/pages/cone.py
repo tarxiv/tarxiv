@@ -474,10 +474,7 @@ def get_cone_search_results(ra, dec, radius, token, logger) -> list:
 
     results = []
     logger.info({"info": f"Cone search response status: {response_cone.status_code}"})
-
-    print(response_cone.text)  # Debug: Print raw response text
-    print(response_cone.headers)  # Debug: Print response headers
-    print(response_cone.status_code)
+    logger.debug({"debug": f"Cone search raw response: {response_cone.text}"})
 
     if response_cone.status_code == 200:
         try:
