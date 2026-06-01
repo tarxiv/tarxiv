@@ -13,6 +13,7 @@ from .auth import sign_token, PROVIDERS, validate_token, TokenStatus
 
 DUMMY_OBJECT_META = load_sample_object_meta()
 
+
 class API(TarxivModule):
     """API module for server requests to the tarxiv database."""
 
