@@ -10,6 +10,8 @@ from .plots import (
 from .cards import (
     format_object_metadata,
     format_cone_search_results,
+    build_cone_result_cards_page,
+    CONE_RESULTS_PAGE_SIZE,
     expressive_card,
     title_card,
     footer_card,
@@ -34,6 +36,8 @@ __all__ = [
     "create_lightcurve_plot",
     "format_object_metadata",
     "format_cone_search_results",
+    "build_cone_result_cards_page",
+    "CONE_RESULTS_PAGE_SIZE",
     "expressive_card",
     "title_card",
     "footer_card",

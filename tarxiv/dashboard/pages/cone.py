@@ -10,6 +10,7 @@ from dash import (
     no_update,
     callback,
     clientside_callback,
+    ClientsideFunction,
     dcc,
     ctx,
 )
@@ -27,6 +28,7 @@ from ..components import (
     title_card,
     expressive_card,
     format_cone_search_results,
+    build_cone_result_cards_page,
     create_message_banner,
 )
 from ..schemas import ConeSearchResponseModel
@@ -41,95 +43,33 @@ dash.register_page(
 )
 
 
-# Initialise the Aladin Lite widget for the cone-search results and overlay a
-# marker per found object. Triggered whenever the cone-search store updates.
-# Hover-linking (result card -> marker highlight) is attached best-effort; if
-# the Aladin Lite marker API differs, the widget and markers still render.
+# Initialise the Aladin Lite widget for the cone-search results: centre on the
+# search position, draw the search radius as a subtle ring, drop a marker per
+# result, and hook up hover-linking from result cards to marker highlights.
+#
+# The JS body lives in assets/cone_aladin.js as window.dash_clientside.cone_aladin
+# rather than an inline-string callback — inline strings under Dash 4 can fail
+# to register with `dc[namespace][function_name] is undefined`, and the asset
+# file is easier to debug in the browser too.
 clientside_callback(
-    """
-    function(storeData) {
-        if (!storeData || !storeData.results) {
-            return "No cone search results";
-        }
-
-        const ra = storeData.ra;
-        const dec = storeData.dec;
-        const results = storeData.results;
-        const radiusArcsec = storeData.radius || 60;
-        // FOV in degrees: encompass the search radius with padding (min 0.02 deg).
-        const fov = Math.max((radiusArcsec / 3600) * 3, 0.02);
-
-        function initAladin() {
-            const container = document.getElementById('cone-aladin-div');
-            if (!container || !window.A) {
-                setTimeout(initAladin, 100);
-                return;
-            }
-
-            window.A.init.then(() => {
-                container.innerHTML = '';
-                const aladin = window.A.aladin('#cone-aladin-div', {
-                    survey: 'P/PanSTARRS/DR1/color-z-zg-g',
-                    target: ra + ' ' + dec,
-                    fov: fov,
-                });
-
-                try {
-                    // Search-centre marker.
-                    const centreCat = window.A.catalog({
-                        name: 'Search centre', sourceSize: 16, color: 'red',
-                    });
-                    aladin.addCatalog(centreCat);
-                    centreCat.addSources([
-                        window.A.marker(ra, dec, {popupTitle: 'Search centre'}),
-                    ]);
-
-                    // One marker per result.
-                    const resultCat = window.A.catalog({
-                        name: 'Results', sourceSize: 12, color: '#1c7ed6',
-                    });
-                    aladin.addCatalog(resultCat);
-                    resultCat.addSources(results.map((o) =>
-                        window.A.marker(o.ra, o.dec, {
-                            popupTitle: o.obj_name,
-                            popupDesc: 'RA ' + o.ra + ', Dec ' + o.dec,
-                        })
-                    ));
-
-                    // Best-effort hover-linking: hovering a result card highlights
-                    // the matching marker. Cards render in result order, so index
-                    // by document position.
-                    const highlightCat = window.A.catalog({
-                        name: 'Highlight', sourceSize: 20, color: 'orange',
-                    });
-                    aladin.addCatalog(highlightCat);
-                    const cards = document.querySelectorAll('[id*="object-card"]');
-                    results.forEach((o, i) => {
-                        const card = cards[i];
-                        if (!card) return;
-                        card.addEventListener('mouseenter', () => {
-                            highlightCat.removeAll();
-                            highlightCat.addSources([
-                                window.A.marker(o.ra, o.dec, {popupTitle: o.obj_name}),
-                            ]);
-                        });
-                        card.addEventListener('mouseleave', () => {
-                            highlightCat.removeAll();
-                        });
-                    });
-                } catch (err) {
-                    console.warn('Aladin marker overlay failed:', err);
-                }
-            });
-        }
-
-        initAladin();
-        return "Aladin cone init";
-    }
-    """,
+    ClientsideFunction(namespace="cone_aladin", function_name="initialize"),
     Output("cone-aladin-status", "children"),
     Input("cone-search-store", "data"),
 )
+
+
+# Re-render the cone-search results list when the user changes the pagination
+# page. The Aladin widget is unaffected — it always shows every marker.
+@callback(
+    Output("cone-results-list", "children"),
+    Input("cone-results-pagination", "value"),
+    State("cone-search-store", "data"),
+    prevent_initial_call=True,
+)
+def update_cone_results_page(page, store_data):
+    if not page or not store_data or not store_data.get("results"):
+        return no_update
+    return build_cone_result_cards_page(store_data["results"], page)
 
 
 def layout(**kwargs):

@@ -1,6 +1,7 @@
 """Card components for displaying object data."""
 
 import json
+import math
 from typing import Literal
 
 import dash_mantine_components as dmc
@@ -644,10 +645,75 @@ def format_object_metadata(object_id, meta, citation_str=None, logger=None):
     return dmc.Stack(sections)
 
 
+# Page size for the cone-search results list. The Aladin overlay still shows
+# markers for every result; only the textual card list is paginated.
+CONE_RESULTS_PAGE_SIZE = 20
+
+
+def build_cone_result_card(idx: int, obj: dict):
+    """Build one cone-search result card.
+
+    The card's pattern-matching id carries the absolute result index so the
+    Aladin clientside callback can match a hover event back to the correct
+    marker even when the list is paginated.
+    """
+    distance_arcsec = obj.get("distance_deg", 0) * 3600  # Convert to arcsec
+    summary_style = {
+        **CARD_STYLE,
+        "cursor": "pointer",
+        "marginBottom": "10px",
+        "padding": "15px",
+    }
+    obj_name = obj["obj_name"]
+    return dmc.Card(
+        [
+            dmc.Group(
+                [
+                    dmc.Anchor(
+                        f"{obj_name}",
+                        href=f"/lightcurve/{obj_name}",
+                        id={"type": "object-link", "index": idx},
+                        underline="always",
+                        style={
+                            "fontWeight": "bold",
+                            "fontSize": "16px",
+                            "marginRight": "20px",
+                            "cursor": "pointer",
+                        },
+                    ),
+                    dcc.Store(
+                        id={"type": "object-id-store", "index": idx},
+                        data=obj_name,
+                    ),
+                    dmc.Text(f"RA: {obj['ra']:.6f}°", style={"marginRight": "15px"}),
+                    dmc.Text(f"Dec: {obj['dec']:.6f}°", style={"marginRight": "15px"}),
+                    dmc.Text(
+                        f"Distance: {distance_arcsec:.2f}″",
+                        style={"fontStyle": "italic"},
+                    ),
+                ],
+                style={"padding": "15px"},
+            ),
+        ],
+        style=summary_style,
+        id={"type": "object-card", "index": idx},
+    )
+
+
+def build_cone_result_cards_page(results: list, page: int) -> list:
+    """Slice results to a 1-indexed page and build card components."""
+    start = max(page - 1, 0) * CONE_RESULTS_PAGE_SIZE
+    end = start + CONE_RESULTS_PAGE_SIZE
+    return [
+        build_cone_result_card(start + offset, obj)
+        for offset, obj in enumerate(results[start:end])
+    ]
+
+
 def format_cone_search_results(
     results, search_ra, search_dec, txv_db=None, logger=None
 ):
-    """Format cone search results with expandable object cards.
+    """Format cone search results with paginated object cards.
 
     Args:
         results: List of objects with ra, dec, obj_name
@@ -658,66 +724,30 @@ def format_cone_search_results(
 
     Returns
     -------
-        html.Div containing formatted results
+        dmc.Stack containing the Aladin widget, paginated object cards and
+        their pagination control.
     """
-    # Create expandable object cards
-    object_cards = []
-    for idx, obj in enumerate(results):
-        obj_name = obj["obj_name"]
-        distance_arcsec = obj.get("distance_deg", 0) * 3600  # Convert to arcsec
+    total = len(results)
+    page_count = max(1, math.ceil(total / CONE_RESULTS_PAGE_SIZE))
+    first_page_cards = build_cone_result_cards_page(results, 1)
 
-        # Create a summary row for each object
-        summary_style = {
-            **CARD_STYLE,
-            "cursor": "pointer",
-            "marginBottom": "10px",
-            "padding": "15px",
-        }
-
-        object_cards.append(
-            dmc.Card(
-                [
-                    dmc.Group(
-                        [
-                            dmc.Anchor(
-                                f"{obj_name}",
-                                href=f"/lightcurve/{obj_name}",
-                                id={"type": "object-link", "index": idx},
-                                underline="always",
-                                style={
-                                    "fontWeight": "bold",
-                                    "fontSize": "16px",
-                                    "marginRight": "20px",
-                                    "cursor": "pointer",
-                                },
-                            ),
-                            dcc.Store(
-                                id={"type": "object-id-store", "index": idx},
-                                data=obj_name,
-                            ),
-                            dmc.Text(
-                                f"RA: {obj['ra']:.6f}°", style={"marginRight": "15px"}
-                            ),
-                            dmc.Text(
-                                f"Dec: {obj['dec']:.6f}°", style={"marginRight": "15px"}
-                            ),
-                            dmc.Text(
-                                f"Distance: {distance_arcsec:.2f}″",
-                                style={"fontStyle": "italic"},
-                            ),
-                        ],
-                        style={"padding": "15px"},
-                    ),
-                ],
-                style=summary_style,
-                id={"type": "object-card", "index": idx},
-            )
+    pagination = (
+        dmc.Pagination(
+            id="cone-results-pagination",
+            total=page_count,
+            value=1,
+            siblings=1,
+            withEdges=True,
+            mt="md",
         )
+        if page_count > 1
+        else html.Div(id="cone-results-pagination", style={"display": "none"})
+    )
 
-    plural = "s" if len(results) != 1 else ""
+    plural = "s" if total != 1 else ""
     return dmc.Stack([
         expressive_card(
-            title=f"Found {len(results)} object{plural}",
+            title=f"Found {total} object{plural}",
             children=[
                 dmc.Text(
                     f"Search coordinates: RA={search_ra:.6f}°, Dec={search_dec:.6f}°",
@@ -733,8 +763,9 @@ def format_cone_search_results(
         expressive_card(
             title="Objects Found",
             title_order=3,
-            children=dmc.Stack(
-                object_cards,
-            ),
+            children=[
+                dmc.Stack(first_page_cards, id="cone-results-list"),
+                pagination,
+            ],
         ),
     ])
