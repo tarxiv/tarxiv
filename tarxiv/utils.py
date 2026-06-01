@@ -8,11 +8,32 @@ from astropy.coordinates import SkyCoord
 import multiprocessing as mp
 import astropy.units as u
 import signal
+import json
 import logging
 import string
 import yaml
 import sys
 import os
+
+
+def load_sample_object_meta() -> dict:
+    """Load the new-schema object-metadata sample from docs/dev-notes/new_sample.json.
+
+    Used by the dummy /get_object_meta_dummy endpoint so the dashboard can be
+    exercised against the forthcoming schema without duplicating the sample
+    payload anywhere in the codebase. The path can be overridden with the
+    ``TARXIV_SAMPLE_META_PATH`` environment variable.
+    """
+    path = os.environ.get("TARXIV_SAMPLE_META_PATH") or os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "docs",
+        "dev-notes",
+        "new_sample.json",
+    )
+    with open(path) as f:
+        return json.load(f)
+
 
 # Reporting mode flags
 PRINT = 1

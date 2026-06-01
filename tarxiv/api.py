@@ -6,116 +6,12 @@ from flask import Flask, Blueprint, request, make_response, redirect, session
 import cherrypy
 from paste.translogger import TransLogger
 
-from .utils import TarxivModule
+from .utils import TarxivModule, load_sample_object_meta
 from .database import TarxivDB
 from .auth import sign_token, PROVIDERS, validate_token, TokenStatus
 
 
-# Temporary fixture used by the /get_object_meta_dummy endpoint. This mirrors
-# the forthcoming source-keyed metadata schema (see docs/dev-notes/new_sample.json)
-# so the dashboard object page can be exercised before the real endpoint emits it.
-# TODO: remove once /get_object_meta returns the new schema.
-DUMMY_OBJECT_META = {
-    "tarxiv_id": "TXV-2026-08656c6c6f",
-    "source": "TNS",
-    "ra": "03:06:55.682",
-    "dec": "-11:58:55.51",
-    "data_sources": {
-        "tns": {
-            "identifier": "2025abov",
-            "ra_deg": 46.7317828801,
-            "dec_deg": -11.982086061,
-            "object_type": "SN Ia",
-            "discovery_date": "2025-10-25 13:01:50.016",
-            "reporting_group": "GOTO",
-            "discovery_data_source": "GOTO",
-            "redshift": 0.01346,
-        },
-        "asas_sn": {
-            "identifier": "661432068951",
-            "ra_deg": 46.733154,
-            "dec_deg": 11.983448,
-            "latest_nondetection": [
-                {
-                    "value": 19.08,
-                    "filter": "g",
-                    "date": "2025-12-08 01:48:35.990",
-                    "mag_rate": None,
-                }
-            ],
-            "latest_detection": [
-                {
-                    "value": 16.831,
-                    "filter": "g",
-                    "date": "2025-12-23 02:39:35.068",
-                    "mag_rate": -0.089595,
-                }
-            ],
-            "peak_mag": [
-                {
-                    "value": 14.983,
-                    "filter": "g",
-                    "date": "2025-11-11 05:28:31.274",
-                    "mag_rate": None,
-                }
-            ],
-        },
-        "sherlock": {
-            "mag": 13.938,
-            "mag_err": 0.0,
-            "mag_filter": "r",
-            "association_type": "SN",
-            "best_distance": 57.628,
-            "best_distance_flag": "sz",
-            "best_distance_source": "LASr 100 Mpc Galaxy Catalogue v1.0",
-            "catalogue_object_id": "MCG-02-08-052",
-            "catalogue_object_type": "galaxy",
-            "catalogue_table_name": "LASR/2MASS/PS1/DESI",
-            "classificationReliability": 2,
-            "dec_deg": -11.98342816,
-            "east_separation_arcsec": 4.885,
-            "north_separation_arcsec": -4.874,
-            "physical_separation_kpc": 1.852,
-            "ra_deg": 46.733144064,
-            "separation_arcsec": 6.806,
-            "redshift": 0.013319,
-        },
-        "ztf": {
-            "identifier": "ZTF25acbsugc",
-            "ra_deg": 46.7317439,
-            "dec_deg": -11.982109,
-            "peak_mag": [
-                {
-                    "value": 15.945535,
-                    "filter": "R",
-                    "date": "2025-12-06 07:16:53.000",
-                    "mag_rate": None,
-                },
-                {
-                    "value": 17.02721,
-                    "filter": "g",
-                    "date": "2025-12-06 05:36:02.002",
-                    "mag_rate": None,
-                },
-            ],
-            "latest_detection": [
-                {
-                    "value": 16.901502999999998,
-                    "filter": "R",
-                    "date": "2025-12-22 03:59:29.003",
-                    "mag_rate": -0.057192,
-                },
-                {
-                    "value": 17.859348,
-                    "filter": "g",
-                    "date": "2025-12-22 05:04:52.997",
-                    "mag_rate": -0.053274,
-                },
-            ],
-        },
-    },
-}
-
+DUMMY_OBJECT_META = load_sample_object_meta()
 
 class API(TarxivModule):
     """API module for server requests to the tarxiv database."""
@@ -307,9 +203,10 @@ class API(TarxivModule):
 
         @self.app.route("/get_object_meta_dummy/<string:obj_name>", methods=["POST"])
         def get_object_meta_dummy(obj_name):
-            """Return a static new-schema metadata document for testing.
+            """Return the new-schema sample metadata document for testing.
 
-            Mirrors get_object_meta's auth handling but serves DUMMY_OBJECT_META
+            Mirrors get_object_meta's auth handling but serves the sample at
+            docs/dev-notes/new_sample.json (loaded via utils.load_sample_object_meta)
             instead of querying the database, so the dashboard object page can be
             exercised before the real endpoint emits the source-keyed schema.
             """
@@ -335,10 +232,16 @@ class API(TarxivModule):
                 result = {"error": str(e), "type": "token"}
                 status_code = 401
                 log["status"] = "PermissionError"
+            except FileNotFoundError as e:
+                result = {"error": f"Sample file not found: {e}", "type": "server"}
+                status_code = 500
+                log["status"] = "ServerError"
             except Exception as e:
                 result = {"error": str(e), "type": "server"}
                 status_code = 500
                 log["status"] = "ServerError"
+                self.logger.exception(e)
+                self.logger.error({"error": str(e)}, extra={"error": str(e)})
 
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
