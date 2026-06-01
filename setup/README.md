@@ -4,7 +4,8 @@ This directory contains the Docker configurations for the services required by t
 
 ```commandline
 docker compose run setup_elasticsearch
-docker compose up  elasticsearch logstash kibana couchbase
+docker compose up elasticsearch logstash kibana couchbase postgres
+docker compose run --rm tarxiv-migrate
 ```
 
 The second command will take about one minute to correctly start-up the Couchbase daemon.
@@ -24,7 +25,7 @@ We have encountered several instances where more memory is required (up to 12GB 
 You may also need to pre-create the directories in `.data` for each of the microservices so they have appropriate permissions:
 
 ```commandline
-mkdir -p .data/elastic .data/couchbase .data/redis
+mkdir -p .data/elastic .data/couchbase .data/redis .data/postgres/db
 ```
 
 ## Populating with test data
@@ -39,4 +40,3 @@ but only if the following caveats are true:
 - You have set up your `tarxiv` config file correctly
 - You have couchbase running with docker compose
 - You have set up a virtual environment, or similar, with the necessary dependencies to run `tarxiv`
-
