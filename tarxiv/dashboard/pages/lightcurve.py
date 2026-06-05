@@ -12,8 +12,10 @@ from ..components import (
     create_message_banner,
 )
 from ...dto import (
-    MetadataResponseModel,
     LightcurveResponseModel,
+)
+from ..schemas import (
+    MetadataResponseModel,
 )
 from ...auth import (
     get_authenticated_user,
