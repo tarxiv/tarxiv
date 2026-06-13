@@ -156,15 +156,15 @@ class API(TarxivModule):
 
         # HFS - 2025-05-28: These self.app.route things are Flask decorators which become
         # endpoints for the API
-        @self.app.route("/get_object_meta/<string:obj_name>", methods=["POST"])
-        def get_object_meta(obj_name):
+        @self.app.route("/get_object_meta/<string:object_id>", methods=["POST"])
+        def get_object_meta(object_id):
             token = request.headers.get("Authorization")
             # Start log
             log = {
                 "query_type": "meta",
                 "query_ip": request.remote_addr,
                 "token": token,
-                "obj_name": obj_name,
+                "object_id": object_id,
             }
 
             try:
@@ -176,7 +176,7 @@ class API(TarxivModule):
                     else:
                         raise PermissionError("Invalid or missing token.")
                 # Find object info
-                result = self.txv_db.get(obj_name, "objects")
+                result = self.txv_db.get(object_id, "objects")
                 # Return nothing if bad request
                 if result is None:
                     raise LookupError("no such object")
@@ -199,15 +199,15 @@ class API(TarxivModule):
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
 
-        @self.app.route("/get_object_lc/<string:obj_name>", methods=["POST"])
-        def get_object_lc(obj_name):
+        @self.app.route("/get_object_lc/<string:object_id>", methods=["POST"])
+        def get_object_lc(object_id):
             token = request.headers.get("Authorization")
             # Start log
             log = {
                 "query_type": "lightcurve",
                 "query_ip": request.remote_addr,
                 "token": token,
-                "obj_name": obj_name,
+                "object_id": object_id,
             }
             try:
                 # Return error if bad token
@@ -218,7 +218,7 @@ class API(TarxivModule):
                     else:
                         raise PermissionError("Invalid or missing token.")
                 # Find object info
-                result = self.txv_db.get(obj_name, "lightcurves")
+                result = self.txv_db.get(object_id, "lightcurves")
                 # Return nothing if bad request
                 if result is None:
                     raise LookupError("no such object")
@@ -319,17 +319,17 @@ class API(TarxivModule):
                     raise ValueError("n_rows/offset must be an integer")
 
                 query = f"""SELECT
-                              `objects`.`internal`.`insert_date` AS date_received,
-                              META().id AS obj_name,
-                              `objects`.`object_type`[0].`value` AS object_type,
-                              `objects`.`ra_hms`[0].`value` AS ra,
-                              `objects`.`dec_dms`[0].`value` AS dec,
-                              `objects`.`discovery_data_source`[0].`value` AS discovery_source,
-                              `objects`.`reporting_group`[0].`value` AS reporting_group,
-                              IFMISSING(`objects`.`redshift`[0].`value`, "") AS redshift
+                              objects.discovery_date,
+                              objects.object_id,
+                              objects.tns.object_type,
+                              objects.ra,
+                              objects.dec,
+                              objects.tns.redshift,
+                              objects.tns.reporting_group,
+                              objects.tns.discovery_data_source AS discovery_source
                             FROM tarxiv.tns.objects
-                            WHERE `objects`.`internal`.`insert_date` IS NOT MISSING
-                            ORDER BY `objects`.`internal`.`insert_date` DESC
+                            WHERE objects.discovery_date IS NOT MISSING
+                            ORDER BY objects.discovery_date DESC
                             LIMIT {request_json["n_rows"]} OFFSET {request_json["offset"]}"""
                 result = list(self.txv_db.query(query))
 
@@ -373,8 +373,8 @@ class API(TarxivModule):
                     raise PermissionError("bad token")
                 # Build query
                 query_str = (
-                    "SELECT meta().id AS `obj_name` "
-                    "FROM tarxiv.tns.objects "
+                    "SELECT object_id "
+                    "FROM tarxiv.tns.objects obj"
                     "WHERE 1=1 AND "
                 )
                 # Add restrictions from search fields, then append search params to query
@@ -387,7 +387,7 @@ class API(TarxivModule):
                 query_str += full_condition_string
                 # Return results
                 result = self.txv_db.query(query_str)
-                result = [r["obj_name"] for r in result]
+                result = [r["object_id"] for r in result]
                 status_code = 200
                 log["status"] = "Success"
             except PermissionError as e:
@@ -455,7 +455,7 @@ class API(TarxivModule):
 
     def build_condition(self, field, condition):
         # Start condition_string
-        condition_str = f"ANY `{field[0]}` IN `{field}` SATISFIES "
+        condition_str = f"ANY {field[0]} IN {field} SATISFIES "
         predicates = []
         # Each query has a number of parameters (usually just value, but peak mag can search on filter/mjd also)
         for param in condition:
@@ -503,7 +503,7 @@ class API(TarxivModule):
         else:
             raise ValueError(f"bad search value {search_value}")
         # Build predicate
-        predicate = f"`{field_name[0]}`.`{search_field}` {operator} {value_str} "
+        predicate = f"{field_name[0]}.{search_field} {operator} {value_str} "
         return predicate
 
 
