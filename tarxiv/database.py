@@ -212,6 +212,7 @@ class TarxivDB(TarxivModule):
     def increment_txv_idx(self, ctx, year):
         # Run increment transaction
         doc = ctx.get(self.conn.scope("misc").collection("idx"), year)
+        print(doc)
         content = doc.content_as[dict]
         content["current_idx"] += 1
         ctx.replace(doc, content)
