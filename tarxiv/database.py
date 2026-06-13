@@ -203,7 +203,8 @@ class TarxivDB(TarxivModule):
         new_idx = self.cluster.transactions.run(
                 lambda ctx: self.increment_txv_idx(ctx, year),
         )
-
+        # Print thing
+        print(new_idx)
         # Full detection id will be TXV-2025-xxxxxx
         alpha_id = int_to_alphanumeric(new_idx, self.config["txv_id_len"])
         return f"TXV-{year}-{alpha_id}"
@@ -212,7 +213,6 @@ class TarxivDB(TarxivModule):
     def increment_txv_idx(self, ctx, year):
         # Run increment transaction
         doc = ctx.get(self.conn.scope("misc").collection("idx"), year)
-        print(doc)
         content = doc.content_as[dict]
         content["current_idx"] += 1
         ctx.replace(doc, content)
