@@ -198,7 +198,7 @@ class TarxivDB(TarxivModule):
         # If we have no object name then just generate a new index
         coll = self.conn.scope("misc").collection("idx")
         new_idx = coll.binary().increment(year,
-                IncrementOptions(delta=DeltaValue(1))).content
+                IncrementOptions(timeout=timedelta(seconds=30))).content
 
         # Full detection id will be TXV-2025-xxxxxx
         alpha_id = int_to_alphanumeric(new_idx, self.config["txv_id_len"])

@@ -99,7 +99,7 @@ class TNSPipeline(TarxivModule):
                 if detections:
                     meta["data_sources"]["fink_ztf"]["latest_detection"] = detections
                 if non_detections:
-                    meta["data_dources"]["fink_ztf"]["non_detections"] = non_detections
+                    meta["data_sources"]["fink_ztf"]["non_detections"] = non_detections
                 if peaks:
                     meta["data_sources"]["fink_ztf"]["peaks"] = peaks
 
@@ -111,7 +111,7 @@ class TNSPipeline(TarxivModule):
                 if detections:
                     meta["data_sources"]["asas_sn"]["latest_detection"] = detections
                 if non_detections:
-                    meta["data_dources"]["asas_sn"]["non_detections"] = non_detections
+                    meta["data_sources"]["asas_sn"]["non_detections"] = non_detections
                 if peaks:
                     meta["data_sources"]["asas_sn"]["peaks"] = peaks
 
@@ -124,7 +124,7 @@ class TNSPipeline(TarxivModule):
                 if detections:
                     meta["data_sources"]["fink_lsst"]["latest_detection"] = detections
                 if non_detections:
-                    meta["data_dources"]["fink_lsst"]["non_detections"] = non_detections
+                    meta["data_sources"]["fink_lsst"]["non_detections"] = non_detections
                 if peaks:
                     meta["data_sources"]["fink_lsst"]["peaks"] = peaks
 
