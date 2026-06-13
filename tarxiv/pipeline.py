@@ -2,6 +2,7 @@ from .utils import TarxivModule, deg2sex
 from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair, summarize_lc_mags
 from .database import TarxivDB
 from .alerts import IMAP
+from confluent_kafka import Producer
 from astropy.time import Time
 from hop.auth import Auth
 from hop import Stream
@@ -10,6 +11,7 @@ import requests
 import datetime
 import traceback
 import zipfile
+import socket
 import json
 import io
 import os
@@ -41,6 +43,16 @@ class TNSPipeline(TarxivModule):
             user=os.environ["TARXIV_HOPSKOTCH_USERNAME"],
             password=os.environ["TARXIV_HOPSKOTCH_PASSWORD"],
         )
+
+        # Get kafka configuration
+        conf = {'bootstrap.servers': "pooskaus.ifa.hawaii.edu:9092",
+                'delivery.timeout.ms': 10000,
+                'queue.buffering.max.messages': 1000000,
+                'queue.buffering.max.ms': 5000,
+                'batch.num.messages': 100,
+                'client.id': socket.gethostname()}
+        self.kafka = Producer(conf)
+
     def get_object(self, object_id):
         """
         Queries TNS for an object then finds all associated survey data.
@@ -305,6 +317,11 @@ class TNSPipeline(TarxivModule):
                             "object_id": object_id,
                         }
                         self.logger.info(status, extra=status)
+
+                    # Submit kafka alert
+                    msg = json.dumps(obj_meta).encode('utf-8')
+                    self.kafka.produce(topic='tns', value=msg, callback=self.acked)
+
                 except Exception:
                     stack_trace = traceback.format_exc()
                     self.logger.error({
@@ -312,3 +329,7 @@ class TNSPipeline(TarxivModule):
                         "object_id": object_id,
                         "exception": stack_trace,
                     })
+    def acked(self, err, msg):
+        if err is not None:
+            status = {"status": "failed kafka publish", "msg": msg}
+            self.logger.error(status, extra=status)
