@@ -76,7 +76,6 @@ def register_auth_callbacks(app, logger):
         profile = payload.get("profile", {})
         name = (
             profile.get("username")
-            or profile.get("nickname")
             or profile.get("forename")
             or profile.get("email")
             or "ORCID user"
@@ -101,12 +100,15 @@ def register_auth_callbacks(app, logger):
             Output("auth-message-banner", "children", allow_duplicate=True),
             Output("url", "href", allow_duplicate=True),
         ],
-        Input("auth-logout-button", "n_clicks"),
+        [
+            Input("auth-logout-button", "n_clicks"),
+            Input("nav-logout-button", "n_clicks"),
+        ],
         State("url", "pathname"),
         prevent_initial_call=True,
     )
-    def handle_logout(logout_clicks, pathname):
-        if not logout_clicks:
+    def handle_logout(logout_clicks, nav_logout_clicks, pathname):
+        if not (logout_clicks or nav_logout_clicks):
             return no_update, no_update
         info = create_message_banner("You have been logged out.", "info")
 

@@ -66,7 +66,7 @@ jobs:
           mkdir -p .data/elastic .data/couchbase .data/redis .data/logs
           chmod 777 .data/elastic .data/couchbase .data/redis .data/logs
           docker compose run setup_elasticsearch
-          docker compose up -d elasticsearch logstash kibana couchbase
+          docker compose up -d elasticsearch logstash kibana couchbase postgres
 
           ready=0
           for _ in $(seq 1 90); do
@@ -102,6 +102,7 @@ jobs:
       - name: Start tarxiv API
         run: |
           cd setup
+          docker compose run --rm tarxiv-migrate
           docker compose up -d tarxiv-api
           sleep 10
           docker ps -a

@@ -1,19 +1,10 @@
-"""Auth provider registry.
-
-Each entry maps a URL path segment to a module that implements the
-AuthProvider protocol::
-
-    def build_authorize_url(state: str) -> str: ...
-    def complete_login(code: str) -> dict: ...
-
-To add a new provider, create ``providers/<name>.py`` implementing those
-two functions and register it here.
-"""
-
-from . import orcid
+"""Auth provider registry."""
 
 from dataclasses import dataclass
 from typing import Callable
+
+from . import orcid
+from ..typing import LoginDict
 
 
 @dataclass(frozen=True)
@@ -21,7 +12,7 @@ class AuthProvider:
     """Callable hooks required for an authentication provider."""
 
     build_authorize_url: Callable[[str], str]
-    complete_login: Callable[[str], dict]
+    complete_login: Callable[[str], LoginDict]
 
 
 PROVIDERS = {
