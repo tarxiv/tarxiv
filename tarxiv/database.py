@@ -192,7 +192,7 @@ class TarxivDB(TarxivModule):
         if object_id is not None:
             meta = self.get(object_id, collection='objects')
             # If the object exists, then use its txv-idx
-            if meta is not None:
+            if meta is not None and "tarxiv_id" in meta.keys():
                 return meta["tarxiv_id"]
 
         # If we have no object name then just generate a new index

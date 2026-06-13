@@ -194,7 +194,9 @@ class TNSPipeline(TarxivModule):
             data = myzip.read(name="tns_public_objects.csv")
         # Get list of TNS names and reporting dates
         tns_df = pd.read_csv(io.BytesIO(data), skiprows=[0])
-        return tns_df
+        # Order in reverse
+        sorted_df = tns_df.sort_values("name", ascending=False).reset_index()
+        return sorted_df
 
     def update_bulk(self, include_existing=False):
         """Download bulk TNS public object csv and convert to dataframe.
