@@ -197,7 +197,7 @@ class TarxivDB(TarxivModule):
 
         # If we have no object name then just generate a new index
         new_idx = self.cluster.transactions.run(
-                lambda ctx: self.increment_txv_idx(ctx, year)
+                lambda ctx: self.increment_txv_idx(ctx, year),
         )
 
         # Full detection id will be TXV-2025-xxxxxx

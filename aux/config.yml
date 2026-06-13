@@ -99,3 +99,5 @@ spark_executor_cores: "4"
 spark_executor_memory: "4g"
 spark_driver_memory: "16g"
 
+# Home many digits to keep in yearly base 36 ids? TXV-2026-xxxxx
+txv_id_len: 6
