@@ -91,6 +91,9 @@ class TNSPipeline(TarxivModule):
         lasair_meta = self.lasair.get_object(object_id, ra_deg, dec_deg)
 
         # Make the meta dict
+        if lasair_meta is not None:
+            meta["data_sources"]["sherlock"] = lasair_meta
+
         if fink_ztf_meta is not None:
             meta["data_sources"]["fink_ztf"] = fink_ztf_meta
             # Calculate lc_detections and mag rates
@@ -127,9 +130,6 @@ class TNSPipeline(TarxivModule):
                     meta["data_sources"]["fink_lsst"]["non_detections"] = non_detections
                 if peaks:
                     meta["data_sources"]["fink_lsst"]["peaks"] = peaks
-
-        if lasair_meta is not None:
-            meta["data_sources"]["sherlock"] = lasair_meta
 
         # Collate lightcurves and add peak mag measurements to schema
         lc_df = pd.concat([ztf_lc, asas_sn_lc, lsst_lc])
