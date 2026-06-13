@@ -31,7 +31,7 @@ def summarize_lc_mags(lc_df):
     recent_dets = []
     recent_nondets = []
 
-    for filter_name, grp_df in lc_df.groupby('filter_name'):
+    for filter_name, grp_df in lc_df.groupby('filter'):
         detections = grp_df[grp_df["detection"] == 1].copy()
         non_detections = grp_df[grp_df["detection"] == 0].copy()
         if len(detections) > 0:
@@ -240,7 +240,7 @@ class ZTF(TarxivModule):
         try:
             # Hit FINK API
             result = requests.post(
-                f"{self.config['fink_url']}/api/v1/conesearch",
+                f"{self.config['fink_ztf_url']}/api/v1/conesearch",
                 json={
                     "ra": ra_deg,
                     "dec": dec_deg,
@@ -338,6 +338,7 @@ class ZTF(TarxivModule):
             lc_df = lc_df[lc_df["detection"] >= 0]
             # JD now unneeded
             lc_df = lc_df.drop("jd", axis=1)
+            df["camera"] = "main"
 
             # Reorder cols
             lc_df = lc_df[
@@ -349,6 +350,7 @@ class ZTF(TarxivModule):
                     "fwhm",
                     "filter",
                     "detection",
+                    "camera"
                 ]
             ]
             # Report count
@@ -529,7 +531,7 @@ class LSST(TarxivModule):
 
             # Query fink
             r1 = requests.post(
-                "https://api.lsst.fink-portal.org/api/v1/sources",
+                f"{self.config['fink_lsst_url']}/api/v1/sources",
                 json={
                     "diaObjectId": str(nearest["r:diaObjectId"]),
                     "output-format": "json",
@@ -548,8 +550,10 @@ class LSST(TarxivModule):
             df["mag"] = -2.5 * np.log10(df["r:psfFlux"]) + 31.4
             df["mag_err"] = np.abs(1.0857 * df["r:psfFluxErr"] / df["r:psfFlux"])
             # Specific to lightcurves
+            df["limit"] = None
+            df["camera"] = "main"
             df = df.rename({"r:midpointMjdTai": "mjd", "r:band": "filter", "r:snr": "snr"}, axis=1)
-            lc_df = df[["mjd", "mag", "mag_err", "filter", "snr"]]
+            lc_df = df[["mjd", "mag", "mag_err", "filter", "snr", "detection", "limit", "camera"]]
             lc_df["detection"] = 1
 
         except SurveyMetaMissingError:
