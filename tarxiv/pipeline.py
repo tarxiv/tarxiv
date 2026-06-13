@@ -69,7 +69,7 @@ class TNSPipeline(TarxivModule):
         # Get a tarxiv unique id
         txv_id = self.db.get_txv_id(year=object_id[:4], object_id=object_id)
         # Parse coords
-        ra_deg, dec_deg = tns_meta["ra_deg"]["value"], tns_meta["dec_deg"]["value"]
+        ra_deg, dec_deg = tns_meta["ra_deg"], tns_meta["dec_deg"]
         ra_hms, dec_dms = deg2sex(ra_deg, dec_deg)
         # Start our meta dict
         meta = {
