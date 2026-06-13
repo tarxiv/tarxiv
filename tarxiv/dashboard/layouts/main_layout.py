@@ -1,9 +1,12 @@
 """Main dashboard layout."""
 
+import os
+
 from dash import html, dcc
 import dash
 import flask
 import dash_mantine_components as dmc
+import requests
 from ..components import (
     get_theme_components,
     footer_card,
@@ -12,13 +15,110 @@ from ..components import (
     avatar_fallback,
     avatar_image,
 )
-from ...auth import get_authenticated_user
+from ...auth import get_authenticated_user, get_jwt_from_request
+
+
+def _fetch_live_profile(token):
+    """Fetch the current profile from the API.
+
+    The JWT ``profile`` claim is a snapshot taken at login, so fields edited
+    afterwards (e.g. email) can be stale. This reads the live record and falls
+    back to ``None`` on any error so the caller can use the JWT snapshot.
+    """
+    if not token:
+        return None
+    host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
+    port = os.getenv("TARXIV_API_PORT", "9001")
+    api_url = os.getenv("TARXIV_INTERNAL_API_URL", f"http://{host}:{port}")
+    try:
+        response = requests.get(
+            url=f"{api_url}/user",
+            timeout=5,
+            headers={
+                "accept": "application/json",
+                "Authorization": f"Bearer {token}",
+            },
+        )
+    except requests.RequestException:
+        return None
+    if response.status_code != 200:
+        return None
+    return response.json()
+
 
 SETTING_DEFAULTS = {  # These defaults need to correspond with the PERMISSION_MAP in cookie_callbacks.py
     "theme": "tarxiv_light",
     "analytics_on": False,
     "user": None,
 }
+
+
+def account_nav_hovercard(
+    user_icon, user_page, account_name, account_email, account_avatar
+):
+    """Wrap the Account nav link in a hover card showing a profile summary."""
+    nav_link = create_nav_link(
+        icon=user_icon,
+        label=user_page["name"],
+        href=user_page["relative_path"],
+        is_active=False,
+    )
+
+    if not account_name:
+        dropdown_children = [
+            dmc.Text("Not signed in", fw=600, size="sm"),
+            dmc.Anchor("Sign in", href=user_page["relative_path"], size="xs"),
+        ]
+    else:
+        dropdown_children = [
+            dmc.Group(
+                [
+                    account_avatar,
+                    dmc.Stack(
+                        [
+                            dmc.Text(account_name, fw=600, size="sm"),
+                            dmc.Text(
+                                account_email or "No email",
+                                size="xs",
+                                c="dimmed",
+                            ),
+                        ],
+                        gap=0,
+                    ),
+                ],
+                gap="xs",
+                wrap="nowrap",
+            ),
+            dmc.Anchor(
+                "View account", href=user_page["relative_path"], size="xs", mt="xs"
+            ),
+            dmc.Button(
+                "Logout",
+                variant="outline",
+                size="xs",
+                id="nav-logout-button",
+            ),
+        ]
+
+    return dmc.HoverCard(
+        withArrow=True,
+        position="right",
+        shadow="md",
+        openDelay=150,
+        closeDelay=500,
+        children=[
+            dmc.HoverCardTarget(
+                nav_link,
+                # Here we have to pass style props to the dmc.Box wrapper using
+                # boxWrapperProps (see https://www.dash-mantine-components.com/components/hovercard
+                # and https://www.dash-mantine-components.com/style-props)
+                boxWrapperProps={"w": "100%"},
+            ),
+            dmc.HoverCardDropdown(
+                dmc.Stack(dropdown_children, gap="xs"),
+            ),
+        ],
+    )
 
 
 def create_layout() -> dmc.MantineProvider:
@@ -33,24 +133,38 @@ def create_layout() -> dmc.MantineProvider:
     theme, theme_switch = get_theme_components()
     user_page = dash.page_registry.get(
         "tarxiv.dashboard.pages.user",
-        {"name": "User", "icon": "mdi:user-outline", "relative_path": "/user"},
+        {
+            "name": "Acc",
+            "icon": "mdi:user-outline",
+            "relative_path": "/user",
+        },
     )
 
     # Check if user is authenticated and update layout
     user_profile = None
     user_icon = user_page.get("icon", "mdi:help-circle")
+    account_name = None
+    account_email = None
+    account_avatar = None
     if flask.has_request_context():
         user_profile = get_authenticated_user(flask.request)
         if user_profile:
+            # Prefer the live record (the JWT snapshot can be stale, e.g. email).
+            live_profile = _fetch_live_profile(get_jwt_from_request(flask.request))
+            profile = {**user_profile, **(live_profile or {})}
             name = (
-                user_profile.get("username")
-                or user_profile.get("nickname")
-                or user_profile.get("forename")
-                or user_profile.get("email")
+                profile.get("username")
+                or profile.get("forename")
+                or profile.get("email")
                 or "User"
             )
-            avatar_src = user_profile.get("picture_url")
+            avatar_src = profile.get("picture_url")
             user_icon = (
+                avatar_image(avatar_src) if avatar_src else avatar_fallback(name[:1])
+            )
+            account_name = name
+            account_email = profile.get("email")
+            account_avatar = (
                 avatar_image(avatar_src) if avatar_src else avatar_fallback(name[:1])
             )
 
@@ -118,13 +232,12 @@ def create_layout() -> dmc.MantineProvider:
                                 # The "Magic" bottom pin
                                 html.Div(
                                     children=[
-                                        create_nav_link(
-                                            icon=user_icon,
-                                            label=user_page["name"],
-                                            # label=page["title"],
-                                            href=user_page["relative_path"],
-                                            # is_active=(pathname == user_page["relative_path"]),
-                                            is_active=False,
+                                        account_nav_hovercard(
+                                            user_icon=user_icon,
+                                            user_page=user_page,
+                                            account_name=account_name,
+                                            account_email=account_email,
+                                            account_avatar=account_avatar,
                                         ),
                                         theme_switch,
                                     ],
