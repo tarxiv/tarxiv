@@ -207,7 +207,7 @@ class TarxivDB(TarxivModule):
 
 
     def increment_txv_idx(self, ctx, year):
-        opts = UpsertOptions(durability=ServerDurability(Durability.PERSIST_TO_MAJORITY))
+        opts = UpsertOptions(durability=ServerDurability(Durability.NONE))
         # Run increment transaction
         doc = ctx.get(self.conn.scope("misc").collection("idx"), year)
         content = doc.content_as[dict]
