@@ -180,7 +180,8 @@ class ASAS_SN(TarxivModule):  # noqa: N801
             lc_df["detection"] = np.where(lc_df["mag_err"] > 99, 0, 1)
             lc_df["mag"] = np.where(lc_df["mag_err"] > 99, np.nan, lc_df["mag"])
             lc_df["mag_err"] = np.where(lc_df["mag_err"] > 99, np.nan, lc_df["mag_err"])
-            # Add dummy column for night (real values only needed in ATLAS
+            # Set survey
+            lc_df["survey"] = "asas-sn"
             # Reorder cols
             lc_df = lc_df[
                 [
@@ -192,6 +193,7 @@ class ASAS_SN(TarxivModule):  # noqa: N801
                     "filter",
                     "detection",
                     "camera",
+                    "survey"
                 ]
             ]
             # Update
@@ -338,6 +340,7 @@ class ZTF(TarxivModule):
             # JD now unneeded
             lc_df = lc_df.drop("jd", axis=1)
             lc_df["camera"] = "main"
+            lc_df["survey"] = "ztf"
 
             # Reorder cols
             lc_df = lc_df[
@@ -349,7 +352,8 @@ class ZTF(TarxivModule):
                     "fwhm",
                     "filter",
                     "detection",
-                    "camera"
+                    "camera",
+                    "survey"
                 ]
             ]
             # Report count
@@ -554,6 +558,7 @@ class LSST(TarxivModule):
             df = df.rename({"r:midpointMjdTai": "mjd", "r:band": "filter", "r:snr": "snr"}, axis=1)
             lc_df = df[["mjd", "mag", "mag_err", "filter", "snr", "detection", "limit", "camera"]]
             lc_df["detection"] = 1
+            lc_df["survey"] = "lsst"
 
         except SurveyMetaMissingError:
             status["status"] = "no match"
