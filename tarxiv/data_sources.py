@@ -458,7 +458,7 @@ class Lasair(TarxivModule):
             debug=debug,
         )
         # Get client
-        api_key = os.getenv("TARXIV_LSST_API_KEY", "")
+        api_key = os.getenv("TARXIV_LASAIR_TOKEN", "")
         self.client = lasair_client(api_key, endpoint=self.config["lasair"]["url"])
 
     def get_object(self, object_id=None, ra_deg=None, dec_deg=None):
