@@ -2,8 +2,8 @@
 from .utils import TarxivModule, int_to_alphanumeric
 from datetime import timedelta
 from couchbase.cluster import Cluster
-from couchbase.options import ClusterOptions, ClusterTimeoutOptions, UpsertOptions
-from couchbase.durability import ServerDurability, Durability
+from couchbase.options import ClusterOptions, ClusterTimeoutOptions, TransactionConfig
+from couchbase.durability import ServerDurability, DurabilityLevel
 from couchbase.auth import PasswordAuthenticator
 from couchbase.exceptions import DocumentNotFoundException
 import json
@@ -37,7 +37,10 @@ class TarxivDB(TarxivModule):
         timeout_opts = ClusterTimeoutOptions(
             connect_timeout=timedelta(seconds=12), kv_timeout=timedelta(seconds=10)
         )
-        options = ClusterOptions(authenticator, timeout_options=timeout_opts)
+        durability_opts =  TransactionConfig(
+            durability=ServerDurability(DurabilityLevel.PERSIST_TO_MAJORITY)
+        )
+        options = ClusterOptions(authenticator, timeout_options=timeout_opts, transaction_config=durability_opts)
         # Connect
         status = {"status": "connecting to couchbase"}
         self.logger.info(status, extra=status)
@@ -207,12 +210,11 @@ class TarxivDB(TarxivModule):
 
 
     def increment_txv_idx(self, ctx, year):
-        opts = UpsertOptions(durability=ServerDurability(Durability.NONE))
         # Run increment transaction
         doc = ctx.get(self.conn.scope("misc").collection("idx"), year)
         content = doc.content_as[dict]
         content["current_idx"] += 1
-        ctx.replace(doc, content, opts=opts)
+        ctx.replace(doc, content)
         return content["current_idx"]
 
     def close(self):
