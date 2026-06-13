@@ -34,7 +34,7 @@ class TarxivDB(TarxivModule):
         # Authenticate
         authenticator = PasswordAuthenticator(username, password)
         timeout_opts = ClusterTimeoutOptions(
-            connect_timeout=timedelta(seconds=12), kv_timeout=timedelta(seconds=10)
+            connect_timeout=timedelta(seconds=12), kv_timeout=timedelta(seconds=20)
         )
         options = ClusterOptions(authenticator, timeout_options=timeout_opts)
         # Connect
