@@ -5,7 +5,6 @@ from .utils import (
     SurveyMetaMissingError,
     SurveyLightCurveMissingError,
     precision,
-    camel_to_snake
 )
 
 from pyasassn.client import SkyPatrolClient
@@ -39,7 +38,7 @@ def summarize_lc_mags(lc_df):
             peak_row = detections.loc[detections["mag"].idxmin()]
             peak_mag = {
                 "filter": filter_name,
-                "value": peak_row["mag"],
+                "value": precision(float(peak_row["mag"]), 8),
                 "date": Time(
                     peak_row["mjd"], format="mjd", scale="utc"
                 ).isot.replace("T", " "),
@@ -81,7 +80,7 @@ def summarize_lc_mags(lc_df):
             recent_row = sorted_detections.loc[sorted_detections["mjd"].idxmax()]
             recent_det = {
                 "filter": filter_name,
-                "value": recent_row["mag"],
+                "value": precision(float(peak_row["mag"]), 8),
                 "mag_rate": precision(recent_row["mag_rate"], 6),
                 "date": Time(
                     recent_row["mjd"], format="mjd", scale="utc"
@@ -94,7 +93,7 @@ def summarize_lc_mags(lc_df):
             nondet_row = non_detections.loc[non_detections["mjd"].idxmax()]
             recent_nondet = {
                 "filter": filter_name,
-                "value": nondet_row["limit"],
+                "value": precision(float(nondet_row["limit"]), 8),
                 "date": Time(
                     nondet_row["mjd"], format="mjd", scale="utc"
                 ).isot.replace("T", " "),
@@ -338,7 +337,7 @@ class ZTF(TarxivModule):
             lc_df = lc_df[lc_df["detection"] >= 0]
             # JD now unneeded
             lc_df = lc_df.drop("jd", axis=1)
-            df["camera"] = "main"
+            lc_df["camera"] = "main"
 
             # Reorder cols
             lc_df = lc_df[
