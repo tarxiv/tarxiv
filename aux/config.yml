@@ -32,7 +32,7 @@ atlas:
     - "sherlock"
 
 # Fink/ZTF info
-fink_url: "https://api.ztf.fink-portal.org/"
+fink_ztf_url: "https://api.ztf.fink-portal.org/"
 ztf:
   associated_sources:
     - "ztf"
@@ -58,6 +58,7 @@ lasair:
   kafka_endpoint: "lasair-lsst-kafka_pub.lsst.ac.uk:9092"
   kafka_topic: "lasair_18tarxiv_nostars"
   url: "https://api.lasair.lsst.ac.uk/api"
+
 
 lsst:
   associated_sources:

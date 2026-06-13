@@ -19,4 +19,4 @@ def avatar_fallback(initials: str):
 def avatar_image(src: str):
     """Return an avatar image element."""
     return html.Img(src=src, style=AVATAR_STYLE)
-    # return dmc.Avatar(src=src, style=AVATAR_STYLE)
+    # return dmc.Avatar(ingest=ingest, style=AVATAR_STYLE)

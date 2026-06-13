@@ -13,6 +13,7 @@ import string
 import yaml
 import sys
 import os
+import re
 
 # Reporting mode flags
 PRINT = 1
@@ -159,3 +160,8 @@ def int_to_alphanumeric(num, n):
 def deg2sex(ra_deg, dec_deg):
     c = SkyCoord(ra=ra_deg * u.degree, dec=dec_deg * u.degree)
     return c.to_string("hmsdms", sep=":").split()
+
+def camel_to_snake(text: str) -> str:
+    # Match lowercase/digit followed by an uppercase letter and split them with an underscore
+    str1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', text)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', str1).lower()

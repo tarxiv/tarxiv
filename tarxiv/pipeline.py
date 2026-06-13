@@ -1,5 +1,5 @@
-from .utils import TarxivModule, clean_meta
-from .data_sources import TNS, ATLAS, ASAS_SN, ZTF, append_dynamic_values
+from .utils import TarxivModule, deg2sex
+from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair, summarize_lc_mags
 from .database import TarxivDB
 from .alerts import IMAP
 from astropy.time import Time
@@ -8,7 +8,6 @@ from hop import Stream
 import pandas as pd
 import requests
 import datetime
-import deepdiff
 import traceback
 import zipfile
 import json
@@ -29,9 +28,10 @@ class TNSPipeline(TarxivModule):
 
         # Create survey objects
         self.tns = TNS(script_name, reporting_mode, debug)
-        self.atlas = ATLAS(script_name, reporting_mode, debug)
         self.ztf = ZTF(script_name, reporting_mode, debug)
         self.asas_sn = ASAS_SN(script_name, reporting_mode, debug)
+        self.lsst = LSST(script_name, reporting_mode, debug)
+        self.lasair = Lasair(script_name, reporting_mode, debug)
         # Get email interface
         self.gmail = IMAP(script_name, reporting_mode, debug)
         # Get database
@@ -41,37 +41,86 @@ class TNSPipeline(TarxivModule):
             user=os.environ["TARXIV_HOPSKOTCH_USERNAME"],
             password=os.environ["TARXIV_HOPSKOTCH_PASSWORD"],
         )
-
-    def get_object(self, obj_name):
+    def get_object(self, object_id):
         """
         Queries TNS for an object then finds all associated survey data.
-
-        :param obj_name: TNS object name (e.g. 2024iss); str
-        :return: metadata and light curve data dictionaries
+        Same as get object, but with split schema
+        :param object_id:
+        :return:
         """
-        # Get data if exists already for comparison
-        init_meta = self.db.get(obj_name, "objects")
-
         # Get initial info from TNS
-        tns_meta, _ = self.tns.get_object(obj_name)
+        tns_meta = self.tns.get_object(object_id)
         # Return empty dicts
         if tns_meta is None:
-            return {}, {}, {}
-        ra_deg, dec_deg = tns_meta["ra_deg"]["value"], tns_meta["dec_deg"]["value"]
-        # Now get meta and lightcurves from the surveys
-        atlas_meta, atlas_lc = self.atlas.get_object(obj_name, ra_deg, dec_deg)
-        ztf_meta, ztf_lc = self.ztf.get_object(obj_name, ra_deg, dec_deg)
-        asas_sn_meta, asas_sn_lc = self.asas_sn.get_object(obj_name, ra_deg, dec_deg)
+            return None
 
-        # Gent a new schema
-        schema = self.db.get_object_schema()
-        # Now we populate schema with our survey information
-        obj_meta = self.tns.update_object_meta(schema, tns_meta)
-        obj_meta = self.atlas.update_object_meta(obj_meta, atlas_meta)
-        obj_meta = self.ztf.update_object_meta(obj_meta, ztf_meta)
-        obj_meta = self.asas_sn.update_object_meta(obj_meta, asas_sn_meta)
+        # Get a tarxiv unique id
+        txv_id = self.db.get_txv_id(year=object_id[:4], obj_name=object_id)
+        # Parse coords
+        ra_deg, dec_deg = tns_meta["ra_deg"]["value"], tns_meta["dec_deg"]["value"]
+        ra_hms, dec_dms = deg2sex(ra_deg, dec_deg)
+        # Start our meta dict
+        meta = {
+            "tarxiv_id": txv_id,
+            "ra": ra_hms,
+            "dec": dec_dms,
+            "source": "tns",
+            "object_id": object_id,
+            "discovery_date": tns_meta["discovery_date"],
+            "data_sources": {
+                "tns": tns_meta
+            }
+        }
+        # Now get meta and lightcurves from the surveys
+        fink_ztf_meta, ztf_lc = self.ztf.get_object(object_id, ra_deg, dec_deg)
+        asas_sn_meta, asas_sn_lc = self.asas_sn.get_object(object_id, ra_deg, dec_deg)
+        fink_lsst_meta, lsst_lc = self.lsst.get_object(object_id, ra_deg, dec_deg)
+        # Get additional meta from the survey
+        lasair_meta = self.lasair.get_object(object_id, ra_deg, dec_deg)
+
+        # Make the meta dict
+        if fink_ztf_meta is not None:
+            meta["data_sources"]["fink_ztf"] = fink_ztf_meta
+            # Calculate lc_detections and mag rates
+            if not ztf_lc.empty:
+                detections, non_detections, peaks = summarize_lc_mags(ztf_lc)
+                if detections:
+                    meta["data_sources"]["fink_ztf"]["latest_detection"] = detections
+                if non_detections:
+                    meta["data_dources"]["fink_ztf"]["non_detections"] = non_detections
+                if peaks:
+                    meta["data_sources"]["fink_ztf"]["peaks"] = peaks
+
+        if asas_sn_meta is not None:
+            meta["data_sources"]["asas_sn"] = asas_sn_meta
+            # Calculate
+            if not asas_sn_lc.empty:
+                detections, non_detections, peaks = summarize_lc_mags(asas_sn_lc)
+                if detections:
+                    meta["data_sources"]["asas_sn"]["latest_detection"] = detections
+                if non_detections:
+                    meta["data_dources"]["asas_sn"]["non_detections"] = non_detections
+                if peaks:
+                    meta["data_sources"]["asas_sn"]["peaks"] = peaks
+
+        if fink_lsst_meta is not None:
+            meta["data_sources"]["fink_lsst"] = fink_lsst_meta
+            # I could make this a function, but fuck that
+            # Calculate
+            if not asas_sn_lc.empty:
+                detections, non_detections, peaks = summarize_lc_mags(lsst_lc)
+                if detections:
+                    meta["data_sources"]["fink_lsst"]["latest_detection"] = detections
+                if non_detections:
+                    meta["data_dources"]["fink_lsst"]["non_detections"] = non_detections
+                if peaks:
+                    meta["data_sources"]["fink_lsst"]["peaks"] = peaks
+
+        if lasair_meta is not None:
+            meta["data_sources"]["sherlock"] = lasair_meta
+
         # Collate lightcurves and add peak mag measurements to schema
-        lc_df = pd.concat([atlas_lc, ztf_lc, asas_sn_lc])
+        lc_df = pd.concat([ztf_lc, asas_sn_lc, lsst_lc])
         if len(lc_df) > 0:
             # Sometimes we get bad negative mag/limit values (make positive when over 10 for sanity)
             lc_df["mag"] = lc_df["mag"].apply(
@@ -82,115 +131,37 @@ class TNSPipeline(TarxivModule):
             )
 
             # Cut on time (1 month before DISCOVERY, 6 months after)
-            disc_mjd = Time(obj_meta["discovery_date"][0]["value"]).mjd
+            disc_mjd = Time(tns_meta["discovery_date"]).mjd
             # IF we have a reporting date, cut around that as well, IF NOT just sub in discovery for no effect
             rep_mjd = (
-                Time(obj_meta["reporting_date"][0]["value"]).mjd
-                if "reporting_date" in obj_meta.keys()
-                else Time(obj_meta["discovery_date"][0]["value"]).mjd
+                Time(tns_meta["reporting_date"]).mjd
+                if "reporting_date" in tns_meta.keys()
+                else Time(tns_meta["discovery_date"]).mjd
             )
             lc_df = lc_df[
-                (
-                    ((disc_mjd - lc_df["mjd"]) <= self.config["tns"]["obj_prior_days"])
-                    & (
-                        (lc_df["mjd"] - disc_mjd)
-                        <= self.config["tns"]["obj_active_days"]
-                    )
-                )
-                | (
-                    ((rep_mjd - lc_df["mjd"]) <= self.config["tns"]["obj_prior_days"])
-                    & (
-                        (lc_df["mjd"] - rep_mjd)
-                        <= self.config["tns"]["obj_active_days"]
-                    )
-                )
+                (((disc_mjd - lc_df["mjd"]) <= self.config["tns"]["obj_prior_days"])
+                  & ((lc_df["mjd"] - disc_mjd) <= self.config["tns"]["obj_active_days"]))
+                | (((rep_mjd - lc_df["mjd"]) <= self.config["tns"]["obj_prior_days"])
+                  & ((lc_df["mjd"] - rep_mjd) <= self.config["tns"]["obj_active_days"]))
             ]
-        # Add peak magnitudes to meta
-        status, obj_meta = append_dynamic_values(obj_meta, lc_df)
-        # Drop night column from lc, was only necessary for mag_rates
-        if len(lc_df) != 0:
-            lc_df = lc_df.drop("night", axis=1)
-        status.update({"obj_name": obj_name})
-        self.logger.info(status, extra=status)
-        obj_meta = clean_meta(obj_meta)
         # Convert to json for submission
         obj_lc = json.loads(lc_df.to_json(orient="records"))
 
-        # Now run a quick comparison of the initial metadata to new metadata for updates
-        if init_meta is not None:  # Check to see which fields have been updated
-            diff = deepdiff.DeepDiff(
-                init_meta, obj_meta, ignore_order=True, view="tree"
-            )
-            # We only care about the following fields
-            relevant_fields = [
-                "identifiers",
-                "object_type",
-                "host_name",
-                "redshift",
-                "latest_detection",
-            ]
-            update_meta = {field: [] for field in relevant_fields}
-            if "values_changed" in diff.keys():
-                for field in diff["values_changed"]:
-                    field_name = field.get_root_key()
-                    if field_name in relevant_fields:
-                        update_field = (
-                            field.t2
-                            if isinstance(field.t2, dict) and len(field.t2.keys()) > 1
-                            else field.up.t2
-                        )
-                        if update_field not in update_meta[field_name]:
-                            update_meta[field_name].append(update_field)
-            if "iterable_item_added" in diff.keys():
-                for field in diff["iterable_item_added"]:
-                    field_name = field.get_root_key()
-                    if field_name in relevant_fields:
-                        update_field = (
-                            field.t2
-                            if isinstance(field.t2, dict) and len(field.t2.keys()) > 1
-                            else field.up.t2
-                        )
-                        if update_field not in update_meta[field_name]:
-                            update_meta[field_name].append(update_field)
-            if "dictionary_item_added" in diff.keys():
-                for field in diff["dictionary_item_added"]:
-                    field_name = field.get_root_key()
-                    if field_name in relevant_fields:
-                        update_field = (
-                            field.t2
-                            if isinstance(field.t2, dict) and len(field.t2.keys()) > 1
-                            else field.up.t2
-                        )
-                        if update_field not in update_meta[field_name]:
-                            update_meta[field_name].append(update_field)
-            # Remove blank updates
-            update_meta = {
-                field: value for field, value in update_meta.items() if value
-            }
-            update_meta |= {"status": "updated_entry", "obj_name": obj_name}
+        return meta, obj_lc
 
-        else:
-            update_meta = obj_meta
-            update_meta["status"] = "new_entry"
-        # Add TNS RA and DEC to internal meta
-        obj_meta["internal"] = {
-            "tns_ra": tns_meta["ra_deg"]["value"],
-            "tns_dec": tns_meta["dec_deg"]["value"],
-        }
-        return obj_meta, obj_lc, update_meta
 
-    def upsert_object(self, obj_name, obj_meta, obj_lc):
+    def upsert_object(self, object_id, obj_meta, obj_lc):
         """
         Insert a TarXiv TNS object into the database.
 
-        :param obj_name: tarxiv obj name; str
+        :param object_id: tarxiv obj name; str
         :param obj_meta: tarxiv obj meta data; dict
         :param obj_lc: tarxiv obj light curve data; dict
         :return: void
         """
         # Before we upsert, we will add a couple lookup fields
-        self.db.upsert(obj_name, obj_meta, collection="objects")
-        self.db.upsert(obj_name, obj_lc, collection="lightcurves")
+        self.db.upsert(object_id, obj_meta, collection="objects")
+        self.db.upsert(object_id, obj_lc, collection="lightcurves")
 
     def get_tns_bulk_df(self):
         # Run request to TNS Server
@@ -224,9 +195,9 @@ class TNSPipeline(TarxivModule):
 
         if not include_existing:
             # Only ingest TNS objects NOT already in the database
-            db_obj_names = self.db.get_all_objects()
-            obj_names = list(set(tns_df["name"].tolist()) - set(db_obj_names))
-            tns_df = tns_df[tns_df["name"].isin(obj_names)]
+            db_object_ids = self.db.get_all_objects()
+            object_ids = list(set(tns_df["name"].tolist()) - set(db_object_ids))
+            tns_df = tns_df[tns_df["name"].isin(object_ids)]
 
         status = {"status": "processing bulk object list", "n_objs": len(tns_df)}
         self.logger.info(status, extra=status)
@@ -235,23 +206,21 @@ class TNSPipeline(TarxivModule):
                 break
             # FRB Naming conventions are weird
             if obj["type"] == "FRB" and obj["name"][:3] != "FRB":
-                obj_name = "FRB" + obj["name"]
+                object_id = "FRB" + obj["name"]
             else:
-                obj_name = obj["name"]
+                object_id = obj["name"]
             try:
                 # Get survey information
-                obj_meta, obj_lc, _ = self.get_object(obj_name)
+                object_id, obj_meta, obj_lc = self.get_object(object_id)
                 # Add reporting date
-                obj_meta["reporting_date"] = [
-                    {"value": obj["time_received"], "source": "tns"}
-                ]
+                obj_meta["reporting_date"] = obj["time_received"]
                 # Upsert to database
-                self.upsert_object(obj_name, obj_meta, obj_lc)
+                self.upsert_object(object_id, obj_meta, obj_lc)
             except Exception:
                 stack_trace = traceback.format_exc()
                 self.logger.error({
                     "status": "failed pipeline operation",
-                    "obj_name": obj_name,
+                    "object_id": object_id,
                     "exception": stack_trace,
                 })
 
@@ -263,52 +232,36 @@ class TNSPipeline(TarxivModule):
         # First get whole dataframe
         tns_df = self.get_tns_bulk_df()
         # Pull TNS info and update
-        for obj_name in daily_objects:
+        for object_id in daily_objects:
             try:
                 if self.stop_event.is_set():
                     break
                 # Get survey information
-                obj_meta, obj_lc, update_meta = self.get_object(obj_name)
+                obj_meta, obj_lc = self.get_object(object_id)
                 # Add reporting date
                 try:
-                    obj = tns_df[tns_df["name"] == obj_name].iloc[0].to_dict()
-                    obj_meta["reporting_date"] = [
-                        {"value": obj["time_received"], "source": "tns"}
-                    ]
+                    obj = tns_df[tns_df["name"] == object_id].iloc[0].to_dict()
+                    obj_meta["reporting_date"] = obj["time_received"]
                 except Exception:
                     status = {
                         "status": "no cooresponding reporting date",
-                        "obj_name": obj_name,
+                        "object_id": object_id,
                     }
                     self.logger.error(status, extra=status)
 
                 # Get timestamp
                 timestamp = datetime.datetime.now().isoformat()
-                update_meta["timestamp"] = timestamp
                 # Add insertion date to internal meta as well
-                obj_meta["internal"]["update_date"] = timestamp
+                obj_meta["update_date"] = timestamp
 
                 # Upsert to database
-                self.upsert_object(obj_name, obj_meta, obj_lc)
-                # We don't need to send hopskotch alert for objects with no updates
-                if len(update_meta.keys()) <= 3:
-                    continue
-                stream = Stream(auth=self.hop_auth)
-                # Submit to hopskotch
-                with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
-                    # Add fields for hopskotch alert
+                self.upsert_object(object_id, obj_meta, obj_lc)
 
-                    s.write(update_meta)
-                    status = {
-                        "status": "submitted hopskotch alert",
-                        "obj_name": obj_name,
-                    }
-                    self.logger.info(status, extra=status)
             except Exception:
                 stack_trace = traceback.format_exc()
                 self.logger.error({
                     "status": "failed pipeline operation",
-                    "obj_name": obj_name,
+                    "object_id": object_id,
                     "exception": stack_trace,
                 })
 
@@ -327,19 +280,18 @@ class TNSPipeline(TarxivModule):
                 continue
 
             # Each result contains message and list of objects
-            for obj_name in alerts:
+            for object_id in alerts:
                 try:
                     # Get survey information
-                    obj_meta, obj_lc, update_meta = self.get_object(obj_name)
+                    obj_meta, obj_lc = self.get_object(object_id)
 
                     # Get timestamp
                     timestamp = datetime.datetime.now().isoformat()
-                    update_meta["timestamp"] = timestamp
                     # Add insertion date to internal meta as well
-                    obj_meta["internal"]["insert_date"] = timestamp
+                    obj_meta["update_date"] = timestamp
 
                     # Upsert to database
-                    self.upsert_object(obj_name, obj_meta, obj_lc)
+                    self.upsert_object(object_id, obj_meta, obj_lc)
 
                     stream = Stream(self.hop_auth)
                     # Submit to hopskotch
@@ -347,16 +299,16 @@ class TNSPipeline(TarxivModule):
                         # Additional information for hopskotch
                         # hop_msg = {}
                         # update_meta | {"title": "TNS Public Alert"}
-                        s.write(update_meta)
+                        s.write(obj_meta)
                         status = {
                             "status": "submitted hopskotch alert",
-                            "obj_name": obj_name,
+                            "object_id": object_id,
                         }
                         self.logger.info(status, extra=status)
                 except Exception:
                     stack_trace = traceback.format_exc()
                     self.logger.error({
                         "status": "failed pipeline operation",
-                        "obj_name": obj_name,
+                        "object_id": object_id,
                         "exception": stack_trace,
                     })
