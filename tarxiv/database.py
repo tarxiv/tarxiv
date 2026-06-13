@@ -1,5 +1,5 @@
 # Database utilities
-from .utils import TarxivModule
+from .utils import TarxivModule, int_to_alphanumeric
 from datetime import timedelta
 from couchbase.cluster import Cluster
 from couchbase.options import ClusterOptions, ClusterTimeoutOptions
@@ -73,7 +73,7 @@ class TarxivDB(TarxivModule):
     def get_all_active_objects(self, active_days):
         query = (
             f"SELECT                                "
-            f"  meta().id as obj_name               "
+            f"  meta().id as object_id               "
             f"FROM tarxiv.{self.scope}.objects      "
             f"WHERE                                 "
             f"  ANY `disc_date` IN `discovery_date`                                                 "
@@ -84,12 +84,12 @@ class TarxivDB(TarxivModule):
         )
 
         result = self.cluster.query(query)
-        return [r["obj_name"] for r in result]
+        return [r["object_id"] for r in result]
 
     def get_all_objects(self):
-        query = f"SELECT meta().id as obj_name FROM tarxiv.{self.scope}.objects"
+        query = f"SELECT meta().id as object_id FROM tarxiv.{self.scope}.objects"
         result = self.cluster.query(query)
-        return [r["obj_name"] for r in result]
+        return [r["object_id"] for r in result]
 
     def upsert(self, object_name, payload, collection):
         """Insert document into couchbase collection. Update if already exists.
@@ -103,7 +103,7 @@ class TarxivDB(TarxivModule):
         coll.upsert(object_name, payload)
         status = {
             "status": "upserted",
-            "obj_name": object_name,
+            "object_id": object_name,
             "collection": collection,
         }
         self.logger.info(status, extra=status)
@@ -120,7 +120,7 @@ class TarxivDB(TarxivModule):
             result = coll.get(object_name).value
             status = {
                 "status": "retrieved",
-                "obj_name": object_name,
+                "object_id": object_name,
                 "collection": collection,
             }
             if isinstance(result, dict) and "internal" in result:
@@ -129,7 +129,7 @@ class TarxivDB(TarxivModule):
         except DocumentNotFoundException:
             status = {
                 "status": "no_document",
-                "obj_name": object_name,
+                "object_id": object_name,
                 "collection": collection,
             }
             self.logger.warn(status, extra=status)
@@ -143,7 +143,7 @@ class TarxivDB(TarxivModule):
         :param ra_deg: Right Ascension in degrees; float
         :param dec_deg: Declination in degrees; float
         :param radius_arcsec: Search radius in arcseconds; float
-        :return: List of matching objects with obj_name, ra, dec, distance_deg
+        :return: List of matching objects with object_id, ra, dec, distance_deg
         """
         # Convert arcseconds to degrees
         radius_deg = radius_arcsec / 3600.0
@@ -156,20 +156,22 @@ class TarxivDB(TarxivModule):
         # Note: 'value' is a reserved keyword in SQL++ so we escape it with backticks
         # Using LET to compute distance, then filter with WHERE
         query = f"""
-            SELECT meta().id as obj_name,
-                   obj.internal.tns_ra as ra,
-                   obj.internal.tns_dec as dec,
-                   distance_deg
+            SELECT 
+                obj.tarxiv_id,
+                obj.source,
+                obj.discovery_date,
+                obj.object_id,
+                obj.ra,
+                obj.dec,
+                distance_deg
             FROM tarxiv.{self.scope}.objects obj
             LET distance_deg = ACOS(
-                       SIN(RADIANS({dec_deg})) * SIN(RADIANS(obj.internal.tns_dec)) +
-                       COS(RADIANS({dec_deg})) * COS(RADIANS(obj.internal.tns_dec)) *
-                       COS(RADIANS({ra_deg} - obj.internal.tns_ra))
+                       SIN(RADIANS({dec_deg})) * SIN(RADIANS(obj.dec)) +
+                       COS(RADIANS({dec_deg})) * COS(RADIANS(obj.dec)) *
+                       COS(RADIANS({ra_deg} - obj.ra))
                    ) * 180 / PI()
             WHERE 1=1
-              AND obj.ra_deg IS NOT NULL
-              AND obj.dec_deg IS NOT NULL
-              AND ABS(obj.internal.tns_dec - {dec_deg}) <= {radius_deg}
+              AND ABS(obj.dec - {dec_deg}) <= {radius_deg}
               AND distance_deg <= {radius_deg}
             ORDER BY distance_deg
         """
@@ -184,6 +186,32 @@ class TarxivDB(TarxivModule):
 
         result = self.cluster.query(query)
         return list(result)
+
+    def get_txv_id(self, year, object_id=None):
+        # If we have an object name, the check if there
+        if object_id is not None:
+            meta = self.get(object_id, collection='objects')
+            # If the object exists, then use its txv-idx
+            if meta is not None:
+                return meta["tarxiv_id"]
+
+        # If we have no object name then just generate a new index
+        new_idx = self.cluster.transactions.run(
+                lambda ctx: self.increment_txv_idx(ctx, year)
+        )
+
+        # Full detection id will be TXV-2025-xxxxxx
+        alpha_id = int_to_alphanumeric(new_idx, self.config["txv_id_len"])
+        return f"TXV-{year}-{alpha_id}"
+
+
+    def increment_txv_idx(self, ctx, year):
+        # Run increment transaction
+        doc = ctx.get(self.conn.scope("misc").collection("idx"), year)
+        content = doc.content_as[dict]
+        content["current_idx"] += 1
+        ctx.replace(doc, content)
+        return content["current_idx"]
 
     def close(self):
         """Close connection to couchbase
