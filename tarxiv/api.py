@@ -635,7 +635,7 @@ class API(TarxivModule):
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
 
-        @self.app.route("/get_object_lc/<string:catalog>_<string:tarxiv_id>", methods=["POST"])
+        @self.app.route("/get_object_lc/<string:tarxiv_id>", methods=["POST"])
         def get_object_lc(tarxiv_id):
             token = request.headers.get("Authorization")
             # Start log

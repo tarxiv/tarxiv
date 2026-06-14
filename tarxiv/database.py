@@ -1,4 +1,6 @@
 # Database utilities
+import traceback
+
 from .utils import TarxivModule, int_to_alphanumeric
 from datetime import timedelta
 
@@ -126,6 +128,7 @@ class TarxivDB(TarxivModule):
                         "collection": collection,
                     }
                     self.logger.error(status, extra=status)
+                    print(traceback.format_exc())
                     break
 
 
@@ -179,7 +182,7 @@ class TarxivDB(TarxivModule):
                 FROM tarxiv.objects.meta 
                 WHERE source_id = '{source_id}'
             """
-            result = list(self.cluster.query(statement))[0]
+            result = list(self.cluster.query(statement))[0]["meta"]
             status = {
                 "status": "retrieved",
                 "source_id": source_id,
