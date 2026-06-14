@@ -178,7 +178,15 @@ class TarxivDB(TarxivModule):
     def get_source_meta(self, source_id):
         try:
             statement = f"""
-                SELECT *
+                SELECT 
+                  tarxiv_id,
+                  source,
+                  source_id,
+                  ra,
+                  dec,
+                  discovery_date,
+                  update_date,
+                  data_sources
                 FROM tarxiv.objects.meta 
                 WHERE source_id = '{source_id}'
             """
