@@ -14,6 +14,7 @@ import time
 import os
 import imaplib
 import email
+import signal
 import re
 
 
@@ -248,6 +249,17 @@ class IMAP(TarxivModule):
         self.q = Queue()
         # Create stop flag for monitoring
         self.stop_event = threading.Event()
+        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
+
+    def signal_handler(self, sig, frame):
+        status = {
+            "status": "received exit signal, wait to finish processing",
+            "signal": str(sig),
+            "frame": str(frame),
+        }
+        self.stop_monitoring()
+        self.logger.info(status, extra=status)
 
     def poll(self, timeout=1):
         """Once we have began monitoring notices, poll the queue for new messages and alerts

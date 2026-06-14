@@ -205,11 +205,11 @@ class TNSPipeline(TarxivModule):
                 object_id = obj["name"]
             try:
                 # Get survey information
-                object_id, obj_meta, obj_lc = self.get_object(object_id)
+                txv_id, obj_meta, obj_lc = self.get_object(object_id)
                 # Add reporting date
                 obj_meta["reporting_date"] = obj["time_received"]
                 # Upsert to database
-                self.upsert_object(object_id, obj_meta, obj_lc)
+                self.upsert_object(txv_id, obj_meta, obj_lc)
 
             except Exception:
                 stack_trace = traceback.format_exc()
@@ -230,7 +230,7 @@ class TNSPipeline(TarxivModule):
                 if self.stop_event.is_set():
                     break
                 # Get survey information
-                obj_meta, obj_lc = self.get_object(object_id)
+                txv_id, obj_meta, obj_lc = self.get_object(object_id)
                 # Add reporting date
                 try:
                     obj = tns_df[tns_df["name"] == object_id].iloc[0].to_dict()
@@ -248,7 +248,7 @@ class TNSPipeline(TarxivModule):
                 obj_meta["update_date"] = timestamp
 
                 # Upsert to database
-                self.upsert_object(object_id, obj_meta, obj_lc)
+                self.upsert_object(txv_id, obj_meta, obj_lc)
 
             except Exception:
                 stack_trace = traceback.format_exc()
@@ -276,7 +276,7 @@ class TNSPipeline(TarxivModule):
             for object_id in alerts:
                 try:
                     # Get survey information
-                    obj_meta, obj_lc = self.get_object(object_id)
+                    txv_id, obj_meta, obj_lc = self.get_object(object_id)
 
                     # Get timestamp
                     timestamp = datetime.datetime.now().isoformat()
@@ -284,7 +284,7 @@ class TNSPipeline(TarxivModule):
                     obj_meta["update_date"] = timestamp
 
                     # Upsert to database
-                    self.upsert_object(object_id, obj_meta, obj_lc)
+                    self.upsert_object(txv_id, obj_meta, obj_lc)
 
                     stream = Stream(self.hop_auth)
                     # Submit to hopskotch
