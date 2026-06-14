@@ -190,7 +190,7 @@ class TarxivDB(TarxivModule):
                 FROM tarxiv.objects.meta 
                 WHERE source_id = '{source_id}'
             """
-            result = list(self.cluster.query(statement))[0]["meta"]
+            result = list(self.cluster.query(statement))[0]
             status = {
                 "status": "retrieved",
                 "source_id": source_id,
