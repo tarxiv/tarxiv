@@ -6,12 +6,14 @@ from confluent_kafka import Producer
 from astropy.time import Time
 from hop.auth import Auth
 from hop import Stream
+import multiprocessing as mp
 import pandas as pd
 import requests
 import datetime
 import traceback
 import zipfile
 import socket
+import signal
 import json
 import io
 import os
@@ -52,6 +54,20 @@ class TNSPipeline(TarxivModule):
                 'batch.num.messages': 100,
                 'client.id': socket.gethostname()}
         self.kafka = Producer(conf)
+
+        # Signal handling
+        self.stop_event = mp.Event()
+        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
+
+    def signal_handler(self, sig, frame):
+        self.stop_event.set()
+        status = {
+            "status": "received exit signal, wait to finish processing",
+            "signal": str(sig),
+            "frame": str(frame),
+        }
+        self.logger.info(status, extra=status)
 
     def get_object(self, object_id, data_source):
         """

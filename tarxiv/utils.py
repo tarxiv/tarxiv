@@ -89,21 +89,6 @@ class TarxivModule:
         status = {"status": "initializing"}
         self.logger.info(status, extra=status)
 
-        # Signal handling
-        self.stop_event = mp.Event()
-        signal.signal(signal.SIGINT, self.signal_handler)
-        signal.signal(signal.SIGTERM, self.signal_handler)
-
-    def signal_handler(self, sig, frame):
-        self.stop_event.set()
-        status = {
-            "status": "received exit signal, wait to finish processing",
-            "signal": str(sig),
-            "frame": str(frame),
-        }
-        self.logger.info(status, extra=status)
-        time.sleep(5)
-        sys.exit(0)
 
 
 class SurveyMetaMissingError(Exception):
