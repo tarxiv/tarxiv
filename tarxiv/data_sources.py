@@ -576,9 +576,10 @@ class LSST(TarxivModule):
             # Specific to lightcurves
             df["limit"] = None
             df["camera"] = "main"
+            lc_df["detection"] = 1
+
             df = df.rename({"r:midpointMjdTai": "mjd", "r:band": "filter", "r:snr": "snr"}, axis=1)
             lc_df = df[["mjd", "mag", "mag_err", "filter", "snr", "detection", "limit", "camera"]]
-            lc_df["detection"] = 1
             lc_df["survey"] = "lsst"
 
             # Now let us cut the mjd of this

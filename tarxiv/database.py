@@ -3,7 +3,8 @@ from .utils import TarxivModule, int_to_alphanumeric
 from datetime import timedelta
 
 from couchbase.options import ClusterOptions, ClusterTimeoutOptions, IncrementOptions
-from couchbase.exceptions import DocumentNotFoundException, SubdocPathMismatchException, PathNotFoundException
+from couchbase.exceptions import DocumentNotFoundException, SubdocPathMismatchException, PathNotFoundException, \
+    AmbiguousTimeoutException
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster
 import couchbase.subdocument as SD
@@ -37,7 +38,7 @@ class TarxivDB(TarxivModule):
         # Authenticate
         authenticator = PasswordAuthenticator(username, password)
         timeout_opts = ClusterTimeoutOptions(
-            connect_timeout=timedelta(seconds=12), kv_timeout=timedelta(seconds=20)
+            connect_timeout=timedelta(seconds=12), kv_timeout=timedelta(seconds=30)
         )
         options = ClusterOptions(authenticator, timeout_options=timeout_opts)
         # Connect
@@ -103,14 +104,30 @@ class TarxivDB(TarxivModule):
         :param collection: couchbase collection; meta or lightcurve; str
         :return: void
         """
-        coll = self.conn.scope(scope).collection(collection)
-        coll.upsert(doc_id, payload)
-        status = {
-            "status": "upserted",
-            "object_id": doc_id,
-            "collection": collection,
-        }
-        self.logger.info(status, extra=status)
+        count = 0
+        while True:
+            # TRY 5x WITH TIMEOUTS
+            try:
+                coll = self.conn.scope(scope).collection(collection)
+                coll.upsert(doc_id, payload)
+                status = {
+                    "status": "upserted",
+                    "object_id": doc_id,
+                    "collection": collection,
+                }
+                self.logger.info(status, extra=status)
+                break
+            except AmbiguousTimeoutException:
+                count += 1
+                if count > 5:
+                    status = {
+                        "status":  "repeated upsert timeouts",
+                        "object_id": doc_id,
+                        "collection": collection,
+                    }
+                    self.logger.error(status, extra=status)
+                    break
+
 
     def lookup_in(self, object_id, sub_field, scope, collection, return_type=str):
         """
@@ -150,7 +167,7 @@ class TarxivDB(TarxivModule):
                 "object_id": doc_id,
                 "collection": collection,
             }
-            self.logger.warn(status, extra=status)
+            self.logger.debug(status, extra=status)
             result = None
 
         return result
@@ -173,7 +190,7 @@ class TarxivDB(TarxivModule):
                 "status": "no_document",
                 "object_id": source_id,
             }
-            self.logger.warn(status, extra=status)
+            self.logger.debug(status, extra=status)
             result = None
 
         return result
@@ -237,14 +254,32 @@ class TarxivDB(TarxivModule):
             if meta is not None and "tarxiv_id" in meta.keys():
                 return meta["tarxiv_id"]
 
-        # If we have no object name then just generate a new index
-        coll = self.conn.scope("misc").collection("idx")
-        new_idx = coll.binary().increment(year,
-                IncrementOptions(timeout=timedelta(seconds=30))).content
-
-        # Full detection id will be TXV-2025-xxxxxx
-        alpha_id = int_to_alphanumeric(new_idx, self.config["txv_id_len"])
-        return f"TXV-{year}-{alpha_id}"
+        # Try 5x if necessary
+        count = 0
+        while True:
+            try:
+                # If we have no object name then just generate a new index
+                coll = self.conn.scope("misc").collection("idx")
+                new_idx = coll.binary().increment(year,
+                        IncrementOptions(timeout=timedelta(seconds=30))).content
+                # Full detection id will be TXV-2025-xxxxxx
+                alpha_id = int_to_alphanumeric(new_idx, self.config["txv_id_len"])
+                txv_id = f"TXV-{year}-{alpha_id}"
+                status = {
+                    "status": "new_txv_idx",
+                    "tarxiv_id": txv_id,
+                }
+                self.logger.info(status, extra=status)
+                return txv_id
+            except AmbiguousTimeoutException:
+                count += 1
+                if count > 5:
+                    status = {
+                        "status":  "repeated txv idx timeouts",
+                        "year": year,
+                    }
+                    self.logger.error(status, extra=status)
+                    return None
 
 
     def close(self):

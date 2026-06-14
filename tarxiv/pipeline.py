@@ -1,4 +1,4 @@
-from .utils import TarxivModule, deg2sex
+from .utils import TarxivModule, TarxivPipelineError, deg2sex
 from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair
 from .database import TarxivDB
 from .alerts import IMAP
@@ -61,13 +61,14 @@ class TNSPipeline(TarxivModule):
         signal.signal(signal.SIGTERM, self.signal_handler)
 
     def signal_handler(self, sig, frame):
-        self.stop_event.set()
         status = {
             "status": "received exit signal, wait to finish processing",
             "signal": str(sig),
             "frame": str(frame),
         }
         self.logger.info(status, extra=status)
+        self.stop_event.set()
+        self.gmail.stop_monitoring()
 
     def get_object(self, object_id):
         """
@@ -84,6 +85,8 @@ class TNSPipeline(TarxivModule):
 
         # Get a tarxiv unique id
         txv_id = self.db.get_txv_id(year=object_id[:4], object_id=object_id)
+        if txv_id is None:
+            raise TarxivPipelineError("Unable to generate new tarxiv_idx")
         # Parse coords
         ra_deg, dec_deg = tns_meta["ra_deg"], tns_meta["dec_deg"]
         ra_hms, dec_dms = deg2sex(ra_deg, dec_deg)
@@ -111,6 +114,7 @@ class TNSPipeline(TarxivModule):
                 "prior_days": self.config["tns"]["obj_prior_days"],
                 "active_days": self.config["tns"]["obj_active_days"],
             }
+            self.db.upsert(txv_id, active_settings, scope="misc", collection="active_settings")
         # Check if we have special min/max mjds, if not use default
         mjd_min = disc_mjd - active_settings["prior_days"]
         mjd_max = disc_mjd + active_settings["active_days"]
