@@ -69,7 +69,7 @@ class TNSPipeline(TarxivModule):
         }
         self.logger.info(status, extra=status)
 
-    def get_object(self, object_id, data_source):
+    def get_object(self, object_id):
         """
         Queries TNS for an object then finds all associated survey data.
         Same as get object, but with split schema
@@ -230,9 +230,7 @@ class TNSPipeline(TarxivModule):
 
     def daily_update(self):
         # Get all targets still in "active" window for update
-        daily_objects = self.db.get_all_active_objects(
-            active_days=self.config["tns"]["obj_active_days"]
-        )
+        daily_objects = self.db.get_all_active_objects()
         # First get whole dataframe
         tns_df = self.get_tns_bulk_df()
         # Pull TNS info and update

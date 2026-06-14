@@ -71,7 +71,7 @@ class TarxivDB(TarxivModule):
         self.logger.debug(status, extra=status)
         return self.cluster.query(statement)
 
-    def get_all_active_objects(self, active_days):
+    def get_all_active_objects(self):
         statement = (
             f"SELECT                                                                          "
             f"  meta.tarxiv_id                                                                "
@@ -232,7 +232,7 @@ class TarxivDB(TarxivModule):
     def get_txv_id(self, year, object_id=None):
         # If we have an object name, the check if there
         if object_id is not None:
-            meta = self.get(object_id, collection='objects')
+            meta = self.get(object_id, scope="objects", collection='meta')
             # If the object exists, then use its txv-idx
             if meta is not None and "tarxiv_id" in meta.keys():
                 return meta["tarxiv_id"]
