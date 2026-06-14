@@ -63,6 +63,7 @@ class API(TarxivModule):
         self.app.secret_key = os.environ.get(
             "TARXIV_API_SECRET_KEY"
         ) or secrets.token_hex(32)
+        self.app.config["JSON_SORT_KEYS"] = False
         # Register routes
         self.routes()
         self.app.register_blueprint(Blueprint("main", __name__))

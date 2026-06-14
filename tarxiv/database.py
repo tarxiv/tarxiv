@@ -191,6 +191,17 @@ class TarxivDB(TarxivModule):
                 WHERE source_id = '{source_id}'
             """
             result = list(self.cluster.query(statement))[0]
+            # Ya ordering
+            result = {
+                "tarxiv_id": result["tarxiv_id"],
+                "source": result["source"],
+                "source_id": result["source_id"],
+                "ra": result["ra"],
+                "dec": result["dec"],
+                "discovery_date": result["discovery_date"],
+                "update_date": result["update_date"],
+                "data_sources": result["data_sources"],
+            }
             status = {
                 "status": "retrieved",
                 "source_id": source_id,
