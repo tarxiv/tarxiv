@@ -565,10 +565,15 @@ class LSST(TarxivModule):
             df = pd.read_json(io.BytesIO(r1.content))
             # Get meta line from most recent measurement
             meta_line = df.iloc[df["r:midpointMjdTai"].idxmax()].dropna().to_dict()
-            meta = {k[2:]: v for k, v in meta_line.items()
-                         if k[0] == "f" and v != 'nan' and "tns" not in k and "version" not in k}
+            meta = {}
             meta["object_id"] = nearest["r:diaObjectId"]
             meta["source_id_name"] = "diaObjectId"
+            meta["ra_deg"] = ra_deg
+            meta["dec_deg"] = dec_deg
+            # Put all the rest of the meta in
+            for k, v in meta_line.items():
+                if k[0] == "f" and v != 'nan' and "tns" not in k and "version" not in k:
+                    meta[k[2:]] = v
 
             # Format output in a DataFrame
             df["mag"] = -2.5 * np.log10(df["r:psfFlux"]) + 31.4
