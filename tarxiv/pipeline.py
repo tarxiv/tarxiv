@@ -103,27 +103,18 @@ class TNSPipeline(TarxivModule):
         # Cut on time (1 month before DISCOVERY, 6 months after)
         # IF we have a reporting date, WORK ON LATER
         disc_mjd = Time(tns_meta["discovery_date"]).mjd
-        # Check if we have special min/max mjds, if not use default
-        mjd_min = self.db.lookup_in(txv_id,
-                                    sub_field="prior_days",
-                                    scope="misc",
-                                    collection="active_settings")
-        if mjd_min is None:
-            mjd_min = disc_mjd - self.config["tns"]["obj_prior_days"]
-            self.db.set_field(txv_id,
-                              key="prior_days", value=self.config["tns"]["obj_prior_days"],
-                              scope="misc", collection="active_settings")
 
-        # Now check max
-        mjd_max = self.db.lookup_in(txv_id,
-                                    sub_field="active_days",
-                                    scope="misc",
-                                    collection="active_settings")
-        if mjd_min is None:
-            mjd_max = disc_mjd + self.config["tns"]["obj_active_days"]
-            self.db.set_field(txv_id,
-                              key="active_days", value=self.config["tns"]["obj_active_days"],
-                              scope="misc", collection="active_settings")
+        # Check if we have a document giving the settings
+        active_settings = self.db.get(txv_id, scope="misc", collection="active_settings")
+        if active_settings is None:
+            active_settings = {
+                "prior_days": self.config["tns"]["obj_prior_days"],
+                "active_days": self.config["tns"]["obj_active_days"],
+            }
+        # Check if we have special min/max mjds, if not use default
+        mjd_min = disc_mjd - active_settings["prior_days"]
+        mjd_max = disc_mjd + active_settings["active_days"]
+
 
         # Now get meta and lightcurves from the surveys
         fink_ztf_meta, ztf_lc = self.ztf.get_object(object_id, ra_deg, dec_deg, mjd_min, mjd_max)
