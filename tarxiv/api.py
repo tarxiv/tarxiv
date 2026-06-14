@@ -36,7 +36,7 @@ class API(TarxivModule):
             extra={"status": "initializing API module"},
         )
         # Get couchbase connection
-        self.txv_db = TarxivDB("tns", "api", script_name, reporting_mode, debug)
+        self.txv_db = TarxivDB("api", script_name, reporting_mode, debug)
         self.user_db = UserDB(
             script_name="user_db",
             reporting_mode=reporting_mode,
@@ -590,27 +590,29 @@ class API(TarxivModule):
 
         # HFS - 2025-05-28: These self.app.route things are Flask decorators which become
         # endpoints for the API
-        @self.app.route("/get_object_meta/<string:object_id>", methods=["POST"])
-        def get_object_meta(object_id):
+        @self.app.route("/get_object_meta/<string:source_id>", methods=["POST"])
+        def get_object_meta(source_id):
             token = request.headers.get("Authorization")
             # Start log
             log = {
                 "query_type": "meta",
                 "query_ip": request.remote_addr,
                 "token": token,
-                "object_id": object_id,
+                "source_id": source_id,
             }
-
             try:
-                # Return error if bad token
+                # No token required
+                """
                 validation = self.validate_token_request(token)
                 if not validation["is_valid"]:
                     if validation["status"] == "expired":
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
+                """
                 # Find object info
-                result = self.txv_db.get(object_id, "objects")
+                result = self.txv_db.get_source_meta(source_id)
+
                 # Return nothing if bad request
                 if result is None:
                     raise LookupError("no such object")
@@ -633,26 +635,28 @@ class API(TarxivModule):
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
 
-        @self.app.route("/get_object_lc/<string:object_id>", methods=["POST"])
-        def get_object_lc(object_id):
+        @self.app.route("/get_object_lc/<string:catalog>_<string:tarxiv_id>", methods=["POST"])
+        def get_object_lc(tarxiv_id):
             token = request.headers.get("Authorization")
             # Start log
             log = {
                 "query_type": "lightcurve",
                 "query_ip": request.remote_addr,
                 "token": token,
-                "object_id": object_id,
+                "tarxiv_id": tarxiv_id,
             }
             try:
-                # Return error if bad token
+                # No token required
+                """
                 validation = self.validate_token_request(token)
                 if not validation["is_valid"]:
                     if validation["status"] == "expired":
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
+                """
                 # Find object info
-                result = self.txv_db.get(object_id, "lightcurves")
+                result = self.txv_db.get(tarxiv_id, scope="objects", collection="lightcurves")
                 # Return nothing if bad request
                 if result is None:
                     raise LookupError("no such object")
@@ -687,14 +691,15 @@ class API(TarxivModule):
                 "sources": request_json["sources"],
             }
             try:
-                # Return error if bad token
+                # No token required
+                """
                 validation = self.validate_token_request(token)
                 if not validation["is_valid"]:
                     if validation["status"] == "expired":
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
-
+                """
                 # Get all relevant citations
                 citations = []
                 for source in request_json["sources"]:
@@ -781,17 +786,17 @@ class API(TarxivModule):
                     object_filter = f" AND META().id IN [{object_list}]"
 
                 query = f"""SELECT
-                              objects.discovery_date,
-                              objects.object_id,
-                              objects.tns.object_type,
-                              objects.ra,
-                              objects.dec,
-                              objects.tns.redshift,
-                              objects.tns.reporting_group,
-                              objects.tns.discovery_data_source AS discovery_source
-                            FROM tarxiv.tns.objects
-                            WHERE objects.discovery_date IS NOT MISSING
-                            ORDER BY objects.discovery_date DESC
+                              meta.discovery_date,
+                              meta.tns.object_id,
+                              meta.tns.object_type,
+                              meta.ra,
+                              meta.dec,
+                              meta.tns.redshift,
+                              meta.tns.reporting_group,
+                              meta.tns.discovery_data_source AS discovery_source
+                            FROM tarxiv.objects.meta
+                            WHERE meta.source = 'tns' 
+                            ORDER BY meta.discovery_date DESC
                             LIMIT {request_json["n_rows"]} OFFSET {request_json["offset"]}"""
                 result = list(self.txv_db.query(query))
 
@@ -880,13 +885,15 @@ class API(TarxivModule):
                 "request": request_json,
             }
             try:
-                # Return error if bad token
+                # No token required
+                """
                 validation = self.validate_token_request(token)
                 if not validation["is_valid"]:
                     if validation["status"] == "expired":
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
+                """
                 # Extract parameters
                 ra = request_json["ra"]
                 dec = request_json["dec"]

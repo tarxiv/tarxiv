@@ -24,7 +24,8 @@ import os
 
 
 
-def summarize_lc_mags(lc_df):
+
+def summarize_lc_mags(obj_meta, lc_df):
     # We are interested in peak mag, most recent detection, most recent non detection, and recent change
     peak_mags = []
     recent_dets = []
@@ -99,9 +100,15 @@ def summarize_lc_mags(lc_df):
                 ).isot.replace("T", " "),
             }
             recent_nondets.append(recent_nondet)
+    # Append to meta and return
+    if recent_dets:
+        obj_meta["latest_detections"] = recent_dets
+    if recent_nondets:
+        obj_meta["latest_non_detections"] = recent_nondets
+    if peak_mags:
+        obj_meta["peak_mags"] = peak_mags
 
-    # Now return all detections, non_detections, and peak mags (for all filters)
-    return recent_dets, recent_nondets, peak_mags
+    return obj_meta
 
 
 class ASAS_SN(TarxivModule):  # noqa: N801
@@ -118,7 +125,7 @@ class ASAS_SN(TarxivModule):  # noqa: N801
         # Also need ASAS-SN client
         self.client = SkyPatrolClient(verbose=False)
 
-    def get_object(self, object_id=None, ra_deg=None, dec_deg=None, radius=15):
+    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=15):
         """Get ASAS-SN Lightcurve curve from coordinates using cone_search.
 
         :param object_id: name of object (used for logging); str
@@ -159,7 +166,11 @@ class ASAS_SN(TarxivModule):  # noqa: N801
             nearest = lcs.catalog_info.iloc[0]
             nearest_id = nearest["asas_sn_id"]
             meta = {
-                "asas_sn_id": str(nearest_id),
+                "object_id": str(nearest_id),
+                "source_id_name": "asas_sn_id",
+                "ra_deg": nearest["ra_deg"],
+                "dec_deg": nearest["dec_deg"],
+                "catalog_sources": nearest["catalog_sources"],
             }
             # Log
             status.update({"status": "match", "id": str(nearest_id)})
@@ -196,6 +207,10 @@ class ASAS_SN(TarxivModule):  # noqa: N801
                     "survey"
                 ]
             ]
+            # Now let us cut the mjd of this
+            lc_df = lc_df[(mjd_min <= lc_df["mjd"]) & (lc_df["mjd"] <= mjd_max)]
+            # Append information on recent detections and peak mags, etc
+            meta = summarize_lc_mags(obj_meta=meta, lc_df=lc_df)
             # Update
             status["lc_count"] = len(lc_df)
 
@@ -225,7 +240,7 @@ class ZTF(TarxivModule):
             debug=debug,
         )
 
-    def get_object(self, object_id=None, ra_deg=None, dec_deg=None, radius=15):
+    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=15):
         """Get ZTF Lightcurve from coordinates using cone_search.
 
         :param object_id: name of object (used for logging); str
@@ -312,7 +327,8 @@ class ZTF(TarxivModule):
             ]
             meta = {k :v for k, v in meta_line.items() if k in meta_columns
                            if v not in [None, 'nan', 'None']}
-            meta["identifier"] = ztf_name
+            meta["object_id"] = ztf_name
+            meta["source_id_name"] = "objectId"
 
             # Lightcurve columns and values
             cols = {
@@ -356,6 +372,11 @@ class ZTF(TarxivModule):
                     "survey"
                 ]
             ]
+
+            # Now let us cut the mjd of this
+            lc_df = lc_df[(mjd_min <= lc_df["mjd"]) & (lc_df["mjd"] <= mjd_max)]
+            # Append information on recent detections and peak mags, etc
+            meta = summarize_lc_mags(obj_meta=meta, lc_df=lc_df)
             # Report count
             status["lc_count"] = len(lc_df)
 
@@ -433,20 +454,19 @@ class TNS(TarxivModule):
         status["status"] = "query success"
         result = response_json["data"]
         meta = {
-            "identifier": result["objname"],
+            "object_id": result["objname"],
+            "source_id_name": "objname",
             "ra_deg": result["radeg"],
             "dec_deg": result["decdeg"],
             "ra_hms": result["ra"],
             "dec_dms": result["dec"],
             "object_type": result["object_type"]["name"],
+            "redshift": result["redshift"],
+            "hostname": result["hostname"],
             "discovery_date": result["discoverydate"],
             "reporting_group": result["reporting_group"]["group_name"],
             "discovery_data_source": result["discovery_data_source"]["group_name"]
         }
-        if result["redshift"] is not None:
-            meta["redshift"] = result["redshift"]
-        if result["hostname"] is not None:
-            meta["host_name"] = result["hostname"]
 
         self.logger.info(status, extra=status)
         return meta
@@ -509,7 +529,7 @@ class LSST(TarxivModule):
         )
 
 
-    def get_object(self, object_id=None, ra_deg=None, dec_deg=None, radius=15):
+    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=15):
         status = {"object_id": object_id}
         meta = None
         lc_df = pd.DataFrame()
@@ -547,7 +567,8 @@ class LSST(TarxivModule):
             meta_line = df.iloc[df["r:midpointMjdTai"].idxmax()].dropna().to_dict()
             meta = {k[2:]: v for k, v in meta_line.items()
                          if k[0] == "f" and v != 'nan' and "tns" not in k and "version" not in k}
-            meta["diaObjectId"] = nearest["r:diaObjectId"]
+            meta["object_id"] = nearest["r:diaObjectId"]
+            meta["source_id_name"] = "diaObjectId"
 
             # Format output in a DataFrame
             df["mag"] = -2.5 * np.log10(df["r:psfFlux"]) + 31.4
@@ -559,6 +580,13 @@ class LSST(TarxivModule):
             lc_df = df[["mjd", "mag", "mag_err", "filter", "snr", "detection", "limit", "camera"]]
             lc_df["detection"] = 1
             lc_df["survey"] = "lsst"
+
+            # Now let us cut the mjd of this
+            lc_df = lc_df[(mjd_min <= lc_df["mjd"]) & (lc_df["mjd"] <= mjd_max)]
+            # Append information on recent detections and peak mags, etc
+            meta = summarize_lc_mags(obj_meta=meta, lc_df=lc_df)
+            # Report count
+            status["lc_count"] = len(lc_df)
 
         except SurveyMetaMissingError:
             status["status"] = "no match"

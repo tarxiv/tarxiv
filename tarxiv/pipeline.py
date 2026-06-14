@@ -1,5 +1,5 @@
 from .utils import TarxivModule, deg2sex
-from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair, summarize_lc_mags
+from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair
 from .database import TarxivDB
 from .alerts import IMAP
 from confluent_kafka import Producer
@@ -37,7 +37,7 @@ class TNSPipeline(TarxivModule):
         # Get email interface
         self.gmail = IMAP(script_name, reporting_mode, debug)
         # Get database
-        self.db = TarxivDB("tns", "pipeline", script_name, reporting_mode, debug)
+        self.db = TarxivDB("pipeline", script_name, reporting_mode, debug)
         # Hopskotch authorization
         self.hop_auth = Auth(
             user=os.environ["TARXIV_HOPSKOTCH_USERNAME"],
@@ -53,7 +53,7 @@ class TNSPipeline(TarxivModule):
                 'client.id': socket.gethostname()}
         self.kafka = Producer(conf)
 
-    def get_object(self, object_id):
+    def get_object(self, object_id, data_source):
         """
         Queries TNS for an object then finds all associated survey data.
         Same as get object, but with split schema
@@ -77,89 +77,62 @@ class TNSPipeline(TarxivModule):
             "ra": ra_hms,
             "dec": dec_dms,
             "source": "tns",
-            "object_id": object_id,
+            "source_id": object_id,
             "discovery_date": tns_meta["discovery_date"],
             "data_sources": {
                 "tns": tns_meta
             }
         }
+
+        # Cut on time (1 month before DISCOVERY, 6 months after)
+        # IF we have a reporting date, WORK ON LATER
+        disc_mjd = Time(tns_meta["discovery_date"]).mjd
+        # Check if we have special min/max mjds, if not use default
+        mjd_min = self.db.lookup_in(txv_id,
+                                    sub_field="prior_days",
+                                    scope="misc",
+                                    collection="active_settings")
+        if mjd_min is None:
+            mjd_min = disc_mjd - self.config["tns"]["obj_prior_days"]
+            self.db.set_field(txv_id,
+                              key="prior_days", value=self.config["tns"]["obj_prior_days"],
+                              scope="misc", collection="active_settings")
+
+        # Now check max
+        mjd_max = self.db.lookup_in(txv_id,
+                                    sub_field="active_days",
+                                    scope="misc",
+                                    collection="active_settings")
+        if mjd_min is None:
+            mjd_max = disc_mjd + self.config["tns"]["obj_active_days"]
+            self.db.set_field(txv_id,
+                              key="active_days", value=self.config["tns"]["obj_active_days"],
+                              scope="misc", collection="active_settings")
+
         # Now get meta and lightcurves from the surveys
-        fink_ztf_meta, ztf_lc = self.ztf.get_object(object_id, ra_deg, dec_deg)
-        asas_sn_meta, asas_sn_lc = self.asas_sn.get_object(object_id, ra_deg, dec_deg)
-        fink_lsst_meta, lsst_lc = self.lsst.get_object(object_id, ra_deg, dec_deg)
+        fink_ztf_meta, ztf_lc = self.ztf.get_object(object_id, ra_deg, dec_deg, mjd_min, mjd_max)
+        asas_sn_meta, asas_sn_lc = self.asas_sn.get_object(object_id, ra_deg, dec_deg, mjd_min, mjd_max)
+        fink_lsst_meta, lsst_lc = self.lsst.get_object(object_id, ra_deg, dec_deg, mjd_min, mjd_max)
         # Get additional meta from the survey
         lasair_meta = self.lasair.get_object(object_id, ra_deg, dec_deg)
 
-        # Make the meta dict
+        # Add data sources to meta dict
         if lasair_meta is not None:
             meta["data_sources"]["sherlock"] = lasair_meta
-
         if fink_ztf_meta is not None:
             meta["data_sources"]["fink_ztf"] = fink_ztf_meta
-            # Calculate lc_detections and mag rates
-            if not ztf_lc.empty:
-                detections, non_detections, peaks = summarize_lc_mags(ztf_lc)
-                if detections:
-                    meta["data_sources"]["fink_ztf"]["latest_detection"] = detections
-                if non_detections:
-                    meta["data_sources"]["fink_ztf"]["non_detections"] = non_detections
-                if peaks:
-                    meta["data_sources"]["fink_ztf"]["peaks"] = peaks
-
         if asas_sn_meta is not None:
             meta["data_sources"]["asas_sn"] = asas_sn_meta
-            # Calculate
-            if not asas_sn_lc.empty:
-                detections, non_detections, peaks = summarize_lc_mags(asas_sn_lc)
-                if detections:
-                    meta["data_sources"]["asas_sn"]["latest_detection"] = detections
-                if non_detections:
-                    meta["data_sources"]["asas_sn"]["non_detections"] = non_detections
-                if peaks:
-                    meta["data_sources"]["asas_sn"]["peaks"] = peaks
-
         if fink_lsst_meta is not None:
             meta["data_sources"]["fink_lsst"] = fink_lsst_meta
-            # I could make this a function, but fuck that
-            # Calculate
-            if not asas_sn_lc.empty:
-                detections, non_detections, peaks = summarize_lc_mags(lsst_lc)
-                if detections:
-                    meta["data_sources"]["fink_lsst"]["latest_detection"] = detections
-                if non_detections:
-                    meta["data_sources"]["fink_lsst"]["non_detections"] = non_detections
-                if peaks:
-                    meta["data_sources"]["fink_lsst"]["peaks"] = peaks
 
         # Collate lightcurves and add peak mag measurements to schema
         lc_df = pd.concat([ztf_lc, asas_sn_lc, lsst_lc])
-        if len(lc_df) > 0:
-            # Sometimes we get bad negative mag/limit values (make positive when over 10 for sanity)
-            lc_df["mag"] = lc_df["mag"].apply(
-                lambda val: abs(val) if abs(val) > 10 else val
-            )
-            lc_df["limit"] = lc_df["limit"].apply(
-                lambda val: abs(val) if abs(val) > 10 else val
-            )
 
-            # Cut on time (1 month before DISCOVERY, 6 months after)
-            disc_mjd = Time(tns_meta["discovery_date"]).mjd
-            # IF we have a reporting date, cut around that as well, IF NOT just sub in discovery for no effect
-            rep_mjd = (
-                Time(tns_meta["reporting_date"]).mjd
-                if "reporting_date" in tns_meta.keys()
-                else Time(tns_meta["discovery_date"]).mjd
-            )
-            lc_df = lc_df[
-                (((disc_mjd - lc_df["mjd"]) <= self.config["tns"]["obj_prior_days"])
-                  & ((lc_df["mjd"] - disc_mjd) <= self.config["tns"]["obj_active_days"]))
-                | (((rep_mjd - lc_df["mjd"]) <= self.config["tns"]["obj_prior_days"])
-                  & ((lc_df["mjd"] - rep_mjd) <= self.config["tns"]["obj_active_days"]))
-            ]
         # Convert to json for submission
         obj_lc = json.loads(lc_df.to_json(orient="records"))
 
-        return meta, obj_lc
+        return txv_id, meta, obj_lc
 
 
     def upsert_object(self, object_id, obj_meta, obj_lc):
@@ -172,8 +145,8 @@ class TNSPipeline(TarxivModule):
         :return: void
         """
         # Before we upsert, we will add a couple lookup fields
-        self.db.upsert(object_id, obj_meta, collection="objects")
-        self.db.upsert(object_id, obj_lc, collection="lightcurves")
+        self.db.upsert(object_id, obj_meta, scope="objects", collection="meta")
+        self.db.upsert(object_id, obj_lc, scope="objects", collection="lightcurves")
 
     def get_tns_bulk_df(self):
         # Run request to TNS Server
@@ -230,6 +203,7 @@ class TNSPipeline(TarxivModule):
                 obj_meta["reporting_date"] = obj["time_received"]
                 # Upsert to database
                 self.upsert_object(object_id, obj_meta, obj_lc)
+
             except Exception:
                 stack_trace = traceback.format_exc()
                 self.logger.error({

@@ -35,6 +35,8 @@ dependencies = [
     "werkzeug",
     "paste",
     "cherrypy",
+    "pyasassn",
+    "hop-client",
     "python-logstash-async>=4.0.0",
     "dash>=3.3.0",
     "dash-mantine-components",
