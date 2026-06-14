@@ -56,6 +56,8 @@ lsst:
     - "fink_sn_candidates_ztf"
     - "fink_unknowns_ztf"
     - "fink_new_hostless_ztf"
+
+data_source_order: ["tns", "sherlock", "asas_sn_id", "fink_ztf", "fink_lsst"]
 # ingesting TNS notices by IMAP
 imap:
   server: "imap.gmail.com"
