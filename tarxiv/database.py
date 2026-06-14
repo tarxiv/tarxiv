@@ -175,37 +175,15 @@ class TarxivDB(TarxivModule):
 
         return result
 
-    def get_source_meta(self, source_id):
+    def get_source_txv_id(self, source_id):
         try:
             statement = f"""
                 SELECT 
-                  tarxiv_id,
-                  source,
-                  source_id,
-                  ra,
-                  dec,
-                  discovery_date,
-                  update_date,
-                  data_sources
+                  tarxiv_id
                 FROM tarxiv.objects.meta 
                 WHERE source_id = '{source_id}'
             """
-            result = list(self.cluster.query(statement))[0]
-            # Ya ordering
-            meta = {
-                "tarxiv_id": result["tarxiv_id"],
-                "source": result["source"],
-                "source_id": result["source_id"],
-                "ra": result["ra"],
-                "dec": result["dec"],
-                "discovery_date": result["discovery_date"],
-                "update_date": result["update_date"],
-                "data_sources": {},
-            }
-            for source in self.config["data_source_order"]:
-                if source in result["data_sources"].keys():
-                    meta["data_sources"][source] = result["data_sources"][source]
-
+            result = list(self.cluster.query(statement))[0]["tarxiv_id"]
             # Order data sources
             status = {
                 "status": "retrieved",
@@ -218,9 +196,9 @@ class TarxivDB(TarxivModule):
                 "object_id": source_id,
             }
             self.logger.debug(status, extra=status)
-            meta = None
+            result = None
 
-        return meta
+        return result
 
 
     def cone_search(self, ra_deg, dec_deg, radius_arcsec):

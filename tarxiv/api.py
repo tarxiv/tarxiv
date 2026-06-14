@@ -612,7 +612,8 @@ class API(TarxivModule):
                         raise PermissionError("Invalid or missing token.")
                 """
                 # Find object info
-                result = self.txv_db.get_source_meta(source_id)
+                tarxiv_id = self.txv_db.get_source_txv_id(source_id)
+                result = self.txv_db.get(tarxiv_id, scope="objects", collection="meta")
 
                 # Return nothing if bad request
                 if result is None:
