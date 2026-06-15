@@ -225,17 +225,17 @@ class TarxivDB(TarxivModule):
                 meta.source,
                 meta.source_id,
                 meta.discovery_date,
-                meta.ra,
-                meta.dec,
+                meta.ra_deg,
+                meta.dec_deg,
                 distance_deg
             FROM tarxiv.objects.meta meta
             LET distance_deg = ACOS(
-                       SIN(RADIANS({dec_deg})) * SIN(RADIANS(meta.dec)) +
-                       COS(RADIANS({dec_deg})) * COS(RADIANS(meta.dec)) *
-                       COS(RADIANS({ra_deg} - obj.ra))
+                       SIN(RADIANS({dec_deg})) * SIN(RADIANS(meta.dec_deg)) +
+                       COS(RADIANS({dec_deg})) * COS(RADIANS(meta.dec_deg)) *
+                       COS(RADIANS({ra_deg} - obj.ra_deg))
                    ) * 180 / PI()
             WHERE 1=1
-              AND ABS(meta.dec - {dec_deg}) <= {radius_deg}
+              AND ABS(meta.dec_deg - {dec_deg}) <= {radius_deg}
               AND distance_deg <= {radius_deg}
             ORDER BY distance_deg
         """

@@ -791,8 +791,8 @@ class API(TarxivModule):
                               meta.discovery_date,
                               meta.tns.object_id,
                               meta.tns.object_type,
-                              meta.ra,
-                              meta.dec,
+                              meta.ra_hms,
+                              meta.dec_dms,
                               meta.tns.redshift,
                               meta.tns.reporting_group,
                               meta.tns.discovery_data_source AS discovery_source

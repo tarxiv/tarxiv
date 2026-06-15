@@ -93,8 +93,10 @@ class TNSPipeline(TarxivModule):
         # Start our meta dict
         meta = {
             "tarxiv_id": txv_id,
-            "ra": ra_hms,
-            "dec": dec_dms,
+            "ra_deg": ra_deg,
+            "dec_deg": dec_deg,
+            "ra_hms": ra_hms,
+            "dec_dms": dec_dms,
             "source": "tns",
             "source_id": object_id,
             "discovery_date": tns_meta["discovery_date"],
