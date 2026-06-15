@@ -39,7 +39,7 @@ class API(TarxivModule):
             extra={"status": "initializing API module"},
         )
         # Get couchbase connection
-        self.txv_db = TarxivDB("tns", "api", script_name, reporting_mode, debug)
+        self.txv_db = TarxivDB("api", script_name, reporting_mode, debug)
         self.user_db = UserDB(
             script_name="user_db",
             reporting_mode=reporting_mode,
@@ -66,6 +66,7 @@ class API(TarxivModule):
         self.app.secret_key = os.environ.get(
             "TARXIV_API_SECRET_KEY"
         ) or secrets.token_hex(32)
+        self.app.config["JSON_SORT_KEYS"] = False
         # Register routes
         self.routes()
         self.app.register_blueprint(Blueprint("main", __name__))
@@ -593,27 +594,30 @@ class API(TarxivModule):
 
         # HFS - 2025-05-28: These self.app.route things are Flask decorators which become
         # endpoints for the API
-        @self.app.route("/get_object_meta/<string:obj_name>", methods=["POST"])
-        def get_object_meta(obj_name):
+        @self.app.route("/get_object_meta/<string:source_id>", methods=["POST"])
+        def get_object_meta(source_id):
             token = request.headers.get("Authorization")
             # Start log
             log = {
                 "query_type": "meta",
                 "query_ip": request.remote_addr,
                 "token": token,
-                "obj_name": obj_name,
+                "source_id": source_id,
             }
-
             try:
-                # Return error if bad token
+                # No token required
+                """
                 validation = self.validate_token_request(token)
                 if not validation["is_valid"]:
                     if validation["status"] == "expired":
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
+                """
                 # Find object info
-                result = self.txv_db.get(obj_name, "objects")
+                tarxiv_id = self.txv_db.get_source_txv_id(source_id)
+                result = self.txv_db.get(tarxiv_id, scope="objects", collection="meta")
+
                 # Return nothing if bad request
                 if result is None:
                     raise LookupError("no such object")
@@ -681,26 +685,28 @@ class API(TarxivModule):
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
 
-        @self.app.route("/get_object_lc/<string:obj_name>", methods=["POST"])
-        def get_object_lc(obj_name):
+        @self.app.route("/get_object_lc/<string:tarxiv_id>", methods=["POST"])
+        def get_object_lc(tarxiv_id):
             token = request.headers.get("Authorization")
             # Start log
             log = {
                 "query_type": "lightcurve",
                 "query_ip": request.remote_addr,
                 "token": token,
-                "obj_name": obj_name,
+                "tarxiv_id": tarxiv_id,
             }
             try:
-                # Return error if bad token
+                # No token required
+                """
                 validation = self.validate_token_request(token)
                 if not validation["is_valid"]:
                     if validation["status"] == "expired":
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
+                """
                 # Find object info
-                result = self.txv_db.get(obj_name, "lightcurves")
+                result = self.txv_db.get(tarxiv_id, scope="objects", collection="lightcurves")
                 # Return nothing if bad request
                 if result is None:
                     raise LookupError("no such object")
@@ -735,14 +741,15 @@ class API(TarxivModule):
                 "sources": request_json["sources"],
             }
             try:
-                # Return error if bad token
+                # No token required
+                """
                 validation = self.validate_token_request(token)
                 if not validation["is_valid"]:
                     if validation["status"] == "expired":
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
-
+                """
                 # Get all relevant citations
                 citations = []
                 for source in request_json["sources"]:
@@ -829,18 +836,17 @@ class API(TarxivModule):
                     object_filter = f" AND META().id IN [{object_list}]"
 
                 query = f"""SELECT
-                              `objects`.`internal`.`insert_date` AS date_received,
-                              META().id AS obj_name,
-                              `objects`.`object_type`[0].`value` AS object_type,
-                              `objects`.`ra_hms`[0].`value` AS ra,
-                              `objects`.`dec_dms`[0].`value` AS dec,
-                              `objects`.`discovery_data_source`[0].`value` AS discovery_source,
-                              `objects`.`reporting_group`[0].`value` AS reporting_group,
-                              IFMISSING(`objects`.`redshift`[0].`value`, "") AS redshift
-                            FROM tarxiv.tns.objects
-                            WHERE `objects`.`internal`.`insert_date` IS NOT MISSING
-                            {object_filter}
-                            ORDER BY `objects`.`internal`.`insert_date` DESC
+                              meta.discovery_date,
+                              meta.tns.object_id,
+                              meta.tns.object_type,
+                              meta.ra_hms,
+                              meta.dec_dms,
+                              meta.tns.redshift,
+                              meta.tns.reporting_group,
+                              meta.tns.discovery_data_source AS discovery_source
+                            FROM tarxiv.objects.meta
+                            WHERE meta.source = 'tns' 
+                            ORDER BY meta.discovery_date DESC
                             LIMIT {request_json["n_rows"]} OFFSET {request_json["offset"]}"""
                 result = list(self.txv_db.query(query))
 
@@ -884,8 +890,8 @@ class API(TarxivModule):
                     raise PermissionError("bad token")
                 # Build query
                 query_str = (
-                    "SELECT meta().id AS `obj_name` "
-                    "FROM tarxiv.tns.objects "
+                    "SELECT object_id "
+                    "FROM tarxiv.tns.objects obj"
                     "WHERE 1=1 AND "
                 )
                 # Add restrictions from search fields, then append search params to query
@@ -898,7 +904,7 @@ class API(TarxivModule):
                 query_str += full_condition_string
                 # Return results
                 result = self.txv_db.query(query_str)
-                result = [r["obj_name"] for r in result]
+                result = [r["object_id"] for r in result]
                 status_code = 200
                 log["status"] = "Success"
             except PermissionError as e:
@@ -929,13 +935,15 @@ class API(TarxivModule):
                 "request": request_json,
             }
             try:
-                # Return error if bad token
+                # No token required
+                """
                 validation = self.validate_token_request(token)
                 if not validation["is_valid"]:
                     if validation["status"] == "expired":
                         raise PermissionError("Session expired — please log in again.")
                     else:
                         raise PermissionError("Invalid or missing token.")
+                """
                 # Extract parameters
                 ra = request_json["ra"]
                 dec = request_json["dec"]
@@ -966,7 +974,7 @@ class API(TarxivModule):
 
     def build_condition(self, field, condition):
         # Start condition_string
-        condition_str = f"ANY `{field[0]}` IN `{field}` SATISFIES "
+        condition_str = f"ANY {field[0]} IN {field} SATISFIES "
         predicates = []
         # Each query has a number of parameters (usually just value, but peak mag can search on filter/mjd also)
         for param in condition:
@@ -1014,7 +1022,7 @@ class API(TarxivModule):
         else:
             raise ValueError(f"bad search value {search_value}")
         # Build predicate
-        predicate = f"`{field_name[0]}`.`{search_field}` {operator} {value_str} "
+        predicate = f"{field_name[0]}.{search_field} {operator} {value_str} "
         return predicate
 
 

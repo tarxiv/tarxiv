@@ -35,6 +35,7 @@ dependencies = [
     "werkzeug",
     "paste",
     "cherrypy",
+    "hop-client",
     "python-logstash-async>=4.0.0",
     "dash>=3.3.0",
     "dash-mantine-components",
@@ -47,6 +48,7 @@ dependencies = [
     "confluent_kafka",
     "pyspark",
     "sqlalchemy>=2.0.48",
+    "confluent-kafka",
     "psycopg2-binary>=2.9.11",
     "alembic>=1.16.5",
 ]
