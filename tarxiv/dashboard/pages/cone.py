@@ -183,6 +183,43 @@ def layout(**kwargs):
                                 style={"marginTop": "21px"},
                             ),
                         ]),
+                        dmc.Divider(label="OR", labelPosition="center"),
+                        dmc.Text(
+                            "Option 3: Enter a single RA/Dec string "
+                            "(space-separated h:m:s and d:m:s) and radius (arcsec)"
+                        ),
+                        dmc.Group([
+                            Keyboard(
+                                children=dmc.Group([
+                                    dmc.TextInput(
+                                        id="radec-combined-input",
+                                        placeholder="21:01:36.90 +68:09:48.0",
+                                        label="RA/Dec (HMS DMS):",
+                                        style={
+                                            "width": "310px",
+                                        },
+                                    ),
+                                    dmc.NumberInput(
+                                        id="radius-combined-input",
+                                        placeholder=">0",
+                                        min=0,
+                                        label="Radius (arcsec):",
+                                        style={
+                                            "width": "150px",
+                                        },
+                                    ),
+                                ]),
+                                captureKeys=["Enter"],
+                                n_keydowns=0,
+                                id="cone-search-combined-keyboard",
+                            ),
+                            dmc.Button(
+                                "Search",
+                                id="cone-search-combined-button",
+                                n_clicks=0,
+                                style={"marginTop": "21px"},
+                            ),
+                        ]),
                     ]),
                 ],
             ),
@@ -238,6 +275,29 @@ def parse_hms_dms_coordinates(ra_hms: str, dec_dms: str) -> tuple[float, float]:
     return cast(float, ra_angle.degree), cast(float, dec_angle.degree)
 
 
+def parse_combined_coordinates(combined: str) -> tuple[float, float]:
+    """Parse a single combined 'RA Dec' string into degrees.
+
+    Accepts space-separated sexagesimal coordinates where RA is in h:m:s and
+    Dec in d:m:s, e.g. '21:01:36.90 +68:09:48.0'. A comma between the two parts
+    is also tolerated ('21:01:36.90, +68:09:48.0'). The RA and Dec components
+    must use colon separators internally so the pair splits cleanly on the space.
+    """
+    if not combined or not combined.strip():
+        raise ValueError("Please provide a combined RA/Dec coordinate string.")
+
+    tokens = combined.replace(",", " ").split()
+    if len(tokens) != 2:
+        raise ValueError(
+            "Could not parse the combined coordinates. Use colon-separated "
+            "sexagesimal values separated by a space, e.g. "
+            "'21:01:36.90 +68:09:48.0'."
+        )
+
+    ra_hms, dec_dms = tokens
+    return parse_hms_dms_coordinates(ra_hms, dec_dms)
+
+
 @callback(
     [
         Output("results-container", "children", allow_duplicate=True),
@@ -251,6 +311,8 @@ def parse_hms_dms_coordinates(ra_hms: str, dec_dms: str) -> tuple[float, float]:
         Input("cone-search-keyboard", "n_keydowns"),
         Input("cone-search-hmsdms-button", "n_clicks"),
         Input("cone-search-hmsdms-keyboard", "n_keydowns"),
+        Input("cone-search-combined-button", "n_clicks"),
+        Input("cone-search-combined-keyboard", "n_keydowns"),
     ],
     [
         State("ra-input", "value"),
@@ -259,6 +321,8 @@ def parse_hms_dms_coordinates(ra_hms: str, dec_dms: str) -> tuple[float, float]:
         State("ra-hms-input", "value"),
         State("dec-dms-input", "value"),
         State("radius-hmsdms-input", "value"),
+        State("radec-combined-input", "value"),
+        State("radius-combined-input", "value"),
         State("active-settings-store", "data"),
     ],
     prevent_initial_call=True,
@@ -268,12 +332,16 @@ def handle_cone_search(
     n_keydowns,
     n_hmsdms_clicks,
     n_hmsdms_keydowns,
+    n_combined_clicks,
+    n_combined_keydowns,
     ra,
     dec,
     radius,
     ra_hms,
     dec_dms,
     radius_hmsdms,
+    radec_combined,
+    radius_combined,
     settings,
 ):
     """Handle cone search button clicks."""
@@ -308,8 +376,31 @@ def handle_cone_search(
         "cone-search-hmsdms-button",
         "cone-search-hmsdms-keyboard",
     }
+    use_combined_input = trigger_id in {
+        "cone-search-combined-button",
+        "cone-search-combined-keyboard",
+    }
 
-    if use_hmsdms_input:
+    if use_combined_input:
+        if not radec_combined or not str(radec_combined).strip():
+            warning_banner = create_message_banner(
+                "Please provide a combined RA/Dec coordinate string.", "warning"
+            )
+            return html.Div(), "", warning_banner, no_update, no_update
+        if radius_combined is None or radius_combined <= 0:
+            warning_banner = create_message_banner(
+                "Please provide a radius greater than zero.", "warning"
+            )
+            return html.Div(), "", warning_banner, no_update, no_update
+
+        try:
+            ra, dec = parse_combined_coordinates(radec_combined)
+        except ValueError as exc:
+            warning_banner = create_message_banner(str(exc), "warning")
+            return html.Div(), "", warning_banner, no_update, no_update
+
+        radius = float(radius_combined)
+    elif use_hmsdms_input:
         if (
             not ra_hms
             or not str(ra_hms).strip()

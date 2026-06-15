@@ -562,18 +562,27 @@ def format_object_metadata(object_id, meta, citation_str=None, logger=None):
 
     Returns
     -------
-        dmc.Stack containing formatted cards
+        A ``(results_top, citations_card, full_metadata)`` tuple. The caller
+        composes these into the page: ``results_top`` (lightcurve + sky-plot /
+        metadata) goes in the results container, ``citations_card`` sits in a
+        grid beside the (always-present) ``object-tagging-container``, and
+        ``full_metadata`` is the collapsible JSON dump pinned to the page bottom.
+        Splitting the output this way lets the tagging container live in the base
+        layout so its callbacks never target a missing component.
     """
     data_sources = meta.get("data_sources") or {}
 
     metadata_component = _build_metadata_tabs(data_sources)
     citations_component = _build_citation_component(citation_str)
 
-    # Lightcurve and Aladin sky-plot sit side-by-side in a 3:1 grid.
+    # Prominent, copyable RA/Dec (sexagesimal HMS + DMS) sits above the lightcurve.
     lightcurve_card = expressive_card(
-        children=dcc.Loading(
-            dcc.Graph(id={"type": "themeable-plot", "index": "lightcurve-plot"}),
-        ),
+        children=[
+            _build_coordinates_header(meta),
+            dcc.Loading(
+                dcc.Graph(id={"type": "themeable-plot", "index": "lightcurve-plot"}),
+            ),
+        ],
         title=f"Lightcurve: {object_id}",
     )
     aladin_card = expressive_card(
@@ -588,61 +597,92 @@ def format_object_metadata(object_id, meta, citation_str=None, logger=None):
         title="Sky Plot (Aladin Lite)",
     )
 
-    sections = [
+    results_top = dmc.Stack([
+        # Lightcurve spans the full width; the sky plot pairs with the metadata.
+        lightcurve_card,
+        # Aladin sky-plot half-half with the per-source metadata tabs.
         dmc.Grid(
             [
-                dmc.GridCol(lightcurve_card, span=6),
                 dmc.GridCol(aladin_card, span=6),
+                dmc.GridCol(
+                    expressive_card(
+                        children=metadata_component,
+                        title=f"Object Metadata: {object_id}",
+                    ),
+                    span=6,
+                ),
             ],
             gutter="md",
         ),
-    ]
+    ])
 
-    # Per-source metadata tabs.
-    sections.append(
-        expressive_card(
-            children=metadata_component,
-            title=f"Object Metadata: {object_id}",
-        )
+    # Citations card (copyable BibTeX); the caller pairs it with the tagging panel.
+    citations_card = expressive_card(
+        children=citations_component,
+        title=f"Citations: {object_id}",
     )
 
-    # Citations card (copyable BibTeX).
-    sections.append(
-        expressive_card(
-            children=citations_component,
-            title=f"Citations: {object_id}",
-        )
-    )
-
-    # Full metadata JSON — collapsible, collapsed by default.
-    sections.append(
-        dmc.Accordion(
-            chevronPosition="left",
-            variant="separated",
-            children=[
-                dmc.AccordionItem(
-                    value="full-metadata",
-                    children=[
-                        dmc.AccordionControl("Full Metadata (JSON)"),
-                        dmc.AccordionPanel(
-                            dmc.Code(
-                                json.dumps(meta, indent=2),
-                                style={
-                                    "padding": "10px",
-                                    "maxHeight": "400px",
-                                    "overflow": "auto",
-                                    "borderRadius": "4px",
-                                },
-                                block=True,
-                            ),
+    # Full metadata JSON — collapsible, collapsed by default, at the very bottom.
+    full_metadata = dmc.Accordion(
+        chevronPosition="left",
+        variant="separated",
+        children=[
+            dmc.AccordionItem(
+                value="full-metadata",
+                children=[
+                    dmc.AccordionControl("Full Metadata (JSON)"),
+                    dmc.AccordionPanel(
+                        dmc.Code(
+                            json.dumps(meta, indent=2),
+                            style={
+                                "padding": "10px",
+                                "maxHeight": "400px",
+                                "overflow": "auto",
+                                "borderRadius": "4px",
+                            },
+                            block=True,
                         ),
-                    ],
-                )
-            ],
-        )
+                    ),
+                ],
+            )
+        ],
     )
 
-    return dmc.Stack(sections)
+    return results_top, citations_card, full_metadata
+
+
+def _build_coordinates_header(meta):
+    """Build a prominent, copyable RA/Dec display above the lightcurve.
+
+    The top-level ``ra``/``dec`` are sexagesimal strings (h:m:s / d:m:s). They
+    are shown together, space-separated, with a clipboard button that copies the
+    combined string. Returns a dimmed placeholder when coordinates are missing.
+    """
+    ra = meta.get("ra")
+    dec = meta.get("dec")
+    if not ra or not dec:
+        return dmc.Text("Coordinates unavailable", c="dimmed", size="sm")
+
+    coordinate_str = f"{ra} {dec}"
+    return dmc.Group(
+        [
+            dmc.Text("RA, Dec (J2000):", size="sm", c="dimmed"),
+            dmc.Text(
+                coordinate_str,
+                id="object-coordinates",
+                fw=700,
+                size="xl",
+                style={"fontFamily": "monospace"},
+            ),
+            dcc.Clipboard(
+                target_id="object-coordinates",
+                title="Copy coordinates",
+                style={"cursor": "pointer", "fontSize": "1.1rem"},
+            ),
+        ],
+        gap="sm",
+        align="center",
+    )
 
 
 # Page size for the cone-search results list. The Aladin overlay still shows

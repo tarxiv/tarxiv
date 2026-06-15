@@ -47,15 +47,25 @@ def layout(id=None, **kwargs):
 
     if id and user:
         # User came via deep link and has a saved session
-        results, status, banner, lc_store, aladin_store = perform_search(
-            id, token, logger
-        )
+        (
+            results_top,
+            citations_card,
+            full_metadata,
+            status,
+            banner,
+            lc_store,
+            aladin_store,
+        ) = perform_search(id, token, logger)
     elif id and not user:
         validation = validate_token(token)
 
         # Deep link but no token: Show the search bar pre-filled with ID
         # but warn the user that a token is missing.
-        results = html.Div()
+        results_top, citations_card, full_metadata = (
+            html.Div(),
+            html.Div(),
+            html.Div(),
+        )
         status = "Authentication required"
 
         if validation["status"] == TokenStatus.EXPIRED:
@@ -73,13 +83,15 @@ def layout(id=None, **kwargs):
         aladin_store = None
     else:
         # Default empty search page
-        results, status, banner, lc_store, aladin_store = (
+        results_top, citations_card, full_metadata, status, banner = (
+            html.Div(),
+            html.Div(),
             html.Div(),
             "",
             html.Div(),
-            None,
-            None,
         )
+        lc_store = None
+        aladin_store = None
 
     return dmc.Stack(
         children=[
@@ -151,9 +163,23 @@ def layout(id=None, **kwargs):
                     ),
                     dmc.Stack(
                         id="results-container",
-                        children=[results],
+                        children=[results_top],
                     ),
-                    html.Div(id="object-tagging-container"),
+                    # Citations sits half-half with the object tagging panel. The
+                    # tagging container lives here in the base layout (not inside
+                    # the search results) so its callbacks always have a target,
+                    # even on the empty page.
+                    dmc.Grid(
+                        [
+                            dmc.GridCol(citations_card, span=6),
+                            dmc.GridCol(
+                                html.Div(id="object-tagging-container"), span=6
+                            ),
+                        ],
+                        gutter="md",
+                    ),
+                    # Full metadata JSON dump pinned to the very bottom.
+                    full_metadata,
                 ],
             ),
         ],
@@ -570,7 +596,17 @@ def get_lightcurve_data(object_id, token, logger):
 
 
 def perform_search(object_id, token, logger):
-    """The core logic shared by both Button and URL triggers."""
+    """The core logic shared by both Button and URL triggers.
+
+    Returns a tuple of
+    ``(results_top, citations_card, full_metadata, status, banner, lc_store,
+    aladin_store)``. The three render slots correspond to the pieces produced by
+    ``format_object_metadata``; ``layout`` drops them into the page so the
+    object-tagging container can stay in the always-present base layout.
+    """
+    # Render slots used by every non-success early return (no object to show).
+    empty_render = (html.Div(), html.Div(), html.Div())
+
     status_msg = f"Searching for object: {object_id}"
     logger.info({"search_type": "id", "object_id": object_id})
 
@@ -579,7 +615,7 @@ def perform_search(object_id, token, logger):
         meta = get_metadata_data(object_id, token, logger)
     except Unauthorized as e:
         return (
-            html.Div(),
+            *empty_render,
             "Authentication required",
             create_message_banner(str(e), "error"),
             None,
@@ -591,7 +627,7 @@ def perform_search(object_id, token, logger):
         })
         logger.exception(e)
         return (
-            html.Div(),
+            *empty_render,
             "Error",
             create_message_banner(f"Failed to fetch metadata: {str(e)}", "error"),
             None,
@@ -603,7 +639,7 @@ def perform_search(object_id, token, logger):
             f"No object found with ID: {object_id}", "error"
         )
         logger.warning({"warning": f"Object ID not found: {object_id}"})
-        return html.Div(), status_msg, error_banner, None, None
+        return (*empty_render, status_msg, error_banner, None, None)
 
     # Fetch Lightcurve
     lc_data = get_lightcurve_data(object_id, token, logger)
@@ -614,7 +650,9 @@ def perform_search(object_id, token, logger):
     )
 
     # Display metadata
-    result = format_object_metadata(object_id, meta, citation_str, logger)
+    results_top, citations_card, full_metadata = format_object_metadata(
+        object_id, meta, citation_str, logger
+    )
     success_banner = create_message_banner(
         f"Successfully loaded object: {object_id}", "success"
     )
@@ -630,7 +668,15 @@ def perform_search(object_id, token, logger):
             )
         })
 
-    return result, status_msg, success_banner, lc_store, aladin_store
+    return (
+        results_top,
+        citations_card,
+        full_metadata,
+        status_msg,
+        success_banner,
+        lc_store,
+        aladin_store,
+    )
 
 
 @callback(
@@ -643,18 +689,21 @@ def perform_search(object_id, token, logger):
     prevent_initial_call=False,
 )
 def load_object_tagging_panel(lightcurve_store):
+    # The tagging container only exists inside the loaded-object results, so when
+    # no object is shown (empty page / deep link without auth) we must no_update
+    # rather than write to a component that isn't in the layout.
     if not lightcurve_store or not isinstance(lightcurve_store, dict):
-        return html.Div(), [], []
+        return no_update, no_update, no_update
 
     object_id = lightcurve_store.get("id")
     if not object_id:
-        return html.Div(), [], []
+        return no_update, no_update, no_update
 
     logger = current_app.config["TXV_LOGGER"]
     token = get_jwt_from_request(request)
     validation = validate_token(token)
     if validation["status"] != TokenStatus.VALID:
-        return html.Div(), [], []
+        return no_update, no_update, no_update
 
     tags_response = fetch_visible_tags(token, logger)
     object_tags_response = fetch_object_tags(object_id, token, logger)
