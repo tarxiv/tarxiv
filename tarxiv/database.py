@@ -232,7 +232,7 @@ class TarxivDB(TarxivModule):
             LET distance_deg = ACOS(
                        SIN(RADIANS({dec_deg})) * SIN(RADIANS(meta.dec_deg)) +
                        COS(RADIANS({dec_deg})) * COS(RADIANS(meta.dec_deg)) *
-                       COS(RADIANS({ra_deg} - obj.ra_deg))
+                       COS(RADIANS({ra_deg} - meta.ra_deg))
                    ) * 180 / PI()
             WHERE 1=1
               AND ABS(meta.dec_deg - {dec_deg}) <= {radius_deg}
