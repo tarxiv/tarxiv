@@ -1,3 +1,4 @@
+
 from .utils import TarxivModule, TarxivPipelineError, deg2sex
 from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair
 from .database import TarxivDB
@@ -15,6 +16,8 @@ import zipfile
 import socket
 import signal
 import json
+import time
+import sys
 import io
 import os
 
@@ -47,7 +50,7 @@ class TNSPipeline(TarxivModule):
         )
 
         # Get kafka configuration
-        conf = {'bootstrap.servers': "pooskaus.ifa.hawaii.edu:9092",
+        conf = {'bootstrap.servers': f"{os.environ['TARXIV_KAFKA_HOST']}:9092",
                 'delivery.timeout.ms': 10000,
                 'queue.buffering.max.messages': 1000000,
                 'queue.buffering.max.ms': 5000,
@@ -69,6 +72,8 @@ class TNSPipeline(TarxivModule):
         self.logger.info(status, extra=status)
         self.stop_event.set()
         self.gmail.stop_monitoring()
+        time.sleep(10)
+        sys.close
 
     def get_object(self, object_id):
         """
@@ -316,6 +321,7 @@ class TNSPipeline(TarxivModule):
                         "object_id": object_id,
                         "exception": stack_trace,
                     })
+
     def acked(self, err, msg):
         if err is not None:
             status = {"status": "failed kafka publish", "msg": msg}
