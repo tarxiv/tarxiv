@@ -11,20 +11,22 @@ import argparse
 from tarxiv.database import TarxivDB
 
 
-def dump_database_to_json(filename=None):
-    """Export the entire database to a JSON file."""
+def dump_database_to_json(filename=None, limit=None):
+    """Export the database to a JSON file, optionally only the first ``limit`` objects."""
     if not filename:
         filename = os.environ.get("DATABASE_EXPORT_FILENAME", "database_export.json")
 
     # Create database connection
-    db = TarxivDB("tns", "pipeline", "etl", 1)
+    db = TarxivDB("pipeline", "utils-dump", 1)
 
     # get objects and create dictionaries to export to JSON
     obj_list = db.get_all_objects()
+    if limit:
+        obj_list = obj_list[:limit]
     database_json = {}
     for obj in obj_list:
-        meta = db.get(obj, "objects")
-        lc = db.get(obj, "lightcurves")
+        meta = db.get(obj, scope="objects", collection="meta")
+        lc = db.get(obj, scope="objects", collection="lightcurves")
         database_json[obj] = {"meta": meta, "lc": lc}
 
     # write to JSON file
@@ -38,7 +40,7 @@ def load_database_from_json(filename=None):
         filename = os.environ.get("DATABASE_EXPORT_FILENAME", "database_export.json")
 
     # Create database connection
-    db = TarxivDB("tns", "pipeline", "etl", 1)
+    db = TarxivDB("pipeline", "utils-load", 1)
 
     # read from JSON file
     with open(filename, mode="r") as f:
@@ -46,8 +48,8 @@ def load_database_from_json(filename=None):
 
     # insert objects into database
     for obj, data in database_json.items():
-        db.upsert(obj, data["meta"], "objects")
-        db.upsert(obj, data["lc"], "lightcurves")
+        db.upsert(obj, data["meta"], scope="objects", collection="meta")
+        db.upsert(obj, data["lc"], scope="objects", collection="lightcurves")
 
 
 argparser = argparse.ArgumentParser(
@@ -65,6 +67,13 @@ argparser.add_argument(
 argparser.add_argument(
     "--filename", "-f", type=str, help="The JSON file to load from or dump to."
 )
+argparser.add_argument(
+    "--limit",
+    "-n",
+    type=int,
+    default=None,
+    help="Only dump the first N objects (default: all). Ignored when loading.",
+)
 args = argparser.parse_args()
 
 
@@ -72,7 +81,7 @@ def main():
     if args.load:
         load_database_from_json(args.filename)
     elif args.dump:
-        dump_database_to_json(args.filename)
+        dump_database_to_json(args.filename, args.limit)
     else:
         print("Please specify either --dump or --load.")
 
