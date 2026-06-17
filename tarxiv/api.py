@@ -706,7 +706,9 @@ class API(TarxivModule):
                         raise PermissionError("Invalid or missing token.")
                 """
                 # Find object info
-                result = self.txv_db.get(tarxiv_id, scope="objects", collection="lightcurves")
+                result = self.txv_db.get(
+                    tarxiv_id, scope="objects", collection="lightcurves"
+                )
                 # Return nothing if bad request
                 if result is None:
                     raise LookupError("no such object")
@@ -824,16 +826,16 @@ class API(TarxivModule):
                         self.logger.info(log, extra=log)
                         return server_response(result, status_code)
 
-                object_filter = ""
-                if tagged_object_ids is not None:
-                    escaped_ids = [
-                        object_id.replace("\\", "\\\\").replace('"', '\\"')
-                        for object_id in tagged_object_ids
-                    ]
-                    object_list = ", ".join(
-                        f'"{object_id}"' for object_id in escaped_ids
-                    )
-                    object_filter = f" AND META().id IN [{object_list}]"
+                # object_filter = ""
+                # if tagged_object_ids is not None:
+                #     escaped_ids = [
+                #         object_id.replace("\\", "\\\\").replace('"', '\\"')
+                #         for object_id in tagged_object_ids
+                #     ]
+                #     object_list = ", ".join(
+                #         f'"{object_id}"' for object_id in escaped_ids
+                #     )
+                #     object_filter = f" AND META().id IN [{object_list}]"
 
                 query = f"""SELECT
                               meta.discovery_date,
@@ -845,7 +847,7 @@ class API(TarxivModule):
                               meta.tns.reporting_group,
                               meta.tns.discovery_data_source AS discovery_source
                             FROM tarxiv.objects.meta
-                            WHERE meta.source = 'tns' 
+                            WHERE meta.source = 'tns'
                             ORDER BY meta.discovery_date DESC
                             LIMIT {request_json["n_rows"]} OFFSET {request_json["offset"]}"""
                 result = list(self.txv_db.query(query))
@@ -889,11 +891,7 @@ class API(TarxivModule):
                 if not validation["is_valid"]:
                     raise PermissionError("bad token")
                 # Build query
-                query_str = (
-                    "SELECT object_id "
-                    "FROM tarxiv.tns.objects obj"
-                    "WHERE 1=1 AND "
-                )
+                query_str = "SELECT object_id FROM tarxiv.tns.objects objWHERE 1=1 AND "
                 # Add restrictions from search fields, then append search params to query
                 condition_list = []
                 for field, condition in search.items():

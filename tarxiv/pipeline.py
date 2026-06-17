@@ -47,12 +47,14 @@ class TNSPipeline(TarxivModule):
         )
 
         # Get kafka configuration
-        conf = {'bootstrap.servers': "pooskaus.ifa.hawaii.edu:9092",
-                'delivery.timeout.ms': 10000,
-                'queue.buffering.max.messages': 1000000,
-                'queue.buffering.max.ms': 5000,
-                'batch.num.messages': 100,
-                'client.id': socket.gethostname()}
+        conf = {
+            "bootstrap.servers": "pooskaus.ifa.hawaii.edu:9092",
+            "delivery.timeout.ms": 10000,
+            "queue.buffering.max.messages": 1000000,
+            "queue.buffering.max.ms": 5000,
+            "batch.num.messages": 100,
+            "client.id": socket.gethostname(),
+        }
         self.kafka = Producer(conf)
 
         # Signal handling
@@ -73,7 +75,9 @@ class TNSPipeline(TarxivModule):
     def get_object(self, object_id):
         """
         Queries TNS for an object then finds all associated survey data.
+
         Same as get object, but with split schema
+
         :param object_id:
         :return:
         """
@@ -100,9 +104,7 @@ class TNSPipeline(TarxivModule):
             "source": "tns",
             "source_id": object_id,
             "discovery_date": tns_meta["discovery_date"],
-            "data_sources": {
-                "tns": tns_meta
-            }
+            "data_sources": {"tns": tns_meta},
         }
 
         # Cut on time (1 month before DISCOVERY, 6 months after)
@@ -110,22 +112,31 @@ class TNSPipeline(TarxivModule):
         disc_mjd = Time(tns_meta["discovery_date"]).mjd
 
         # Check if we have a document giving the settings
-        active_settings = self.db.get(txv_id, scope="misc", collection="active_settings")
+        active_settings = self.db.get(
+            txv_id, scope="misc", collection="active_settings"
+        )
         if active_settings is None:
             active_settings = {
                 "prior_days": self.config["tns"]["obj_prior_days"],
                 "active_days": self.config["tns"]["obj_active_days"],
             }
-            self.db.upsert(txv_id, active_settings, scope="misc", collection="active_settings")
+            self.db.upsert(
+                txv_id, active_settings, scope="misc", collection="active_settings"
+            )
         # Check if we have special min/max mjds, if not use default
         mjd_min = disc_mjd - active_settings["prior_days"]
         mjd_max = disc_mjd + active_settings["active_days"]
 
-
         # Now get meta and lightcurves from the surveys
-        fink_ztf_meta, ztf_lc = self.ztf.get_object(object_id, ra_deg, dec_deg, mjd_min, mjd_max)
-        asas_sn_meta, asas_sn_lc = self.asas_sn.get_object(object_id, ra_deg, dec_deg, mjd_min, mjd_max)
-        fink_lsst_meta, lsst_lc = self.lsst.get_object(object_id, ra_deg, dec_deg, mjd_min, mjd_max)
+        fink_ztf_meta, ztf_lc = self.ztf.get_object(
+            object_id, ra_deg, dec_deg, mjd_min, mjd_max
+        )
+        asas_sn_meta, asas_sn_lc = self.asas_sn.get_object(
+            object_id, ra_deg, dec_deg, mjd_min, mjd_max
+        )
+        fink_lsst_meta, lsst_lc = self.lsst.get_object(
+            object_id, ra_deg, dec_deg, mjd_min, mjd_max
+        )
         # Get additional meta from the survey
         lasair_meta = self.lasair.get_object(object_id, ra_deg, dec_deg)
 
@@ -146,7 +157,6 @@ class TNSPipeline(TarxivModule):
         obj_lc = json.loads(lc_df.to_json(orient="records"))
 
         return txv_id, meta, obj_lc
-
 
     def upsert_object(self, object_id, obj_meta, obj_lc):
         """
@@ -306,8 +316,8 @@ class TNSPipeline(TarxivModule):
                         self.logger.info(status, extra=status)
 
                     # Submit kafka alert
-                    msg = json.dumps(obj_meta).encode('utf-8')
-                    self.kafka.produce(topic='tns', value=msg, callback=self.acked)
+                    msg = json.dumps(obj_meta).encode("utf-8")
+                    self.kafka.produce(topic="tns", value=msg, callback=self.acked)
 
                 except Exception:
                     stack_trace = traceback.format_exc()
@@ -316,6 +326,7 @@ class TNSPipeline(TarxivModule):
                         "object_id": object_id,
                         "exception": stack_trace,
                     })
+
     def acked(self, err, msg):
         if err is not None:
             status = {"status": "failed kafka publish", "msg": msg}

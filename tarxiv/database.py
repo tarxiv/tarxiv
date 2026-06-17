@@ -5,8 +5,12 @@ from .utils import TarxivModule, int_to_alphanumeric
 from datetime import timedelta
 
 from couchbase.options import ClusterOptions, ClusterTimeoutOptions, IncrementOptions
-from couchbase.exceptions import DocumentNotFoundException, SubdocPathMismatchException, PathNotFoundException, \
-    AmbiguousTimeoutException
+from couchbase.exceptions import (
+    DocumentNotFoundException,
+    SubdocPathMismatchException,
+    PathNotFoundException,
+    AmbiguousTimeoutException,
+)
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster
 import couchbase.subdocument as SD
@@ -54,7 +58,6 @@ class TarxivDB(TarxivModule):
         status = {"status": "connection success"}
         self.logger.info(status, extra=status)
 
-
     def get_object_schema(self):
         """Read object schema from config directory and return it.
 
@@ -76,19 +79,19 @@ class TarxivDB(TarxivModule):
 
     def get_all_active_objects(self):
         statement = (
-            f"SELECT                                                                          "
-            f"  meta.tarxiv_id                                                                "
-            f"FROM tarxiv.objects.meta meta                                                   "
-            f"JOIN tarxiv.misc.active_settings settings USING(tarxiv_id)                      "
-            f"WHERE                                                                           "
-            f"   DATE_DIFF_STR(NOW_UTC(), meta.discovery_date,  'day') < settings.active_days "
+            "SELECT                                                                          "
+            "  meta.tarxiv_id                                                                "
+            "FROM tarxiv.objects.meta meta                                                   "
+            "JOIN tarxiv.misc.active_settings settings USING(tarxiv_id)                      "
+            "WHERE                                                                           "
+            "   DATE_DIFF_STR(NOW_UTC(), meta.discovery_date,  'day') < settings.active_days "
         )
 
         result = self.cluster.query(statement)
         return [r["object_id"] for r in result]
 
     def get_all_objects(self):
-        statement = f"SELECT META().id AS tarxiv_id FROM tarxiv.objects.meta"
+        statement = "SELECT META().id AS tarxiv_id FROM tarxiv.objects.meta"
         result = self.cluster.query(statement)
         return [r["tarxiv_id"] for r in result]
 
@@ -96,7 +99,6 @@ class TarxivDB(TarxivModule):
         # Set a specific field in a document
         coll = self.conn.scope(scope).collection(collection)
         coll.mutate_in(doc_id, [SD.upsert(key, value)])
-
 
     def upsert(self, doc_id, payload, scope, collection):
         """Insert document into couchbase collection. Update if already exists.
@@ -123,7 +125,7 @@ class TarxivDB(TarxivModule):
                 count += 1
                 if count > 5:
                     status = {
-                        "status":  "repeated upsert timeouts",
+                        "status": "repeated upsert timeouts",
                         "object_id": doc_id,
                         "collection": collection,
                     }
@@ -131,10 +133,10 @@ class TarxivDB(TarxivModule):
                     print(traceback.format_exc())
                     break
 
-
     def lookup_in(self, object_id, sub_field, scope, collection, return_type=str):
         """
         Get a specific field value from a subdocument
+
         :param object_id: name of the object to be used as a document id; str
         :param sub_field: name of the field to look up; str
         :param collection: couchbase collection; meta or lightcurve; str
@@ -142,11 +144,16 @@ class TarxivDB(TarxivModule):
         """
         try:
             coll = self.conn.scope(scope).collection(collection)
-            result = coll.lookup_in(object_id,[SD.get(sub_field)]).content_as[return_type](0)
-        except (DocumentNotFoundException, SubdocPathMismatchException, PathNotFoundException):
+            result = coll.lookup_in(object_id, [SD.get(sub_field)]).content_as[
+                return_type
+            ](0)
+        except (
+            DocumentNotFoundException,
+            SubdocPathMismatchException,
+            PathNotFoundException,
+        ):
             result = None
         return result
-
 
     def get(self, doc_id, scope, collection):
         """Retrieve a document from couchbase collection based on object_id
@@ -178,9 +185,9 @@ class TarxivDB(TarxivModule):
     def get_source_txv_id(self, source_id):
         try:
             statement = f"""
-                SELECT 
+                SELECT
                   tarxiv_id
-                FROM tarxiv.objects.meta 
+                FROM tarxiv.objects.meta
                 WHERE source_id = '{source_id}'
             """
             result = list(self.cluster.query(statement))[0]["tarxiv_id"]
@@ -199,7 +206,6 @@ class TarxivDB(TarxivModule):
             result = None
 
         return result
-
 
     def cone_search(self, ra_deg, dec_deg, radius_arcsec):
         """Find objects within radius of coordinates using spherical geometry.
@@ -220,7 +226,7 @@ class TarxivDB(TarxivModule):
         # Note: 'value' is a reserved keyword in SQL++ so we escape it with backticks
         # Using LET to compute distance, then filter with WHERE
         statement = f"""
-            SELECT 
+            SELECT
                 meta.tarxiv_id,
                 meta.source,
                 meta.source_id,
@@ -254,7 +260,7 @@ class TarxivDB(TarxivModule):
     def get_txv_id(self, year, object_id=None):
         # If we have an object name, the check if there
         if object_id is not None:
-            meta = self.get(object_id, scope="objects", collection='meta')
+            meta = self.get(object_id, scope="objects", collection="meta")
             # If the object exists, then use its txv-idx
             if meta is not None and "tarxiv_id" in meta.keys():
                 return meta["tarxiv_id"]
@@ -265,8 +271,12 @@ class TarxivDB(TarxivModule):
             try:
                 # If we have no object name then just generate a new index
                 coll = self.conn.scope("misc").collection("idx")
-                new_idx = coll.binary().increment(year,
-                        IncrementOptions(timeout=timedelta(seconds=30))).content
+                new_idx = (
+                    coll
+                    .binary()
+                    .increment(year, IncrementOptions(timeout=timedelta(seconds=30)))
+                    .content
+                )
                 # Full detection id will be TXV-2025-xxxxxx
                 alpha_id = int_to_alphanumeric(new_idx, self.config["txv_id_len"])
                 txv_id = f"TXV-{year}-{alpha_id}"
@@ -280,12 +290,11 @@ class TarxivDB(TarxivModule):
                 count += 1
                 if count > 5:
                     status = {
-                        "status":  "repeated txv idx timeouts",
+                        "status": "repeated txv idx timeouts",
                         "year": year,
                     }
                     self.logger.error(status, extra=status)
                     return None
-
 
     def close(self):
         """Close connection to couchbase

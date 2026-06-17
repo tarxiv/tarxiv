@@ -41,7 +41,7 @@ def lightcurve_module(monkeypatch):
     # Neutralise page/callback registration so the module can be (re)imported
     # without a running Dash app; we only exercise plain functions here.
     monkeypatch.setattr(dash, "register_page", lambda *args, **kwargs: None)
-    monkeypatch.setattr(dash, "callback", lambda *args, **kwargs: (lambda f: f))
+    monkeypatch.setattr(dash, "callback", lambda *args, **kwargs: lambda f: f)
     monkeypatch.setattr(dash, "clientside_callback", lambda *args, **kwargs: None)
 
     import tarxiv.dashboard.pages.lightcurve as lightcurve
@@ -51,9 +51,7 @@ def lightcurve_module(monkeypatch):
 
 def _render_empty_layout(lightcurve_module, monkeypatch):
     """Render the page layout for the empty (no-object) state."""
-    monkeypatch.setattr(
-        lightcurve_module, "get_jwt_from_request", lambda *a, **k: None
-    )
+    monkeypatch.setattr(lightcurve_module, "get_jwt_from_request", lambda *a, **k: None)
     monkeypatch.setattr(
         lightcurve_module, "get_authenticated_user", lambda *a, **k: None
     )
