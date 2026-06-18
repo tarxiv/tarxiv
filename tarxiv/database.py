@@ -213,7 +213,7 @@ class TarxivDB(TarxivModule):
         :param ra_deg: Right Ascension in degrees; float
         :param dec_deg: Declination in degrees; float
         :param radius_arcsec: Search radius in arcseconds; float
-        :return: List of matching objects with object_id, ra, dec, distance_deg
+        :return: List of matching objects with obj_name, ra, dec, distance_deg
         """
         # Convert arcseconds to degrees
         radius_deg = radius_arcsec / 3600.0
@@ -223,16 +223,18 @@ class TarxivDB(TarxivModule):
         #
         # SQL++ query using haversine formula for spherical distance
         # Distance = arccos(sin(dec1)*sin(dec2) + cos(dec1)*cos(dec2)*cos(ra1-ra2))
-        # Note: 'value' is a reserved keyword in SQL++ so we escape it with backticks
-        # Using LET to compute distance, then filter with WHERE
+        # Using LET to compute distance, then filter with WHERE.
+        #
+        # The SELECT aliases match ConeSearchResponseSingle (obj_name/ra/dec/
+        # distance_deg) so the dashboard can validate the results directly.
+        # ``obj_name`` is the source_id (e.g. the TNS name) because the object
+        # page resolves searches via source_id. ``dec`` is backtick-escaped as
+        # it is a reserved word in SQL++.
         statement = f"""
             SELECT
-                meta.tarxiv_id,
-                meta.source,
-                meta.source_id,
-                meta.discovery_date,
-                meta.ra_deg,
-                meta.dec_deg,
+                meta.source_id AS obj_name,
+                meta.ra_deg AS ra,
+                meta.dec_deg AS `dec`,
                 distance_deg
             FROM tarxiv.objects.meta meta
             LET distance_deg = ACOS(

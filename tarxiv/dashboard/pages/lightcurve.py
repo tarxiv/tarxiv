@@ -13,8 +13,6 @@ from ..components import (
 )
 from ...dto import (
     LightcurveResponseModel,
-)
-from ..schemas import (
     MetadataResponseModel,
 )
 from ...auth import (
@@ -278,13 +276,17 @@ SOURCE_TO_BIB = {
 def _extract_object_coordinates(meta):
     """Return (ra, dec) for the Aladin target from source-keyed metadata.
 
-    Prefers TNS decimal coordinates, then any source providing
-    ``ra_deg``/``dec_deg``, and finally the top-level HMS/DMS strings (Aladin
-    accepts sexagesimal targets too). Returns (None, None) if nothing usable
-    is found.
+    Prefers the top-level decimal coordinates (``ra_deg``/``dec_deg``), then TNS
+    and any other source providing ``ra_deg``/``dec_deg``, and finally the
+    top-level sexagesimal strings (Aladin accepts sexagesimal targets too).
+    Returns (None, None) if nothing usable is found.
     """
-    data_sources = meta.get("data_sources") or {}
+    ra = meta.get("ra_deg")
+    dec = meta.get("dec_deg")
+    if ra is not None and dec is not None:
+        return ra, dec
 
+    data_sources = meta.get("data_sources") or {}
     preferred = ["tns"] + [key for key in data_sources if key != "tns"]
     for source in preferred:
         payload = data_sources.get(source) or {}
@@ -293,8 +295,8 @@ def _extract_object_coordinates(meta):
         if ra is not None and dec is not None:
             return ra, dec
 
-    ra = meta.get("ra")
-    dec = meta.get("dec")
+    ra = meta.get("ra_hms") or meta.get("ra")
+    dec = meta.get("dec_dms") or meta.get("dec")
     if ra and dec:
         return ra, dec
 
@@ -473,16 +475,9 @@ def render_tagging_panel(object_id, visible_tags, assigned_tags):
     )
 
 
-# TEMPORARY: point the object page at the dummy endpoint that serves the new
-# source-keyed schema (see api.py:get_object_meta_dummy). Flip to False once the
-# real /get_object_meta endpoint emits the new schema.
-USE_DUMMY_META_ENDPOINT = True
-
-
 def get_metadata_data(object_id, token, logger):
     """Fetch metadata for an object."""
-    endpoint = "get_object_meta_dummy" if USE_DUMMY_META_ENDPOINT else "get_object_meta"
-    response = fetch_api_data(endpoint, object_id, token, logger)
+    response = fetch_api_data("get_object_meta", object_id, token, logger)
 
     if response.status_code == 200:
         try:
@@ -641,8 +636,18 @@ def perform_search(object_id, token, logger):
         logger.warning({"warning": f"Object ID not found: {object_id}"})
         return (*empty_render, status_msg, error_banner, None, None)
 
+    tarxiv_id = meta.get("tarxiv_id")
+    if not tarxiv_id:
+        error_banner = create_message_banner(
+            f"Object {object_id} has no associated TarXiv ID.", "error"
+        )
+        logger.warning({"warning": f"Object {object_id} missing TarXiv ID."})
+        return (*empty_render, status_msg, error_banner, None, None)
+
     # Fetch Lightcurve
-    lc_data = get_lightcurve_data(object_id, token, logger)
+    lc_data = get_lightcurve_data(tarxiv_id, token, logger)
+    logger.info({"info": f"Lightcurve data fetched for object {object_id}."})
+    logger.debug({"debug": f"Lightcurve data: {lc_data}"})
 
     # Fetch citations for the sources present in the metadata.
     citation_str = get_citations_data(

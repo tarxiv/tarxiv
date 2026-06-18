@@ -138,3 +138,38 @@ def test_coordinates_header_omitted_without_coordinates():
     results_top, _citations, _full = format_object_metadata("x", meta)
 
     assert "object-coordinates" not in collect_component_ids(results_top)
+
+
+def test_coordinates_header_uses_new_schema_hms_dms_keys():
+    """Coordinate header must build from the new ra_hms/dec_dms keys.
+
+    Regression: the new schema exposes sexagesimal coordinates as
+    ``ra_hms``/``dec_dms`` (not ``ra``/``dec``). The header read the old keys and
+    so rendered "Coordinates unavailable" for every object. It must now build the
+    copyable element from the new keys.
+    """
+    from tarxiv.dashboard.components.cards import _build_coordinates_header
+
+    meta = {
+        "tarxiv_id": "TXV-2018-000003",
+        "ra_hms": "12:38:29.211744",
+        "dec_dms": "+39:00:11.0061",
+        "data_sources": {},
+    }
+
+    header = _build_coordinates_header(meta)
+
+    assert "object-coordinates" in collect_component_ids(header)
+
+
+def test_extract_object_coordinates_prefers_top_level_decimal(lightcurve_module):
+    """Aladin should target the top-level decimal coordinates when present."""
+    meta = {
+        "ra_deg": 189.6217156,
+        "dec_deg": 39.00305725,
+        "data_sources": {"tns": {"ra_deg": 1.0, "dec_deg": 2.0}},
+    }
+
+    ra, dec = lightcurve_module._extract_object_coordinates(meta)
+
+    assert (ra, dec) == (189.6217156, 39.00305725)

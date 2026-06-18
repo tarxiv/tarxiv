@@ -654,12 +654,13 @@ def format_object_metadata(object_id, meta, citation_str=None, logger=None):
 def _build_coordinates_header(meta):
     """Build a prominent, copyable RA/Dec display above the lightcurve.
 
-    The top-level ``ra``/``dec`` are sexagesimal strings (h:m:s / d:m:s). They
-    are shown together, space-separated, with a clipboard button that copies the
-    combined string. Returns a dimmed placeholder when coordinates are missing.
+    The top-level ``ra_hms``/``dec_dms`` are sexagesimal strings (h:m:s /
+    d:m:s). They are shown together, space-separated, with a clipboard button
+    that copies the combined string. The older ``ra``/``dec`` keys are accepted
+    as a fallback. Returns a dimmed placeholder when coordinates are missing.
     """
-    ra = meta.get("ra")
-    dec = meta.get("dec")
+    ra = meta.get("ra_hms") or meta.get("ra")
+    dec = meta.get("dec_dms") or meta.get("dec")
     if not ra or not dec:
         return dmc.Text("Coordinates unavailable", c="dimmed", size="sm")
 

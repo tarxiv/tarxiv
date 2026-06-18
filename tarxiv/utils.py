@@ -5,32 +5,12 @@ from logstash_async.handler import LogstashFormatter
 from decimal import Decimal, ROUND_HALF_UP
 from astropy.coordinates import SkyCoord
 import astropy.units as u
-import json
 import logging
 import string
 import yaml
 import sys
 import os
 import re
-
-
-def load_sample_object_meta() -> dict:
-    """Load the new-schema object-metadata sample from docs/dev-notes/new_sample.json.
-
-    Used by the dummy /get_object_meta_dummy endpoint so the dashboard can be
-    exercised against the forthcoming schema without duplicating the sample
-    payload anywhere in the codebase. The path can be overridden with the
-    ``TARXIV_SAMPLE_META_PATH`` environment variable.
-    """
-    path = os.environ.get("TARXIV_SAMPLE_META_PATH") or os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "docs",
-        "dev-notes",
-        "new_sample.json",
-    )
-    with open(path) as f:
-        return json.load(f)
 
 
 # Reporting mode flags

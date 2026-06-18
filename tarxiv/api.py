@@ -7,7 +7,7 @@ from flask import Flask, Blueprint, request, make_response, redirect, session
 import cherrypy
 from paste.translogger import TransLogger
 
-from .utils import TarxivModule, load_sample_object_meta
+from .utils import TarxivModule
 from .database import TarxivDB
 from .auth import sign_token, PROVIDERS, validate_token, TokenStatus, verify_token
 from .database_user import (
@@ -18,9 +18,6 @@ from .database_user import (
 )
 from . import dto
 from .openapi import build_openapi_spec
-
-
-DUMMY_OBJECT_META = load_sample_object_meta()
 
 
 class API(TarxivModule):
@@ -46,7 +43,7 @@ class API(TarxivModule):
             debug=debug,
         )
 
-        # Survey name/alias map (could write better, but fuck it)
+        # Survey name -> alias index map.
         self.survey_source_map = {
             "TNS": 0,
             "ATLAS": 2,
@@ -605,15 +602,8 @@ class API(TarxivModule):
                 "source_id": source_id,
             }
             try:
-                # No token required
-                """
-                validation = self.validate_token_request(token)
-                if not validation["is_valid"]:
-                    if validation["status"] == "expired":
-                        raise PermissionError("Session expired — please log in again.")
-                    else:
-                        raise PermissionError("Invalid or missing token.")
-                """
+                # Require a valid token (raises PermissionError -> 401 below).
+                self._require_authenticated_user_id(token)
                 # Find object info
                 tarxiv_id = self.txv_db.get_source_txv_id(source_id)
                 result = self.txv_db.get(tarxiv_id, scope="objects", collection="meta")
@@ -640,51 +630,6 @@ class API(TarxivModule):
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
 
-        @self.app.route("/get_object_meta_dummy/<string:obj_name>", methods=["POST"])
-        def get_object_meta_dummy(obj_name):
-            """Return the new-schema sample metadata document for testing.
-
-            Mirrors get_object_meta's auth handling but serves the sample at
-            docs/dev-notes/new_sample.json (loaded via utils.load_sample_object_meta)
-            instead of querying the database, so the dashboard object page can be
-            exercised before the real endpoint emits the source-keyed schema.
-            """
-            token = request.headers.get("Authorization")
-            log = {
-                "query_type": "meta_dummy",
-                "query_ip": request.remote_addr,
-                "token": token,
-                "obj_name": obj_name,
-            }
-            try:
-                validation = self.validate_token_request(token)
-                if not validation["is_valid"]:
-                    if validation["status"] == "expired":
-                        raise PermissionError("Session expired — please log in again.")
-                    else:
-                        raise PermissionError("Invalid or missing token.")
-                # Echo the requested object id so the page reflects the search.
-                result = {**DUMMY_OBJECT_META, "tarxiv_id": obj_name}
-                status_code = 200
-                log["status"] = "Success"
-            except PermissionError as e:
-                result = {"error": str(e), "type": "token"}
-                status_code = 401
-                log["status"] = "PermissionError"
-            except FileNotFoundError as e:
-                result = {"error": f"Sample file not found: {e}", "type": "server"}
-                status_code = 500
-                log["status"] = "ServerError"
-            except Exception as e:
-                result = {"error": str(e), "type": "server"}
-                status_code = 500
-                log["status"] = "ServerError"
-                self.logger.exception(e)
-                self.logger.error({"error": str(e)}, extra={"error": str(e)})
-
-            self.logger.info(log, extra=log)
-            return server_response(result, status_code)
-
         @self.app.route("/get_object_lc/<string:tarxiv_id>", methods=["POST"])
         def get_object_lc(tarxiv_id):
             token = request.headers.get("Authorization")
@@ -696,15 +641,7 @@ class API(TarxivModule):
                 "tarxiv_id": tarxiv_id,
             }
             try:
-                # No token required
-                """
-                validation = self.validate_token_request(token)
-                if not validation["is_valid"]:
-                    if validation["status"] == "expired":
-                        raise PermissionError("Session expired — please log in again.")
-                    else:
-                        raise PermissionError("Invalid or missing token.")
-                """
+                # No token required for this endpoint.
                 # Find object info
                 result = self.txv_db.get(
                     tarxiv_id, scope="objects", collection="lightcurves"
@@ -737,21 +674,13 @@ class API(TarxivModule):
             token = request.headers.get("Authorization")
             # Start log
             log = {
-                "query_type": "tns_alerts",
+                "query_type": "citations",
                 "query_ip": request.remote_addr,
                 "token": token,
                 "sources": request_json["sources"],
             }
             try:
-                # No token required
-                """
-                validation = self.validate_token_request(token)
-                if not validation["is_valid"]:
-                    if validation["status"] == "expired":
-                        raise PermissionError("Session expired — please log in again.")
-                    else:
-                        raise PermissionError("Invalid or missing token.")
-                """
+                # No token required for this endpoint.
                 # Get all relevant citations
                 citations = []
                 for source in request_json["sources"]:
@@ -837,16 +766,19 @@ class API(TarxivModule):
                 #     )
                 #     object_filter = f" AND META().id IN [{object_list}]"
 
+                # Per-source TNS fields now live under data_sources.tns; the
+                # object's canonical coordinates/provenance live at the top
+                # level. Aliases match the keys the alerts page reads.
                 query = f"""SELECT
                               meta.discovery_date,
-                              meta.tns.object_id,
-                              meta.tns.object_type,
+                              meta.source_id AS obj_name,
+                              meta.data_sources.tns.object_type,
                               meta.ra_hms,
                               meta.dec_dms,
-                              meta.tns.redshift,
-                              meta.tns.reporting_group,
-                              meta.tns.discovery_data_source AS discovery_source
-                            FROM tarxiv.objects.meta
+                              meta.data_sources.tns.redshift,
+                              meta.data_sources.tns.reporting_group,
+                              meta.data_sources.tns.discovery_data_source AS discovery_source
+                            FROM tarxiv.objects.meta meta
                             WHERE meta.source = 'tns'
                             ORDER BY meta.discovery_date DESC
                             LIMIT {request_json["n_rows"]} OFFSET {request_json["offset"]}"""
@@ -933,15 +865,7 @@ class API(TarxivModule):
                 "request": request_json,
             }
             try:
-                # No token required
-                """
-                validation = self.validate_token_request(token)
-                if not validation["is_valid"]:
-                    if validation["status"] == "expired":
-                        raise PermissionError("Session expired — please log in again.")
-                    else:
-                        raise PermissionError("Invalid or missing token.")
-                """
+                # No token required for this endpoint.
                 # Extract parameters
                 ra = request_json["ra"]
                 dec = request_json["dec"]
