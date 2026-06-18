@@ -1,0 +1,51 @@
+{
+  "tarxiv_id": "TXV-2018-000003",
+  "ra_deg": 189.6217156,
+  "dec_deg": 39.00305725,
+  "ra_hms": "12:38:29.211744",
+  "dec_dms": "+39:00:11.0061",
+  "source": "tns",
+  "source_id": "2018mqw",
+  "discovery_date": "2018-05-05 04:10:48.996",
+  "data_sources": {
+    "tns": {
+      "object_id": "2018mqw",
+      "source_id_name": "objname",
+      "ra_deg": 189.6217156,
+      "dec_deg": 39.00305725,
+      "ra_hms": "12:38:29.212",
+      "dec_dms": "+39:00:11.01",
+      "object_type": null,
+      "redshift": null,
+      "hostname": null,
+      "discovery_date": "2018-05-05 04:10:48.996",
+      "reporting_group": "ZTF",
+      "discovery_data_source": "ZTF"
+    },
+    "sherlock": {
+      "Mag": 18.87,
+      "MagErr": 0.012,
+      "MagFilter": "r",
+      "association_type": "SN",
+      "best_distance": 885.829,
+      "best_distance_flag": "pz",
+      "best_distance_source": "SDSS DR12 PhotoObjAll Table",
+      "catalogue_object_id": "WISEAJ123829.16+390011.4",
+      "catalogue_object_type": "galaxy",
+      "catalogue_table_name": "NED/SDSS/PS1",
+      "classificationReliability": 2,
+      "direct_distance": null,
+      "eastSeparationArcsec": "-0.54603",
+      "northSeparationArcsec": "0.26564",
+      "photoZ": 0.182635,
+      "photoZErr": 0.039232,
+      "physical_separation_kpc": null,
+      "separationArcsec": 0.535,
+      "sm_axis_arcsec": null,
+      "ra_deg": 189.62155944,
+      "dec_deg": 39.003142776,
+      "redshift": null
+    }
+  },
+  "update_date": "2026-06-16T06:00:29.354615"
+}

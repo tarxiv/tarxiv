@@ -1,7 +1,8 @@
 """Card components for displaying object data."""
 
 import json
-from typing import Literal, List, Dict, Set
+import math
+from typing import Literal
 
 import dash_mantine_components as dmc
 from dash import dcc, html
@@ -247,157 +248,211 @@ def create_message_banner(
     )
 
 
-def format_object_metadata(object_id, meta, logger=None):
-    """Format object metadata for display.
+# Source key -> display label for the per-source metadata tabs.
+SOURCE_LABELS = {
+    "tns": "TNS",
+    "ztf": "ZTF",
+    "atlas": "ATLAS",
+    "atlas_twb": "ATLAS TWB",
+    "asas_sn": "ASAS-SN",
+    "asas-sn": "ASAS-SN",
+    "asas-sn_skypatrol": "ASAS-SN Skypatrol",
+    "sherlock": "Sherlock",
+    "fink": "Fink",
+    "mangrove": "Mangrove",
+    "lasair": "Lasair",
+    "lsst": "LSST",
+}
 
-    Args:
-        object_id: Object identifier
-        meta: Metadata dictionary
-        logger: Optional logger instance
+# Preferred ordering of source tabs; any source not listed is appended after.
+SOURCE_ORDER = ["tns", "ztf", "atlas", "asas_sn", "sherlock"]
 
-    Returns
-    -------
-        html.Div containing formatted cards
+# Per-source fields that hold photometry arrays (lists of detection dicts).
+PHOTOMETRY_FIELDS = ("peak_mag", "latest_detection", "latest_nondetection")
+
+# Nice display labels for scalar metadata fields. Anything not listed falls
+# back to a title-cased version of the raw key, so unmapped sources still render.
+FIELD_LABELS = {
+    "identifier": "Identifier",
+    "ra_deg": "RA (deg)",
+    "dec_deg": "Dec (deg)",
+    "object_type": "Object Type",
+    "discovery_date": "Discovery Date",
+    "reporting_group": "Reporting Group",
+    "discovery_data_source": "Discovery Data Source",
+    "redshift": "Redshift",
+    "host_name": "Host Name",
+    "mag": "Magnitude",
+    "mag_err": "Magnitude Error",
+    "mag_filter": "Magnitude Filter",
+    "association_type": "Association Type",
+    "best_distance": "Best Distance",
+    "best_distance_flag": "Best Distance Flag",
+    "best_distance_source": "Best Distance Source",
+    "catalogue_object_id": "Catalogue Object ID",
+    "catalogue_object_type": "Catalogue Object Type",
+    "catalogue_table_name": "Catalogue Table",
+    "classificationReliability": "Classification Reliability",
+    "separation_arcsec": "Separation (arcsec)",
+    "north_separation_arcsec": "North Separation (arcsec)",
+    "east_separation_arcsec": "East Separation (arcsec)",
+    "physical_separation_kpc": "Physical Separation (kpc)",
+}
+
+
+def _field_label(field_name: str) -> str:
+    """Return a display label for a metadata field, with a sensible fallback."""
+    return FIELD_LABELS.get(field_name, field_name.replace("_", " ").title())
+
+
+def _source_label(source_key: str) -> str:
+    """Return a display label for a data source, with a sensible fallback."""
+    return SOURCE_LABELS.get(source_key, source_key.replace("_", " ").upper())
+
+
+def _ordered_sources(data_sources: dict) -> list:
+    """Order present sources by SOURCE_ORDER, appending any extras after."""
+    ordered = [key for key in SOURCE_ORDER if key in data_sources]
+    ordered += [key for key in data_sources if key not in ordered]
+    return ordered
+
+
+def _build_scalar_table(source_payload: dict):
+    """Build a Field/Value table for the scalar entries of a source payload.
+
+    Photometry arrays are handled separately; nested values are rendered
+    compactly rather than dropped so nothing is silently lost.
     """
-    field_labels = {
-        "identifiers": "Identifiers",
-        "ra_deg": "RA (deg)",
-        "dec_deg": "Dec (deg)",
-        "object_type": "Object Type",
-        "discovery_date": "Discovery Date",
-        "reporting_group": "Reporting Group",
-        "discovery_data_source": "Discovery Data Source",
-        "redshift": "Redshift",
-        "host_name": "Host Name",
-        "peak_mag": "Peak Magnitude",
-        "latest_detection": "Latest Detection",
-    }
+    rows = []
+    for field_name, value in source_payload.items():
+        if field_name in PHOTOMETRY_FIELDS:
+            continue
+        if isinstance(value, (list, dict)):
+            value = json.dumps(value, separators=(",", ":"), default=str)
+        rows.append((field_name, value))
 
-    # Associated-source groupings mirrored from aux/config.yml.
-    associated_sources: Dict[str, Set[str]] = {
-        "tns": {"tns"},
-        "ztf": {"ztf", "fink", "mangrove"},
-        "atlas": {"atlas", "atlas_twb", "sherlock"},
-        "asas-sn": {"asas-sn", "asas-sn_skypatrol"},
-    }
+    if not rows:
+        return None
 
-    tab_order = [
-        # ("all", "ALL SOURCES"),
-        ("tns", "TNS"),
-        ("ztf", "ZTF"),
-        ("atlas", "ATLAS"),
-        ("asas-sn", "ASAS-SN"),
-    ]
-    tab_data = {
-        tab_key: {
-            "kv_rows": [],
-            "photometry": {
-                "peak_mag": [],
-                "latest_detection": [],
-            },
-        }
-        for tab_key, _ in tab_order
-    }
+    return dmc.Box(
+        dmc.Table(
+            [
+                dmc.TableThead(
+                    dmc.TableTr([
+                        dmc.TableTh("Field"),
+                        dmc.TableTh("Value"),
+                    ])
+                ),
+                dmc.TableTbody([
+                    dmc.TableTr([
+                        dmc.TableTd(_field_label(field_name)),
+                        dmc.TableTd(str(value)),
+                    ])
+                    for field_name, value in rows
+                ]),
+            ],
+            withTableBorder=True,
+            withColumnBorders=True,
+            striped=True,
+            highlightOnHover=True,
+            horizontalSpacing="xs",
+            verticalSpacing="xs",
+            style={"width": "fit-content"},
+        ),
+    )
 
-    def value_from_entry(field_name: str, entry_value) -> str:
-        """Extract a display-friendly value from a metadata entry."""
-        if isinstance(entry_value, dict):
-            if field_name == "identifiers" and "name" in entry_value:
-                return entry_value["name"]
-            if "value" in entry_value:
-                return entry_value["value"]
-            if "name" in entry_value:
-                return entry_value["name"]
-            return json.dumps(entry_value, separators=(",", ":"), default=str)
-        return entry_value
 
-    def add_text(
-        tab_key: str,
-        label: str,
-        field_name: str,
-        entry_value,
-    ) -> None:
-        source = entry_value.get("source") if isinstance(entry_value, dict) else None
-        value = value_from_entry(field_name, entry_value)
-        tab_data[tab_key]["kv_rows"].append({
-            "field": label,
-            "source": source or "-",
-            "value": value,
-        })
+def _build_detection_info_table(peak_entries: list, latest_entries: list) -> list:
+    """Build a condensed detection summary table grouped by filter.
 
-    def add_field_for_sources(
-        tab_key: str,
-        field_name: str,
-        allowed_sources: Set[str],
-    ) -> None:
-        """Add entries for a specific field if their source is in the allowed set.
+    Columns are:
+    Filter | latest_date | latest_mag | latest_mag_rate | peak_date | peak_mag
+    """
+    if not peak_entries and not latest_entries:
+        return []
 
-        Args:
-            tab_key: The key of the current tab (e.g., "tns", "ztf")
-            field_name: The metadata field to add (e.g., "ra_deg")
-            allowed_sources: Set of sources to include for this field
-        """
-        if field_name not in meta:
-            return
-        entries = (
-            meta[field_name]
-            if isinstance(meta[field_name], list)
-            else [meta[field_name]]
-        )
-        label = field_labels[field_name]
-        for entry in entries:
-            source = entry.get("source") if isinstance(entry, dict) else None
-            if source in allowed_sources:
-                add_text(tab_key, label, field_name, entry)
+    filters = set()
+    for entry in peak_entries:
+        filters.add(str(entry.get("filter", "unknown")))
+    for entry in latest_entries:
+        filters.add(str(entry.get("filter", "unknown")))
 
-    def add_grouped_by_filter(
-        tab_key: str,
-        field_name: str,
-        allowed_sources: Set[str],
-    ) -> None:
-        """Add photometry entries for a specific field grouped by filter.
-
-        Args:
-            tab_key: The key of the current tab (e.g., "ztf", "atlas")
-            field_name: The photometry field to add (e.g., "peak_mag")
-            allowed_sources: Set of sources to include for this field
-        """
-        if field_name not in meta:
-            return
-        entries = (
-            meta[field_name]
-            if isinstance(meta[field_name], list)
-            else [meta[field_name]]
-        )
-        matched = [
+    def latest_for_filter(filter_name: str):
+        candidates = [
             entry
-            for entry in entries
-            if isinstance(entry, dict) and entry.get("source") in allowed_sources
+            for entry in latest_entries
+            if str(entry.get("filter", "unknown")) == filter_name
         ]
-        if not matched:
-            return
-        tab_data[tab_key]["photometry"][field_name].extend(matched)
+        if not candidates:
+            return None
+        return max(candidates, key=lambda item: str(item.get("date", "")))
 
-    def build_kv_table(rows: List[dict]) -> dmc.Box:
-        """Build a compact table for field/source/value metadata rows."""
-        return dmc.Box(
+    def peak_for_filter(filter_name: str):
+        candidates = [
+            entry
+            for entry in peak_entries
+            if str(entry.get("filter", "unknown")) == filter_name
+        ]
+        if not candidates:
+            return None
+
+        numeric_candidates = [
+            entry
+            for entry in candidates
+            if isinstance(entry.get("value"), (int, float))
+        ]
+        if numeric_candidates:
+            # Magnitude peak is the brightest point (minimum magnitude value).
+            return min(numeric_candidates, key=lambda item: item.get("value"))
+
+        return candidates[0]
+
+    def display_or_dash(value):
+        return "-" if value is None else str(value)
+
+    rows = []
+    for filter_name in sorted(filters):
+        latest_entry = latest_for_filter(filter_name)
+        peak_entry = peak_for_filter(filter_name)
+        rows.append(
+            dmc.TableTr([
+                dmc.TableTd(f"{filter_name} Band"),
+                dmc.TableTd(
+                    display_or_dash(latest_entry.get("date") if latest_entry else None)
+                ),
+                dmc.TableTd(
+                    display_or_dash(latest_entry.get("value") if latest_entry else None)
+                ),
+                dmc.TableTd(
+                    display_or_dash(
+                        latest_entry.get("mag_rate") if latest_entry else None
+                    )
+                ),
+                dmc.TableTd(
+                    display_or_dash(peak_entry.get("date") if peak_entry else None)
+                ),
+                dmc.TableTd(
+                    display_or_dash(peak_entry.get("value") if peak_entry else None)
+                ),
+            ])
+        )
+
+    return [
+        dmc.Text("Detection Info by Filter", fw=600),
+        dmc.Box(
             dmc.Table(
                 [
                     dmc.TableThead(
                         dmc.TableTr([
-                            dmc.TableTh("Field"),
-                            dmc.TableTh("Source"),
-                            dmc.TableTh("Value"),
+                            dmc.TableTh("Filter"),
+                            dmc.TableTh("Latest Date"),
+                            dmc.TableTh("Latest Mag"),
+                            dmc.TableTh("Latest Mag Rate"),
+                            dmc.TableTh("Peak Date"),
+                            dmc.TableTh("Peak Mag"),
                         ])
                     ),
-                    dmc.TableTbody([
-                        dmc.TableTr([
-                            dmc.TableTd(str(row["field"])),
-                            dmc.TableTd(str(row["source"])),
-                            dmc.TableTd(str(row["value"])),
-                        ])
-                        for row in rows
-                    ]),
+                    dmc.TableTbody(rows),
                 ],
                 withTableBorder=True,
                 withColumnBorders=True,
@@ -405,205 +460,42 @@ def format_object_metadata(object_id, meta, logger=None):
                 highlightOnHover=True,
                 horizontalSpacing="xs",
                 verticalSpacing="xs",
-                style={
-                    "width": "fit-content",
-                    # "maxWidth": "100%",
-                    # "fontSize": "0.95rem",
-                },
-            ),
-            # style={"overflowX": "auto", "maxWidth": "100%"},
-        )
-
-    def build_detection_info_table(tab_key: str) -> List:
-        """Build a condensed detection summary table grouped by filter.
-
-        Columns are:
-        Filter | latest_date | latest_mag | latest_mag_rate | peak_date | peak_mag
-        """
-        peak_entries = tab_data[tab_key]["photometry"]["peak_mag"]
-        latest_entries = tab_data[tab_key]["photometry"]["latest_detection"]
-
-        if not peak_entries and not latest_entries:
-            return []
-
-        filters = set()
-        for entry in peak_entries:
-            filters.add(str(entry.get("filter", "unknown")))
-        for entry in latest_entries:
-            filters.add(str(entry.get("filter", "unknown")))
-
-        def latest_for_filter(filter_name: str):
-            candidates = [
-                entry
-                for entry in latest_entries
-                if str(entry.get("filter", "unknown")) == filter_name
-            ]
-            if not candidates:
-                return None
-            return max(candidates, key=lambda item: str(item.get("date", "")))
-
-        def peak_for_filter(filter_name: str):
-            candidates = [
-                entry
-                for entry in peak_entries
-                if str(entry.get("filter", "unknown")) == filter_name
-            ]
-            if not candidates:
-                return None
-
-            numeric_candidates = [
-                entry
-                for entry in candidates
-                if isinstance(entry.get("value"), (int, float))
-            ]
-            if numeric_candidates:
-                # Magnitude peak is the brightest point (minimum magnitude value).
-                return min(numeric_candidates, key=lambda item: item.get("value"))
-
-            return candidates[0]
-
-        rows = []
-
-        def display_or_dash(value):
-            return "-" if value is None else str(value)
-
-        for filter_name in sorted(filters):
-            latest_entry = latest_for_filter(filter_name)
-            peak_entry = peak_for_filter(filter_name)
-            rows.append(
-                dmc.TableTr([
-                    dmc.TableTd(f"{filter_name} Band"),
-                    dmc.TableTd(
-                        display_or_dash(
-                            latest_entry.get("date") if latest_entry else None
-                        )
-                    ),
-                    dmc.TableTd(
-                        display_or_dash(
-                            latest_entry.get("value") if latest_entry else None
-                        )
-                    ),
-                    dmc.TableTd(
-                        display_or_dash(
-                            latest_entry.get("mag_rate") if latest_entry else None
-                        )
-                    ),
-                    dmc.TableTd(
-                        display_or_dash(peak_entry.get("date") if peak_entry else None)
-                    ),
-                    dmc.TableTd(
-                        display_or_dash(peak_entry.get("value") if peak_entry else None)
-                    ),
-                ])
+                style={"width": "fit-content"},
             )
+        ),
+    ]
 
-        return [
-            dmc.Text("Detection Info by Filter", fw=600),
-            dmc.Box(
-                dmc.Table(
-                    [
-                        dmc.TableThead(
-                            dmc.TableTr([
-                                dmc.TableTh("Filter"),
-                                dmc.TableTh("Latest Date"),
-                                dmc.TableTh("Latest Mag"),
-                                dmc.TableTh("Latest Mag Rate"),
-                                dmc.TableTh("Peak Date"),
-                                dmc.TableTh("Peak Mag"),
-                            ])
-                        ),
-                        dmc.TableTbody(rows),
-                    ],
-                    withTableBorder=True,
-                    withColumnBorders=True,
-                    striped=True,
-                    highlightOnHover=True,
-                    horizontalSpacing="xs",
-                    verticalSpacing="xs",
-                    style={"width": "fit-content"},
-                )
-            ),
-        ]
 
-    # # ALL SOURCES tab: RA, Dec, identifiers.
-    # for field in ["ra_deg", "dec_deg", "identifiers"]:
-    #     if field not in meta:
-    #         continue
-    #     entries = meta[field] if isinstance(meta[field], list) else [meta[field]]
-    #     for entry in entries:
-    #         add_text("all", field_labels[field], field, entry)
+def _build_metadata_tabs(data_sources: dict):
+    """Build the per-source metadata tabs component from the data_sources dict."""
+    ordered = _ordered_sources(data_sources)
+    if not ordered:
+        return dmc.Text("No metadata available for this object.")
 
-    # Every source tab includes its own RA, Dec, identifiers.
-    add_field_for_sources("tns", "ra_deg", associated_sources["tns"])
-    add_field_for_sources("tns", "dec_deg", associated_sources["tns"])
-    add_field_for_sources("tns", "identifiers", associated_sources["tns"])
+    tabs_list = []
+    tabs_panels = []
+    for source_key in ordered:
+        payload = data_sources.get(source_key) or {}
+        tabs_list.append(dmc.TabsTab(_source_label(source_key), value=source_key))
 
-    add_field_for_sources("ztf", "ra_deg", associated_sources["ztf"])
-    add_field_for_sources("ztf", "dec_deg", associated_sources["ztf"])
-    add_field_for_sources("ztf", "identifiers", associated_sources["ztf"])
-
-    add_field_for_sources("atlas", "ra_deg", associated_sources["atlas"])
-    add_field_for_sources("atlas", "dec_deg", associated_sources["atlas"])
-    add_field_for_sources("atlas", "identifiers", associated_sources["atlas"])
-
-    add_field_for_sources("asas-sn", "ra_deg", associated_sources["asas-sn"])
-    add_field_for_sources("asas-sn", "dec_deg", associated_sources["asas-sn"])
-    add_field_for_sources("asas-sn", "identifiers", associated_sources["asas-sn"])
-
-    # TNS tab: object_type, discovery_date, reporting_group, discovery_data_source, redshift.
-    for field in [
-        "object_type",
-        "discovery_date",
-        "reporting_group",
-        "discovery_data_source",
-        "redshift",
-    ]:
-        add_field_for_sources("tns", field, associated_sources["tns"])
-
-    # ZTF tab: redshift, host_name.
-    for field in ["redshift", "host_name"]:
-        add_field_for_sources("ztf", field, associated_sources["ztf"])
-
-    # ATLAS tab: redshift.
-    add_field_for_sources("atlas", "redshift", associated_sources["atlas"])
-
-    # Survey tabs include grouped peak_mag and latest_detection by filter.
-    add_grouped_by_filter("ztf", "peak_mag", associated_sources["ztf"])
-    add_grouped_by_filter("ztf", "latest_detection", associated_sources["ztf"])
-    add_grouped_by_filter("atlas", "peak_mag", associated_sources["atlas"])
-    add_grouped_by_filter("atlas", "latest_detection", associated_sources["atlas"])
-    add_grouped_by_filter("asas-sn", "peak_mag", associated_sources["asas-sn"])
-    add_grouped_by_filter("asas-sn", "latest_detection", associated_sources["asas-sn"])
-
-    tabs_list = []  # For building the dmc.TabsList with dmc.TabsTab components
-    tabs_panels = []  # For building the dmc.TabsPanel components corresponding to each tab
-    # iterate over the tabs in the specified order to build the tab list and panels
-    for tab_key, tab_label in tab_order:
-        tabs_list.append(dmc.TabsTab(tab_label, value=tab_key))
-        kv_rows = tab_data[tab_key]["kv_rows"]
-        phot_sections = []
-        if tab_key in {"ztf", "atlas", "asas-sn"}:
-            phot_sections.extend(build_detection_info_table(tab_key))
-
-        # Only add the key-value table if there are entries to show
         panel_blocks = []
-        if kv_rows:
-            panel_blocks.append(build_kv_table(kv_rows))
-        panel_blocks.extend(phot_sections)
+        scalar_table = _build_scalar_table(payload)
+        if scalar_table is not None:
+            panel_blocks.append(scalar_table)
+
+        peak_entries = payload.get("peak_mag") or []
+        latest_entries = payload.get("latest_detection") or []
+        panel_blocks.extend(_build_detection_info_table(peak_entries, latest_entries))
 
         panel_children = (
             dmc.Stack(panel_blocks, py="md", gap="sm")
             if panel_blocks
             else dmc.Text("No source-specific metadata available.")
         )
-        tabs_panels.append(
-            dmc.TabsPanel(
-                panel_children,
-                value=tab_key,
-            )
-        )
+        tabs_panels.append(dmc.TabsPanel(panel_children, value=source_key))
 
-    metadata_component = dmc.Tabs(
+    default_tab = "tns" if "tns" in data_sources else ordered[0]
+    return dmc.Tabs(
         [
             dmc.ScrollArea(
                 dmc.TabsList(tabs_list, justify="flex-start"),
@@ -612,56 +504,257 @@ def format_object_metadata(object_id, meta, logger=None):
             )
         ]
         + tabs_panels,
-        # value="all", # default to the "ALL SCOURCES" tab
-        value="tns",  # default to the "TNS" tab since "ALL SOURCES" is currently disabled
+        value=default_tab,
     )
 
-    return dmc.Stack([
-        # Lightcurve card
-        expressive_card(
-            children=dcc.Loading(
-                dcc.Graph(id={"type": "themeable-plot", "index": "lightcurve-plot"}),
-            ),
-            title=f"Lightcurve: {object_id}",
-        ),
-        # Metadata card
-        expressive_card(
-            children=metadata_component,
-            title=f"Object Metadata: {object_id}",
-        ),
-        # Full JSON card
-        expressive_card(
-            children=dmc.Code(
-                json.dumps(meta, indent=2),
-                style={
-                    "padding": "10px",
-                    "maxHeight": "400px",
-                    "overflow": "auto",
-                    "borderRadius": "4px",
-                },
-                block=True,
-            ),
-            title="Full Metadata (JSON)",
-        ),
-        # Sky plot Aladin card
-        expressive_card(
-            children=[
-                # A hidden div to receive the "success" message from our JS
-                html.Div(id="aladin-status-dummy", style={"display": "none"}),
-                html.Div(
-                    id="aladin-lite-div",
-                    style={"width": "100%", "height": "500px"},
+
+def _build_citation_component(citation_str: str | None):
+    """Build a copyable BibTeX citation card with a copy button.
+
+    The card is rendered even when ``citation_str`` is empty/None so the failure
+    mode is visible: an empty citations card with a fallback message means the
+    /citations call returned nothing.
+    """
+    if citation_str:
+        body = html.Div(
+            [
+                dcc.Clipboard(
+                    target_id="citation-bibtex",
+                    title="Copy citations",
+                    style={
+                        "position": "absolute",
+                        "top": "8px",
+                        "right": "8px",
+                        "fontSize": "20px",
+                        "cursor": "pointer",
+                    },
+                ),
+                dmc.Code(
+                    citation_str,
+                    id="citation-bibtex",
+                    block=True,
+                    style={
+                        "padding": "10px",
+                        "maxHeight": "300px",
+                        "overflow": "auto",
+                        "borderRadius": "4px",
+                    },
                 ),
             ],
-            title="Sky Plot (Aladin Lite)",
+            style={"position": "relative"},
+        )
+    else:
+        body = dmc.Text(
+            "Could not load citations for this object — check the /citations API logs.",
+            c="dimmed",
+        )
+    return body
+
+
+def format_object_metadata(object_id, meta, citation_str=None, logger=None):
+    """Format object metadata for display.
+
+    Args:
+        object_id: Object identifier
+        meta: Metadata dictionary (source-keyed schema, see MetadataResponseModel)
+        citation_str: Optional concatenated BibTeX citation string
+        logger: Optional logger instance
+
+    Returns
+    -------
+        A ``(results_top, citations_card, full_metadata)`` tuple. The caller
+        composes these into the page: ``results_top`` (lightcurve + sky-plot /
+        metadata) goes in the results container, ``citations_card`` sits in a
+        grid beside the (always-present) ``object-tagging-container``, and
+        ``full_metadata`` is the collapsible JSON dump pinned to the page bottom.
+        Splitting the output this way lets the tagging container live in the base
+        layout so its callbacks never target a missing component.
+    """
+    data_sources = meta.get("data_sources") or {}
+
+    metadata_component = _build_metadata_tabs(data_sources)
+    citations_component = _build_citation_component(citation_str)
+
+    # Prominent, copyable RA/Dec (sexagesimal HMS + DMS) sits above the lightcurve.
+    lightcurve_card = expressive_card(
+        children=[
+            _build_coordinates_header(meta),
+            dcc.Loading(
+                dcc.Graph(id={"type": "themeable-plot", "index": "lightcurve-plot"}),
+            ),
+        ],
+        title=f"Lightcurve: {object_id}",
+    )
+    aladin_card = expressive_card(
+        children=[
+            # A hidden div to receive the "success" message from our JS
+            html.Div(id="aladin-status-dummy", style={"display": "none"}),
+            html.Div(
+                id="aladin-lite-div",
+                style={"width": "100%", "height": "500px"},
+            ),
+        ],
+        title="Sky Plot (Aladin Lite)",
+    )
+
+    results_top = dmc.Stack([
+        # Lightcurve spans the full width; the sky plot pairs with the metadata.
+        lightcurve_card,
+        # Aladin sky-plot half-half with the per-source metadata tabs.
+        dmc.Grid(
+            [
+                dmc.GridCol(aladin_card, span=6),
+                dmc.GridCol(
+                    expressive_card(
+                        children=metadata_component,
+                        title=f"Object Metadata: {object_id}",
+                    ),
+                    span=6,
+                ),
+            ],
+            gutter="md",
         ),
     ])
+
+    # Citations card (copyable BibTeX); the caller pairs it with the tagging panel.
+    citations_card = expressive_card(
+        children=citations_component,
+        title=f"Citations: {object_id}",
+    )
+
+    # Full metadata JSON — collapsible, collapsed by default, at the very bottom.
+    full_metadata = dmc.Accordion(
+        chevronPosition="left",
+        variant="separated",
+        children=[
+            dmc.AccordionItem(
+                value="full-metadata",
+                children=[
+                    dmc.AccordionControl("Full Metadata (JSON)"),
+                    dmc.AccordionPanel(
+                        dmc.Code(
+                            json.dumps(meta, indent=2),
+                            style={
+                                "padding": "10px",
+                                "maxHeight": "400px",
+                                "overflow": "auto",
+                                "borderRadius": "4px",
+                            },
+                            block=True,
+                        ),
+                    ),
+                ],
+            )
+        ],
+    )
+
+    return results_top, citations_card, full_metadata
+
+
+def _build_coordinates_header(meta):
+    """Build a prominent, copyable RA/Dec display above the lightcurve.
+
+    The top-level ``ra_hms``/``dec_dms`` are sexagesimal strings (h:m:s /
+    d:m:s). They are shown together, space-separated, with a clipboard button
+    that copies the combined string. The older ``ra``/``dec`` keys are accepted
+    as a fallback. Returns a dimmed placeholder when coordinates are missing.
+    """
+    ra = meta.get("ra_hms") or meta.get("ra")
+    dec = meta.get("dec_dms") or meta.get("dec")
+    if not ra or not dec:
+        return dmc.Text("Coordinates unavailable", c="dimmed", size="sm")
+
+    coordinate_str = f"{ra} {dec}"
+    return dmc.Group(
+        [
+            dmc.Text("RA, Dec (J2000):", size="sm", c="dimmed"),
+            dmc.Text(
+                coordinate_str,
+                id="object-coordinates",
+                fw=700,
+                size="xl",
+                style={"fontFamily": "monospace"},
+            ),
+            dcc.Clipboard(
+                target_id="object-coordinates",
+                title="Copy coordinates",
+                style={"cursor": "pointer", "fontSize": "1.1rem"},
+            ),
+        ],
+        gap="sm",
+        align="center",
+    )
+
+
+# Page size for the cone-search results list. The Aladin overlay still shows
+# markers for every result; only the textual card list is paginated.
+CONE_RESULTS_PAGE_SIZE = 20
+
+
+def build_cone_result_card(idx: int, obj: dict):
+    """Build one cone-search result card.
+
+    The card's pattern-matching id carries the absolute result index so the
+    Aladin clientside callback can match a hover event back to the correct
+    marker even when the list is paginated.
+    """
+    distance_arcsec = obj.get("distance_deg", 0) * 3600  # Convert to arcsec
+    summary_style = {
+        **CARD_STYLE,
+        "cursor": "pointer",
+        "marginBottom": "10px",
+        "padding": "15px",
+    }
+    obj_name = obj["obj_name"]
+    return dmc.Card(
+        [
+            dmc.Group(
+                [
+                    dmc.Anchor(
+                        f"{obj_name}",
+                        href=f"/lightcurve/{obj_name}",
+                        id={"type": "object-link", "index": idx},
+                        underline="always",
+                        style={
+                            "fontWeight": "bold",
+                            "fontSize": "16px",
+                            "marginRight": "20px",
+                            "cursor": "pointer",
+                        },
+                    ),
+                    dcc.Store(
+                        id={"type": "object-id-store", "index": idx},
+                        data=obj_name,
+                    ),
+                    dmc.Text(f"RA: {obj['ra']:.6f}°", style={"marginRight": "15px"}),
+                    dmc.Text(f"Dec: {obj['dec']:.6f}°", style={"marginRight": "15px"}),
+                    dmc.Text(
+                        f"Distance: {distance_arcsec:.2f}″",
+                        style={"fontStyle": "italic"},
+                    ),
+                ],
+                style={"padding": "15px"},
+            ),
+        ],
+        style=summary_style,
+        id={"type": "object-card", "index": idx},
+    )
+
+
+def build_cone_result_cards_page(results: list, page: int) -> list:
+    """Slice results to a 1-indexed page and build card components."""
+    start = max(page - 1, 0) * CONE_RESULTS_PAGE_SIZE
+    end = start + CONE_RESULTS_PAGE_SIZE
+    return [
+        build_cone_result_card(start + offset, obj)
+        for offset, obj in enumerate(results[start:end])
+    ]
 
 
 def format_cone_search_results(
     results, search_ra, search_dec, txv_db=None, logger=None
 ):
-    """Format cone search results with expandable object cards.
+    """Format cone search results with paginated object cards.
 
     Args:
         results: List of objects with ra, dec, obj_name
@@ -672,82 +765,48 @@ def format_cone_search_results(
 
     Returns
     -------
-        html.Div containing formatted results
+        dmc.Stack containing the Aladin widget, paginated object cards and
+        their pagination control.
     """
-    # Create expandable object cards
-    object_cards = []
-    for idx, obj in enumerate(results):
-        obj_name = obj["obj_name"]
-        distance_arcsec = obj.get("distance_deg", 0) * 3600  # Convert to arcsec
+    total = len(results)
+    page_count = max(1, math.ceil(total / CONE_RESULTS_PAGE_SIZE))
+    first_page_cards = build_cone_result_cards_page(results, 1)
 
-        # Create a summary row for each object
-        summary_style = {
-            **CARD_STYLE,
-            "cursor": "pointer",
-            "marginBottom": "10px",
-            "padding": "15px",
-        }
-
-        object_cards.append(
-            dmc.Card(
-                [
-                    dmc.Group(
-                        [
-                            dmc.Anchor(
-                                f"{obj_name}",
-                                href=f"/lightcurve/{obj_name}",
-                                id={"type": "object-link", "index": idx},
-                                underline="always",
-                                style={
-                                    "fontWeight": "bold",
-                                    "fontSize": "16px",
-                                    "marginRight": "20px",
-                                    "cursor": "pointer",
-                                },
-                            ),
-                            dcc.Store(
-                                id={"type": "object-id-store", "index": idx},
-                                data=obj_name,
-                            ),
-                            dmc.Text(
-                                f"RA: {obj['ra']:.6f}°", style={"marginRight": "15px"}
-                            ),
-                            dmc.Text(
-                                f"Dec: {obj['dec']:.6f}°", style={"marginRight": "15px"}
-                            ),
-                            dmc.Text(
-                                f"Distance: {distance_arcsec:.2f}″",
-                                style={"fontStyle": "italic"},
-                            ),
-                        ],
-                        style={"padding": "15px"},
-                    ),
-                ],
-                style=summary_style,
-                id={"type": "object-card", "index": idx},
-            )
+    pagination = (
+        dmc.Pagination(
+            id="cone-results-pagination",
+            total=page_count,
+            value=1,
+            siblings=1,
+            withEdges=True,
+            mt="md",
         )
+        if page_count > 1
+        else html.Div(id="cone-results-pagination", style={"display": "none"})
+    )
 
-    plural = "s" if len(results) != 1 else ""
+    plural = "s" if total != 1 else ""
     return dmc.Stack([
         expressive_card(
-            title=f"Found {len(results)} object{plural}",
+            title=f"Found {total} object{plural}",
             children=[
                 dmc.Text(
                     f"Search coordinates: RA={search_ra:.6f}°, Dec={search_dec:.6f}°",
                 ),
-                dcc.Loading(
-                    dcc.Graph(
-                        id={"type": "themeable-plot", "index": "sky-plot"},
-                    ),
+                # Hidden div receives the Aladin init status from clientside JS.
+                html.Div(id="cone-aladin-status", style={"display": "none"}),
+                html.Div(
+                    id="cone-aladin-div",
+                    style={"width": "100%", "height": "500px"},
                 ),
             ],
         ),
         expressive_card(
             title="Objects Found",
             title_order=3,
-            children=dmc.Stack(
-                object_cards,
-            ),
+            children=[
+                dmc.Stack(first_page_cards, id="cone-results-list"),
+                pagination,
+            ],
         ),
     ])

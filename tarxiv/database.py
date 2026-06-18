@@ -1,10 +1,20 @@
 # Database utilities
+import traceback
+
 from .utils import TarxivModule, int_to_alphanumeric
 from datetime import timedelta
-from couchbase.cluster import Cluster
-from couchbase.options import ClusterOptions, ClusterTimeoutOptions
+
+from couchbase.options import ClusterOptions, ClusterTimeoutOptions, IncrementOptions
+from couchbase.exceptions import (
+    DocumentNotFoundException,
+    SubdocPathMismatchException,
+    PathNotFoundException,
+    AmbiguousTimeoutException,
+)
 from couchbase.auth import PasswordAuthenticator
-from couchbase.exceptions import DocumentNotFoundException
+from couchbase.cluster import Cluster
+import couchbase.subdocument as SD
+
 import json
 import os
 
@@ -12,7 +22,7 @@ import os
 class TarxivDB(TarxivModule):
     """Interface for TarXiv couchbase data."""
 
-    def __init__(self, catalog, user, script_name, reporting_mode, debug=False):
+    def __init__(self, user, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
             module="couchbase",
@@ -34,7 +44,7 @@ class TarxivDB(TarxivModule):
         # Authenticate
         authenticator = PasswordAuthenticator(username, password)
         timeout_opts = ClusterTimeoutOptions(
-            connect_timeout=timedelta(seconds=12), kv_timeout=timedelta(seconds=10)
+            connect_timeout=timedelta(seconds=12), kv_timeout=timedelta(seconds=30)
         )
         options = ClusterOptions(authenticator, timeout_options=timeout_opts)
         # Connect
@@ -48,9 +58,6 @@ class TarxivDB(TarxivModule):
         status = {"status": "connection success"}
         self.logger.info(status, extra=status)
 
-        # Set scope, each catalog will have its own scope
-        self.scope = catalog
-
     def get_object_schema(self):
         """Read object schema from config directory and return it.
 
@@ -59,80 +66,143 @@ class TarxivDB(TarxivModule):
         with open(self.schema_file) as f:
             return json.load(f)
 
-    def query(self, query_str):
+    def query(self, statement):
         """Run a SQL++ query against couchbase and return results.
 
-        :param query_str: valid sql++ query string
+        :param statement: valid sql++ query string
         :return: list if query results
         """
         # Log
-        status = {"status": "running sql++ query", "query_str": query_str}
+        status = {"status": "running sql++ query", "statement": statement}
         self.logger.debug(status, extra=status)
-        return self.cluster.query(query_str)
+        return self.cluster.query(statement)
 
-    def get_all_active_objects(self, active_days):
-        query = (
-            f"SELECT                                "
-            f"  meta().id as object_id               "
-            f"FROM tarxiv.{self.scope}.objects      "
-            f"WHERE                                 "
-            f"  ANY `disc_date` IN `discovery_date`                                                 "
-            f"   SATISFIES DATE_DIFF_STR(NOW_UTC(), `disc_date`.`value`, 'day') < {active_days} END "
-            f" OR                                                                                   "
-            f"  ANY `rep_date` IN `reporting_date`                                                  "
-            f"   SATISFIES DATE_DIFF_STR(NOW_UTC(), `rep_date`.`value`, 'day') < {active_days} END  "
+    def get_all_active_objects(self):
+        statement = (
+            "SELECT                                                                          "
+            "  meta.tarxiv_id                                                                "
+            "FROM tarxiv.objects.meta meta                                                   "
+            "JOIN tarxiv.misc.active_settings settings USING(tarxiv_id)                      "
+            "WHERE                                                                           "
+            "   DATE_DIFF_STR(NOW_UTC(), meta.discovery_date,  'day') < settings.active_days "
         )
 
-        result = self.cluster.query(query)
+        result = self.cluster.query(statement)
         return [r["object_id"] for r in result]
 
     def get_all_objects(self):
-        query = f"SELECT meta().id as object_id FROM tarxiv.{self.scope}.objects"
-        result = self.cluster.query(query)
-        return [r["object_id"] for r in result]
+        statement = "SELECT META().id AS tarxiv_id FROM tarxiv.objects.meta"
+        result = self.cluster.query(statement)
+        return [r["tarxiv_id"] for r in result]
 
-    def upsert(self, object_name, payload, collection):
+    def set_field(self, doc_id, key, value, scope, collection):
+        # Set a specific field in a document
+        coll = self.conn.scope(scope).collection(collection)
+        coll.mutate_in(doc_id, [SD.upsert(key, value)])
+
+    def upsert(self, doc_id, payload, scope, collection):
         """Insert document into couchbase collection. Update if already exists.
 
-        :param object_name: name of the object to be used as a document id; str
+        :param doc_id: name of the object to be used as a document id; str
         :param payload: document to upsert, either metadata or lightcurve; dict or list of dicts
         :param collection: couchbase collection; meta or lightcurve; str
         :return: void
         """
-        coll = self.conn.scope(self.scope).collection(collection)
-        coll.upsert(object_name, payload)
-        status = {
-            "status": "upserted",
-            "object_id": object_name,
-            "collection": collection,
-        }
-        self.logger.info(status, extra=status)
+        count = 0
+        while True:
+            # TRY 5x WITH TIMEOUTS
+            try:
+                coll = self.conn.scope(scope).collection(collection)
+                coll.upsert(doc_id, payload)
+                status = {
+                    "status": "upserted",
+                    "object_id": doc_id,
+                    "collection": collection,
+                }
+                self.logger.info(status, extra=status)
+                break
+            except AmbiguousTimeoutException:
+                count += 1
+                if count > 5:
+                    status = {
+                        "status": "repeated upsert timeouts",
+                        "object_id": doc_id,
+                        "collection": collection,
+                    }
+                    self.logger.error(status, extra=status)
+                    print(traceback.format_exc())
+                    break
 
-    def get(self, object_name, collection):
+    def lookup_in(self, object_id, sub_field, scope, collection, return_type=str):
+        """
+        Get a specific field value from a subdocument
+
+        :param object_id: name of the object to be used as a document id; str
+        :param sub_field: name of the field to look up; str
+        :param collection: couchbase collection; meta or lightcurve; str
+        :return:
+        """
+        try:
+            coll = self.conn.scope(scope).collection(collection)
+            result = coll.lookup_in(object_id, [SD.get(sub_field)]).content_as[
+                return_type
+            ](0)
+        except (
+            DocumentNotFoundException,
+            SubdocPathMismatchException,
+            PathNotFoundException,
+        ):
+            result = None
+        return result
+
+    def get(self, doc_id, scope, collection):
         """Retrieve a document from couchbase collection based on object_id
 
-        :param object_name: name of the object to be used as a document id; str
+        :param doc_id: name of the object to be used as a document id; str
         :param collection: couchbase collection; meta or lightcurve; str
         :return: object document, either metadata or lightcurve; dict or list of dicts
         """
         try:
-            coll = self.conn.scope(self.scope).collection(collection)
-            result = coll.get(object_name).value
+            coll = self.conn.scope(scope).collection(collection)
+            result = coll.get(doc_id).value
             status = {
                 "status": "retrieved",
-                "object_id": object_name,
+                "object_id": doc_id,
                 "collection": collection,
             }
-            if isinstance(result, dict) and "internal" in result:
-                del result["internal"]
-            self.logger.info(status, extra=status)
+            self.logger.debug(status, extra=status)
         except DocumentNotFoundException:
             status = {
                 "status": "no_document",
-                "object_id": object_name,
+                "object_id": doc_id,
                 "collection": collection,
             }
-            self.logger.warn(status, extra=status)
+            self.logger.debug(status, extra=status)
+            result = None
+
+        return result
+
+    def get_source_txv_id(self, source_id):
+        try:
+            statement = f"""
+                SELECT
+                  tarxiv_id
+                FROM tarxiv.objects.meta
+                WHERE source_id = '{source_id}'
+            """
+            result = list(self.cluster.query(statement))[0]["tarxiv_id"]
+            # Order data sources
+            status = {
+                "status": "retrieved",
+                "source_id": source_id,
+            }
+            self.logger.debug(status, extra=status)
+        except (IndexError, DocumentNotFoundException):
+            status = {
+                "status": "no_document",
+                "object_id": source_id,
+            }
+            self.logger.debug(status, extra=status)
             result = None
 
         return result
@@ -143,7 +213,7 @@ class TarxivDB(TarxivModule):
         :param ra_deg: Right Ascension in degrees; float
         :param dec_deg: Declination in degrees; float
         :param radius_arcsec: Search radius in arcseconds; float
-        :return: List of matching objects with object_id, ra, dec, distance_deg
+        :return: List of matching objects with obj_name, ra, dec, distance_deg
         """
         # Convert arcseconds to degrees
         radius_deg = radius_arcsec / 3600.0
@@ -153,25 +223,27 @@ class TarxivDB(TarxivModule):
         #
         # SQL++ query using haversine formula for spherical distance
         # Distance = arccos(sin(dec1)*sin(dec2) + cos(dec1)*cos(dec2)*cos(ra1-ra2))
-        # Note: 'value' is a reserved keyword in SQL++ so we escape it with backticks
-        # Using LET to compute distance, then filter with WHERE
-        query = f"""
-            SELECT 
-                obj.tarxiv_id,
-                obj.source,
-                obj.discovery_date,
-                obj.object_id,
-                obj.ra,
-                obj.dec,
+        # Using LET to compute distance, then filter with WHERE.
+        #
+        # The SELECT aliases match ConeSearchResponseSingle (obj_name/ra/dec/
+        # distance_deg) so the dashboard can validate the results directly.
+        # ``obj_name`` is the source_id (e.g. the TNS name) because the object
+        # page resolves searches via source_id. ``dec`` is backtick-escaped as
+        # it is a reserved word in SQL++.
+        statement = f"""
+            SELECT
+                meta.source_id AS obj_name,
+                meta.ra_deg AS ra,
+                meta.dec_deg AS `dec`,
                 distance_deg
-            FROM tarxiv.{self.scope}.objects obj
+            FROM tarxiv.objects.meta meta
             LET distance_deg = ACOS(
-                       SIN(RADIANS({dec_deg})) * SIN(RADIANS(obj.dec)) +
-                       COS(RADIANS({dec_deg})) * COS(RADIANS(obj.dec)) *
-                       COS(RADIANS({ra_deg} - obj.ra))
+                       SIN(RADIANS({dec_deg})) * SIN(RADIANS(meta.dec_deg)) +
+                       COS(RADIANS({dec_deg})) * COS(RADIANS(meta.dec_deg)) *
+                       COS(RADIANS({ra_deg} - meta.ra_deg))
                    ) * 180 / PI()
             WHERE 1=1
-              AND ABS(obj.dec - {dec_deg}) <= {radius_deg}
+              AND ABS(meta.dec_deg - {dec_deg}) <= {radius_deg}
               AND distance_deg <= {radius_deg}
             ORDER BY distance_deg
         """
@@ -184,34 +256,47 @@ class TarxivDB(TarxivModule):
         }
         self.logger.info(status, extra=status)
 
-        result = self.cluster.query(query)
+        result = self.cluster.query(statement)
         return list(result)
 
     def get_txv_id(self, year, object_id=None):
         # If we have an object name, the check if there
         if object_id is not None:
-            meta = self.get(object_id, collection='objects')
+            meta = self.get(object_id, scope="objects", collection="meta")
             # If the object exists, then use its txv-idx
-            if meta is not None:
+            if meta is not None and "tarxiv_id" in meta.keys():
                 return meta["tarxiv_id"]
 
-        # If we have no object name then just generate a new index
-        new_idx = self.cluster.transactions.run(
-                lambda ctx: self.increment_txv_idx(ctx, year)
-        )
-
-        # Full detection id will be TXV-2025-xxxxxx
-        alpha_id = int_to_alphanumeric(new_idx, self.config["txv_id_len"])
-        return f"TXV-{year}-{alpha_id}"
-
-
-    def increment_txv_idx(self, ctx, year):
-        # Run increment transaction
-        doc = ctx.get(self.conn.scope("misc").collection("idx"), year)
-        content = doc.content_as[dict]
-        content["current_idx"] += 1
-        ctx.replace(doc, content)
-        return content["current_idx"]
+        # Try 5x if necessary
+        count = 0
+        while True:
+            try:
+                # If we have no object name then just generate a new index
+                coll = self.conn.scope("misc").collection("idx")
+                new_idx = (
+                    coll
+                    .binary()
+                    .increment(year, IncrementOptions(timeout=timedelta(seconds=30)))
+                    .content
+                )
+                # Full detection id will be TXV-2025-xxxxxx
+                alpha_id = int_to_alphanumeric(new_idx, self.config["txv_id_len"])
+                txv_id = f"TXV-{year}-{alpha_id}"
+                status = {
+                    "status": "new_txv_idx",
+                    "tarxiv_id": txv_id,
+                }
+                self.logger.info(status, extra=status)
+                return txv_id
+            except AmbiguousTimeoutException:
+                count += 1
+                if count > 5:
+                    status = {
+                        "status": "repeated txv idx timeouts",
+                        "year": year,
+                    }
+                    self.logger.error(status, extra=status)
+                    return None
 
     def close(self):
         """Close connection to couchbase

@@ -210,6 +210,7 @@ services:
     command: uv run /app/bin/start-api
     volumes:
       - ../bin:/app/bin:Z
+      - ../docs:/app/docs:Z
       - ../tarxiv:/app/tarxiv:Z
       - ../aux/config.yml:/app/aux/config.yml:Z
       - ../examples:/app/examples:Z
@@ -242,6 +243,7 @@ services:
       VIRTUAL_PORT: ${TARXIV_PORT:-9001}
       LETSENCRYPT_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.tarxiv.com}
       LETSENCRYPT_EMAIL: ${TARXIV_LETSENCRYPT_EMAIL:-}
+      TARXIV_SAMPLE_META_PATH: ${TARXIV_SAMPLE_META_PATH:-/app/docs/dev-notes/new_sample.json}
     networks:
       - tarxiv_net
     restart: unless-stopped

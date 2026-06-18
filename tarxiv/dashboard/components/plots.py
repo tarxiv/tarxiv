@@ -4,6 +4,67 @@ import plotly.graph_objects as go
 from .theme_manager import apply_theme, get_filter_style
 
 
+def empty_lightcurve_plot(
+    object_id, theme_template, message="No lightcurve data available", logger=None
+):
+    """Build a greyed-out placeholder figure with a centred message.
+
+    Many newer records have no lightcurve photometry to plot. Rather than
+    showing a blank frame, this returns a themed figure with hidden axes, a
+    translucent grey overlay and a centred annotation so the empty state is
+    obvious.
+
+    Args:
+        object_id: Object identifier (used in the title)
+        theme_template: Theme template for styling
+        message: Text shown in the centre of the plot
+        logger: Optional logger instance
+
+    Returns
+    -------
+        go.Figure styled as an empty/greyed-out lightcurve plot
+    """
+    if logger:
+        logger.warning({
+            "warning": f"No lightcurve data to plot for object: {object_id}"
+        })
+
+    fig = go.Figure()
+    fig.update_layout(
+        title=f"Lightcurve: {object_id}",
+        height=500,
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        shapes=[
+            dict(
+                type="rect",
+                xref="paper",
+                yref="paper",
+                x0=0,
+                y0=0,
+                x1=1,
+                y1=1,
+                fillcolor="gray",
+                opacity=0.12,
+                line=dict(width=0),
+                layer="below",
+            )
+        ],
+        annotations=[
+            dict(
+                text=message,
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                showarrow=False,
+                font=dict(size=18, color="gray"),
+            )
+        ],
+    )
+    return apply_theme(fig, theme_template)
+
+
 def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
     """Create a lightcurve plot from the data.
 
@@ -15,14 +76,11 @@ def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
 
     Returns
     -------
-        dcc.Graph or None if no valid data
+        go.Figure. When there is no plottable photometry a greyed-out
+        placeholder figure (with a "no data" message) is returned instead.
     """
     if not lc_data:
-        if logger:
-            logger.warning({
-                "warning": f"No lightcurve data received for object: {object_id}"
-            })
-        return None
+        return empty_lightcurve_plot(object_id, theme_template, logger=logger)
 
     fig = go.Figure()
     if logger:
@@ -118,6 +176,11 @@ def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
                 )
             )
 
+    # The points existed but none were plottable (e.g. all missing mjd/mag), so
+    # fall back to the same greyed-out empty state as the no-data case.
+    if not fig.data:
+        return empty_lightcurve_plot(object_id, theme_template, logger=logger)
+
     fig.update_layout(
         title=f"Lightcurve: {object_id}",
         xaxis_title="MJD",
@@ -134,123 +197,6 @@ def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
             x=1.02,
             groupclick="toggleitem",  # Allow clicking group title to toggle all items
         ),
-    )
-
-    fig = apply_theme(fig, theme_template)
-    return fig
-
-
-def create_sky_plot(results, search_ra, search_dec, theme_template, logger=None):
-    """Create a sky position plot for cone search results.
-
-    Args:
-        results: List of objects with ra, dec, obj_name
-        search_ra: Search position RA (degrees, 0-360)
-        search_dec: Search position Dec (degrees, -90 to 90)
-
-    Returns
-    -------
-        go.Figure
-    """
-
-    # Convert RA from [0, 360] to [-180, 180] for proper spherical projection
-    # This centers RA=0 at the middle of the map
-    def convert_ra(ra):
-        """Convert RA to longitude format for plotting."""
-        if ra is None:
-            return None
-        # Shift RA so it's centered properly: 0-360 -> -180 to 180
-        lon = ra if ra <= 180 else ra - 360
-        return lon
-
-    search_lon = convert_ra(search_ra)
-
-    fig = go.Figure()
-
-    # Add search position
-    fig.add_trace(
-        go.Scatter(
-            x=[search_ra],
-            y=[search_dec],
-            mode="markers",
-            marker=dict(
-                size=15,
-                color=get_filter_style("search_position"),
-                symbol="x",
-            ),
-            name="Search Position",
-        )
-    )
-
-    # Add found objects
-    if results:
-        lons = [convert_ra(obj["ra"]) for obj in results if obj["ra"] is not None]
-        lats = [obj["dec"] for obj in results if obj["dec"] is not None]
-        names = [obj["obj_name"] for obj in results]
-
-        fig.add_trace(
-            go.Scattergeo(
-                lon=lons,
-                lat=lats,
-                mode="markers",
-                marker=dict(
-                    size=10,
-                    color=get_filter_style("object"),
-                    symbol="circle",
-                ),
-                text=names,
-                hovertemplate="<b>%{text}</b><br>RA: %{lon:.4f}°<br>Dec: %{lat:.4f}°<extra></extra>",
-                name="Objects",
-            )
-        )
-
-    # Add search position on top
-    fig.add_trace(
-        go.Scattergeo(
-            lon=[search_lon],
-            lat=[search_dec],
-            mode="markers",
-            marker=dict(
-                size=15, color="red", symbol="x", line=dict(width=2, color="darkred")
-            ),
-            hovertemplate="<b>Search Position</b><br>RA: %{lon:.4f}°<br>Dec: %{lat:.4f}°<extra></extra>",
-            name="Search Position",
-        )
-    )
-
-    # Use Aitoff projection (common in astronomy) centered on the search position
-    fig.update_geos(
-        projection_type="aitoff",
-        showcountries=False,
-        showcoastlines=False,
-        showland=False,
-        showocean=False,
-        showlakes=False,
-        showrivers=False,
-        bgcolor="rgba(240, 240, 255, 0.3)",
-        projection_rotation=dict(
-            lon=search_lon if search_lon is not None else 0,
-            lat=search_dec if search_dec is not None else 0,
-            roll=0,
-        ),
-        lataxis=dict(
-            showgrid=True,
-            gridcolor="lightgray",
-            gridwidth=0.5,
-        ),
-        lonaxis=dict(
-            showgrid=True,
-            gridcolor="lightgray",
-            gridwidth=0.5,
-        ),
-    )
-
-    fig.update_layout(
-        title="Sky Position Plot",
-        xaxis_title="RA (degrees)",
-        yaxis_title="Dec (degrees)",
-        hovermode="closest",
-        height=500,
     )
 
     fig = apply_theme(fig, theme_template)

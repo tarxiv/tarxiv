@@ -62,6 +62,29 @@ if ! [ -f "$FILE" ]; then
     --bucket tarxiv --create-collection tns.lightcurves
   sleep 2
 
+  # Create objects scope
+  /opt/couchbase/bin/couchbase-cli collection-manage \
+    -c http://$TARXIV_COUCHBASE_HOST:8091 \
+    --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+    --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --bucket tarxiv --create-scope objects
+  sleep 2
+  # Create meta collection
+  /opt/couchbase/bin/couchbase-cli collection-manage \
+    -c http://$TARXIV_COUCHBASE_HOST:8091 \
+    --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+    --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --bucket tarxiv --create-collection objects.meta
+  sleep 2
+  # Create lightcurve collection`
+  /opt/couchbase/bin/couchbase-cli collection-manage \
+    -c http://$TARXIV_COUCHBASE_HOST:8091 \
+    --username $TARXIV_COUCHBASE_ADMIN_USERNAME \
+    --password $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --bucket tarxiv --create-collection objects.lightcurves
+  sleep 2
+  
+
   # Create xmatch scope
   /opt/couchbase/bin/couchbase-cli collection-manage \
     -c http://$TARXIV_COUCHBASE_HOST:8091 \
@@ -99,6 +122,13 @@ if ! [ -f "$FILE" ]; then
   sleep 2
   /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
     --script "CREATE PRIMARY INDEX ON tarxiv.tns.lightcurves"
+  sleep 2
+  # Indexes for objects
+    /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --script "CREATE PRIMARY INDEX ON tarxiv.objects.meta"
+  sleep 2
+  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
+    --script "CREATE PRIMARY INDEX ON tarxiv.objects.lightcurves"
   sleep 2
   # Indexes for xmatch
   /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
