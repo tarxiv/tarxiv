@@ -87,9 +87,7 @@ def test_dump_legacy_layout_reads_tns_scope(db_utils, fake_db, tmp_path):
 
 def test_load_legacy_layout_writes_tns_scope(db_utils, fake_db, tmp_path):
     src = tmp_path / "dump.json"
-    src.write_text(
-        json.dumps({"2018mqw": {"meta": {"m": 1}, "lc": [{"mjd": 1.0}]}})
-    )
+    src.write_text(json.dumps({"2018mqw": {"meta": {"m": 1}, "lc": [{"mjd": 1.0}]}}))
 
     db_utils.load_database_from_json(str(src), layout="old")
 
