@@ -36,8 +36,6 @@ def register_plotting_callbacks(app, logger):
             settings.get("theme", "tarxiv_light") if settings else "tarxiv_light"
         )
 
-        # create_lightcurve_plot now returns the figure directly (dict/go.Figure)
-        fig = create_lightcurve_plot(lc_data, object_id, theme_template, logger)
-        if fig:
-            return fig
-        return {}
+        # create_lightcurve_plot always returns a figure: a real lightcurve when
+        # there is plottable photometry, otherwise a greyed-out "no data" state.
+        return create_lightcurve_plot(lc_data, object_id, theme_template, logger)

@@ -4,6 +4,67 @@ import plotly.graph_objects as go
 from .theme_manager import apply_theme, get_filter_style
 
 
+def empty_lightcurve_plot(
+    object_id, theme_template, message="No lightcurve data available", logger=None
+):
+    """Build a greyed-out placeholder figure with a centred message.
+
+    Many newer records have no lightcurve photometry to plot. Rather than
+    showing a blank frame, this returns a themed figure with hidden axes, a
+    translucent grey overlay and a centred annotation so the empty state is
+    obvious.
+
+    Args:
+        object_id: Object identifier (used in the title)
+        theme_template: Theme template for styling
+        message: Text shown in the centre of the plot
+        logger: Optional logger instance
+
+    Returns
+    -------
+        go.Figure styled as an empty/greyed-out lightcurve plot
+    """
+    if logger:
+        logger.warning({
+            "warning": f"No lightcurve data to plot for object: {object_id}"
+        })
+
+    fig = go.Figure()
+    fig.update_layout(
+        title=f"Lightcurve: {object_id}",
+        height=500,
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        shapes=[
+            dict(
+                type="rect",
+                xref="paper",
+                yref="paper",
+                x0=0,
+                y0=0,
+                x1=1,
+                y1=1,
+                fillcolor="gray",
+                opacity=0.12,
+                line=dict(width=0),
+                layer="below",
+            )
+        ],
+        annotations=[
+            dict(
+                text=message,
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                showarrow=False,
+                font=dict(size=18, color="gray"),
+            )
+        ],
+    )
+    return apply_theme(fig, theme_template)
+
+
 def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
     """Create a lightcurve plot from the data.
 
@@ -15,14 +76,11 @@ def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
 
     Returns
     -------
-        dcc.Graph or None if no valid data
+        go.Figure. When there is no plottable photometry a greyed-out
+        placeholder figure (with a "no data" message) is returned instead.
     """
     if not lc_data:
-        if logger:
-            logger.warning({
-                "warning": f"No lightcurve data received for object: {object_id}"
-            })
-        return None
+        return empty_lightcurve_plot(object_id, theme_template, logger=logger)
 
     fig = go.Figure()
     if logger:
@@ -117,6 +175,11 @@ def create_lightcurve_plot(lc_data, object_id, theme_template, logger=None):
                     legendgrouptitle_text=survey_label,
                 )
             )
+
+    # The points existed but none were plottable (e.g. all missing mjd/mag), so
+    # fall back to the same greyed-out empty state as the no-data case.
+    if not fig.data:
+        return empty_lightcurve_plot(object_id, theme_template, logger=logger)
 
     fig.update_layout(
         title=f"Lightcurve: {object_id}",
