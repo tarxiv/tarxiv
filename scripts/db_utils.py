@@ -1,7 +1,8 @@
 """
-Example python script showing how to export/import the database to/from JSON.
+Python script to export/import/back up the database to/from JSON.
 
-Used initially to create a small example database for testing purposes.
+Used initially to create a small example database for testing purposes, and to
+take rotated backups of the couchbase scopes (``--backup``).
 
 Supports two couchbase layouts via ``--legacy``:
 
@@ -13,6 +14,9 @@ so an old-schema database can be dumped and reloaded into the old scope.
 
 import json
 import os
+import re
+import glob
+import datetime
 import argparse
 
 from tarxiv.database import TarxivDB
@@ -82,6 +86,105 @@ def load_database_from_json(filename=None, layout="new"):
         db.upsert(obj, data["lc"], scope=paths["scope"], collection=paths["lc"])
 
 
+# GFS (grandfather-father-son) retention windows, in days. These mirror the
+# defaults in ``scripts/backup_postgres.sh``: keep every backup from the last
+# week, then one per week back to ~3 months, then one per month back to a year.
+KEEP_DAILY_DAYS = int(os.environ.get("TARXIV_KEEP_DAILY_DAYS", 7))
+KEEP_WEEKLY_DAYS = int(os.environ.get("TARXIV_KEEP_WEEKLY_DAYS", 90))
+KEEP_MONTHLY_DAYS = int(os.environ.get("TARXIV_KEEP_MONTHLY_DAYS", 365))
+
+# Matches the timestamp in "<prefix>-YYYYMMDD-HHMMSS.json" backup filenames.
+_BACKUP_STAMP_RE = re.compile(r"-(\d{8})-(\d{6})\.json$")
+
+
+def _gfs_rotate(backup_dir, prefix, today=None):
+    """Apply grandfather-father-son rotation to a set of backup files.
+
+    Operates on ``<backup_dir>/<prefix>-YYYYMMDD-HHMMSS.json`` files. Keeps every
+    backup from the last ``KEEP_DAILY_DAYS`` days, then one per week up to
+    ``KEEP_WEEKLY_DAYS``, then one per month up to ``KEEP_MONTHLY_DAYS``, and
+    deletes the rest. Because the files are processed newest-first and the
+    week/month buckets are contiguous in date order, tracking only the last-kept
+    bucket is enough to keep the newest of each. Returns the list of removed
+    paths. Mirrors the scheme in ``scripts/backup_postgres.sh``.
+    """
+    today = today or datetime.date.today()
+    paths = sorted(
+        glob.glob(os.path.join(backup_dir, f"{prefix}-*.json")), reverse=True
+    )
+
+    last_week = last_month = None
+    removed = []
+    for path in paths:
+        match = _BACKUP_STAMP_RE.search(os.path.basename(path))
+        if not match:
+            continue
+        stamp = match.group(1)
+        file_date = datetime.date(int(stamp[:4]), int(stamp[4:6]), int(stamp[6:8]))
+        age = (today - file_date).days
+
+        if age <= KEEP_DAILY_DAYS:
+            continue  # daily tier: keep everything from the last week
+        elif age <= KEEP_WEEKLY_DAYS:
+            week = file_date.toordinal() // 7
+            if week == last_week:
+                os.remove(path)
+                removed.append(path)
+            else:
+                last_week = week
+        elif age <= KEEP_MONTHLY_DAYS:
+            month = file_date.year * 12 + file_date.month
+            if month == last_month:
+                os.remove(path)
+                removed.append(path)
+            else:
+                last_month = month
+        else:
+            os.remove(path)
+            removed.append(path)
+
+    return removed
+
+
+def backup_couchbase(backup_dir=None, layouts=("new", "old"), limit=None):
+    """Back up the couchbase scopes to timestamped JSON files, with GFS rotation.
+
+    Each layout in ``layouts`` is dumped (meta + lightcurves, see
+    ``dump_database_to_json``) to ``couchbase-<scope>-YYYYMMDD-HHMMSS.json`` and
+    the GFS rotation is then applied per-scope. A scope that is missing or fails
+    to dump (e.g. the legacy ``tns`` scope on a new-schema database) is logged
+    and skipped rather than aborting the whole backup. Returns the list of files
+    written this run.
+    """
+    backup_dir = backup_dir or os.environ.get(
+        "TARXIV_COUCHBASE_BACKUP_DIR", ".data/couchbase/backups"
+    )
+    os.makedirs(backup_dir, exist_ok=True)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
+    written = []
+    for layout in layouts:
+        scope = SCHEMA_LAYOUTS[layout]["scope"]
+        prefix = f"couchbase-{scope}"
+        dest = os.path.join(backup_dir, f"{prefix}-{timestamp}.json")
+        # Write to a .partial file first so an interrupted dump never looks like
+        # a usable backup; only atomically rename once it completes.
+        tmp = f"{dest}.partial"
+        try:
+            dump_database_to_json(filename=tmp, limit=limit, layout=layout)
+        except Exception as exc:
+            print(f"Skipping scope '{scope}' ({layout} layout): {exc}")
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            continue
+        os.replace(tmp, dest)
+        written.append(dest)
+        print(f"Backed up scope '{scope}' -> {dest}")
+        _gfs_rotate(backup_dir, prefix)
+
+    return written
+
+
 def build_argparser():
     argparser = argparse.ArgumentParser(
         description="Dump or load the entire database to/from a JSON file."
@@ -94,6 +197,24 @@ def build_argparser():
         "-l",
         action="store_true",
         help="Load the database from a JSON file instead of dumping it.",
+    )
+    argparser.add_argument(
+        "--backup",
+        "-b",
+        action="store_true",
+        help=(
+            "Back up both couchbase scopes to timestamped JSON files with GFS "
+            "rotation (daily for a week, weekly for 3 months, monthly for a year)."
+        ),
+    )
+    argparser.add_argument(
+        "--backup-dir",
+        type=str,
+        default=None,
+        help=(
+            "Directory for couchbase backups "
+            "(default: $TARXIV_COUCHBASE_BACKUP_DIR or .data/couchbase/backups)."
+        ),
     )
     argparser.add_argument(
         "--filename", "-f", type=str, help="The JSON file to load from or dump to."
@@ -121,12 +242,14 @@ def build_argparser():
 def main(argv=None):
     args = build_argparser().parse_args(argv)
     layout = "old" if args.legacy else "new"
-    if args.load:
+    if args.backup:
+        backup_couchbase(args.backup_dir, limit=args.limit)
+    elif args.load:
         load_database_from_json(args.filename, layout=layout)
     elif args.dump:
         dump_database_to_json(args.filename, args.limit, layout=layout)
     else:
-        print("Please specify either --dump or --load.")
+        print("Please specify either --dump, --load or --backup.")
 
 
 if __name__ == "__main__":
