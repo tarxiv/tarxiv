@@ -248,6 +248,10 @@ def create_message_banner(
     )
 
 
+# Shared height (px) for the Aladin sky-plot pane and the scrollable metadata
+# pane beside it, so the two columns line up.
+ALADIN_HEIGHT_PX = 500
+
 # Source key -> display label for the per-source metadata tabs.
 SOURCE_LABELS = {
     "tns": "TNS",
@@ -267,8 +271,13 @@ SOURCE_LABELS = {
 # Preferred ordering of source tabs; any source not listed is appended after.
 SOURCE_ORDER = ["tns", "ztf", "atlas", "asas_sn", "sherlock"]
 
-# Per-source fields that hold photometry arrays (lists of detection dicts).
-PHOTOMETRY_FIELDS = ("peak_mag", "latest_detection", "latest_nondetection")
+# Placeholder shown in metadata tables wherever a value is missing (None).
+EM_DASH = "—"
+
+
+def _display_or_dash(value):
+    """Render a metadata value, substituting an em-dash for missing values."""
+    return EM_DASH if value is None else str(value)
 
 # Nice display labels for scalar metadata fields. Anything not listed falls
 # back to a title-cased version of the raw key, so unmapped sources still render.
@@ -297,6 +306,14 @@ FIELD_LABELS = {
     "north_separation_arcsec": "North Separation (arcsec)",
     "east_separation_arcsec": "East Separation (arcsec)",
     "physical_separation_kpc": "Physical Separation (kpc)",
+    # List-valued photometry fields and their per-entry columns.
+    "peak_mag": "Peak Magnitude",
+    "latest_detection": "Latest Detection",
+    "latest_nondetection": "Latest Non-detection",
+    "filter": "Filter",
+    "date": "Date",
+    "value": "Magnitude",
+    "mag_rate": "Mag Rate",
 }
 
 
@@ -320,14 +337,15 @@ def _ordered_sources(data_sources: dict) -> list:
 def _build_scalar_table(source_payload: dict):
     """Build a Field/Value table for the scalar entries of a source payload.
 
-    Photometry arrays are handled separately; nested values are rendered
-    compactly rather than dropped so nothing is silently lost.
+    List-valued fields are rendered as their own tables by
+    ``_build_list_table`` and skipped here; dict values are rendered compactly
+    rather than dropped so nothing is silently lost.
     """
     rows = []
     for field_name, value in source_payload.items():
-        if field_name in PHOTOMETRY_FIELDS:
+        if isinstance(value, list):
             continue
-        if isinstance(value, (list, dict)):
+        if isinstance(value, dict):
             value = json.dumps(value, separators=(",", ":"), default=str)
         rows.append((field_name, value))
 
@@ -346,7 +364,7 @@ def _build_scalar_table(source_payload: dict):
                 dmc.TableTbody([
                     dmc.TableTr([
                         dmc.TableTd(_field_label(field_name)),
-                        dmc.TableTd(str(value)),
+                        dmc.TableTd(_display_or_dash(value)),
                     ])
                     for field_name, value in rows
                 ]),
@@ -362,108 +380,61 @@ def _build_scalar_table(source_payload: dict):
     )
 
 
-def _build_detection_info_table(peak_entries: list, latest_entries: list) -> list:
-    """Build a condensed detection summary table grouped by filter.
+def _build_list_table(field_name: str, entries: list):
+    """Build a labelled table for a single list-valued metadata field.
 
-    Columns are:
-    Filter | latest_date | latest_mag | latest_mag_rate | peak_date | peak_mag
+    Each list item becomes a row. The nesting is assumed to be at most one deep:
+    when items are dicts (e.g. ``peak_mag``/``latest_detection`` arrays) the
+    columns are the union of their keys, preserving first-seen order; when items
+    are scalars a single ``Value`` column is used. Missing values render as an
+    em-dash. Returns ``None`` for an empty list.
     """
-    if not peak_entries and not latest_entries:
-        return []
+    if not entries:
+        return None
 
-    filters = set()
-    for entry in peak_entries:
-        filters.add(str(entry.get("filter", "unknown")))
-    for entry in latest_entries:
-        filters.add(str(entry.get("filter", "unknown")))
-
-    def latest_for_filter(filter_name: str):
-        candidates = [
-            entry
-            for entry in latest_entries
-            if str(entry.get("filter", "unknown")) == filter_name
-        ]
-        if not candidates:
-            return None
-        return max(candidates, key=lambda item: str(item.get("date", "")))
-
-    def peak_for_filter(filter_name: str):
-        candidates = [
-            entry
-            for entry in peak_entries
-            if str(entry.get("filter", "unknown")) == filter_name
-        ]
-        if not candidates:
-            return None
-
-        numeric_candidates = [
-            entry
-            for entry in candidates
-            if isinstance(entry.get("value"), (int, float))
-        ]
-        if numeric_candidates:
-            # Magnitude peak is the brightest point (minimum magnitude value).
-            return min(numeric_candidates, key=lambda item: item.get("value"))
-
-        return candidates[0]
-
-    def display_or_dash(value):
-        return "-" if value is None else str(value)
-
-    rows = []
-    for filter_name in sorted(filters):
-        latest_entry = latest_for_filter(filter_name)
-        peak_entry = peak_for_filter(filter_name)
-        rows.append(
-            dmc.TableTr([
-                dmc.TableTd(f"{filter_name} Band"),
-                dmc.TableTd(
-                    display_or_dash(latest_entry.get("date") if latest_entry else None)
-                ),
-                dmc.TableTd(
-                    display_or_dash(latest_entry.get("value") if latest_entry else None)
-                ),
-                dmc.TableTd(
-                    display_or_dash(
-                        latest_entry.get("mag_rate") if latest_entry else None
-                    )
-                ),
-                dmc.TableTd(
-                    display_or_dash(peak_entry.get("date") if peak_entry else None)
-                ),
-                dmc.TableTd(
-                    display_or_dash(peak_entry.get("value") if peak_entry else None)
-                ),
-            ])
+    dict_entries = [entry for entry in entries if isinstance(entry, dict)]
+    if dict_entries:
+        columns: list[str] = []
+        for entry in dict_entries:
+            for key in entry:
+                if key not in columns:
+                    columns.append(key)
+        header = dmc.TableThead(
+            dmc.TableTr([dmc.TableTh(_field_label(col)) for col in columns])
         )
+        body_rows = []
+        for entry in entries:
+            if isinstance(entry, dict):
+                cells = [_display_or_dash(entry.get(col)) for col in columns]
+            else:
+                # A bare scalar in an otherwise-dict list: show it in the first
+                # column and pad the rest so the row stays rectangular.
+                cells = [_display_or_dash(entry)] + [EM_DASH] * (len(columns) - 1)
+            body_rows.append(dmc.TableTr([dmc.TableTd(cell) for cell in cells]))
+    else:
+        header = dmc.TableThead(dmc.TableTr([dmc.TableTh("Value")]))
+        body_rows = [
+            dmc.TableTr([dmc.TableTd(_display_or_dash(entry))]) for entry in entries
+        ]
 
-    return [
-        dmc.Text("Detection Info by Filter", fw=600),
-        dmc.Box(
-            dmc.Table(
-                [
-                    dmc.TableThead(
-                        dmc.TableTr([
-                            dmc.TableTh("Filter"),
-                            dmc.TableTh("Latest Date"),
-                            dmc.TableTh("Latest Mag"),
-                            dmc.TableTh("Latest Mag Rate"),
-                            dmc.TableTh("Peak Date"),
-                            dmc.TableTh("Peak Mag"),
-                        ])
-                    ),
-                    dmc.TableTbody(rows),
-                ],
-                withTableBorder=True,
-                withColumnBorders=True,
-                striped=True,
-                highlightOnHover=True,
-                horizontalSpacing="xs",
-                verticalSpacing="xs",
-                style={"width": "fit-content"},
-            )
-        ),
-    ]
+    return dmc.Stack(
+        [
+            dmc.Text(_field_label(field_name), fw=600),
+            dmc.Box(
+                dmc.Table(
+                    [header, dmc.TableTbody(body_rows)],
+                    withTableBorder=True,
+                    withColumnBorders=True,
+                    striped=True,
+                    highlightOnHover=True,
+                    horizontalSpacing="xs",
+                    verticalSpacing="xs",
+                    style={"width": "fit-content"},
+                )
+            ),
+        ],
+        gap="xs",
+    )
 
 
 def _build_metadata_tabs(data_sources: dict):
@@ -483,9 +454,12 @@ def _build_metadata_tabs(data_sources: dict):
         if scalar_table is not None:
             panel_blocks.append(scalar_table)
 
-        peak_entries = payload.get("peak_mag") or []
-        latest_entries = payload.get("latest_detection") or []
-        panel_blocks.extend(_build_detection_info_table(peak_entries, latest_entries))
+        # Each list-valued field gets its own table below the scalar table.
+        for field_name, value in payload.items():
+            if isinstance(value, list) and value:
+                list_table = _build_list_table(field_name, value)
+                if list_table is not None:
+                    panel_blocks.append(list_table)
 
         panel_children = (
             dmc.Stack(panel_blocks, py="md", gap="sm")
@@ -591,26 +565,32 @@ def format_object_metadata(object_id, meta, citation_str=None, logger=None):
             html.Div(id="aladin-status-dummy", style={"display": "none"}),
             html.Div(
                 id="aladin-lite-div",
-                style={"width": "100%", "height": "500px"},
+                style={"width": "100%", "height": f"{ALADIN_HEIGHT_PX}px"},
             ),
         ],
         title="Sky Plot (Aladin Lite)",
     )
 
+    # Constrain the metadata pane to the Aladin height and scroll any overflow,
+    # so a source with many fields doesn't stretch the page.
+    metadata_card = expressive_card(
+        children=dmc.ScrollArea(
+            metadata_component,
+            h=ALADIN_HEIGHT_PX,
+            type="auto",
+            offsetScrollbars=True,
+        ),
+        title=f"Object Metadata: {object_id}",
+    )
+
     results_top = dmc.Stack([
-        # Lightcurve spans the full width; the sky plot pairs with the metadata.
+        # Lightcurve spans the full width; the metadata pairs with the sky plot.
         lightcurve_card,
-        # Aladin sky-plot half-half with the per-source metadata tabs.
+        # Per-source metadata on the left, Aladin sky-plot on the right.
         dmc.Grid(
             [
+                dmc.GridCol(metadata_card, span=6),
                 dmc.GridCol(aladin_card, span=6),
-                dmc.GridCol(
-                    expressive_card(
-                        children=metadata_component,
-                        title=f"Object Metadata: {object_id}",
-                    ),
-                    span=6,
-                ),
             ],
             gutter="md",
         ),
