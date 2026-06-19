@@ -197,7 +197,7 @@ services:
       - ../scripts:/app/scripts:Z
     environment:
       TARXIV_CONFIG_DIR: /app/aux
-      TARXIV_POSTGRES_URL: ${TARXIV_POSTGRES_URL:-postgresql+psycopg2://tarxiv:password_postgres@postgres:5432/tarxiv}
+      TARXIV_POSTGRES_URL: ${TARXIV_POSTGRES_URL:-postgresql+psycopg2://${TARXIV_POSTGRES_USER:-tarxiv}:${TARXIV_POSTGRES_PASSWORD:-tarxiv}@postgres:5432/${TARXIV_POSTGRES_DB:-tarxiv}}
     networks:
       - tarxiv_net
     depends_on:
