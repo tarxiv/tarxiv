@@ -279,6 +279,7 @@ def _display_or_dash(value):
     """Render a metadata value, substituting an em-dash for missing values."""
     return EM_DASH if value is None else str(value)
 
+
 # Nice display labels for scalar metadata fields. Anything not listed falls
 # back to a title-cased version of the raw key, so unmapped sources still render.
 FIELD_LABELS = {
