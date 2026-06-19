@@ -168,11 +168,17 @@ services:
   adminer:
     image: adminer:latest
     ports:
-      - 8080:8080
+      - 8079:8080
     networks:
       - tarxiv_net
     depends_on:
       - postgres
+    environment:
+      ADMINER_DEFAULT_DRIVER: pgsql
+      ADMINER_DEFAULT_DB: ${TARXIV_POSTGRES_DB:-tarxiv}
+      ADMINER_DEFAULT_SERVER: ${TARXIV_POSTGRES_HOST:-postgres}
+      ADMINER_DEFAULT_USERNAME: ${TARXIV_POSTGRES_USER:-tarxiv}
+      ADMINER_DEFAULT_PASSWORD: ${TARXIV_POSTGRES_PASSWORD:-tarxiv}
     restart: unless-stopped
 
   tarxiv-migrate:
