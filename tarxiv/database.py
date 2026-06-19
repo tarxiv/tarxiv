@@ -1,16 +1,18 @@
 # Database utilities
-import traceback
-
 from .utils import TarxivModule, int_to_alphanumeric
-from datetime import timedelta
-
 from couchbase.options import ClusterOptions, ClusterTimeoutOptions, IncrementOptions
-from couchbase.exceptions import DocumentNotFoundException, SubdocPathMismatchException, PathNotFoundException, \
+from couchbase.exceptions import (
+    DocumentNotFoundException,
+    SubdocPathMismatchException,
+    PathNotFoundException,
     AmbiguousTimeoutException
+)
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster
 import couchbase.subdocument as SD
-
+from datetime import timedelta
+import pandas as pd
+import traceback
 import json
 import os
 
@@ -74,23 +76,26 @@ class TarxivDB(TarxivModule):
         self.logger.debug(status, extra=status)
         return self.cluster.query(statement)
 
-    def get_all_active_objects(self):
+    def get_all_active_objects(self, source):
         statement = (
-            f"SELECT                                                                          "
-            f"  meta.tarxiv_id                                                                "
-            f"FROM tarxiv.objects.meta meta                                                   "
-            f"JOIN tarxiv.misc.active_settings settings USING(tarxiv_id)                      "
-            f"WHERE                                                                           "
-            f"   DATE_DIFF_STR(NOW_UTC(), meta.discovery_date,  'day') < settings.active_days "
+            f"SELECT                                                                              "
+            f"  meta.tarxiv_id,                                                                   "
+            f"  meta.source,                                                                      "
+            f"  meta.source_id                                                                    "
+            f"FROM tarxiv.objects.meta meta                                                       "
+            f"JOIN tarxiv.misc.active_settings settings USING(tarxiv_id)                          "
+            f"WHERE 1=1                                                                           "
+            f"   AND DATE_DIFF_STR(NOW_UTC(), meta.discovery_date,  'day') < settings.active_days "
+            f"   AND meta.source = '{source}'"
         )
 
         result = self.cluster.query(statement)
-        return [r["object_id"] for r in result]
+        return pd.DataFrame(list(result))
 
-    def get_all_objects(self):
-        statement = f"SELECT META().id AS tarxiv_id FROM tarxiv.objects.meta"
+    def get_all_catalog_objects(self, catalog):
+        statement = f"SELECT tarxiv_id, source_id AS tarxiv_id FROM tarxiv.objects.meta WHERE source = '{catalog}'"
         result = self.cluster.query(statement)
-        return [r["tarxiv_id"] for r in result]
+        return pd.DataFrame(list(result))
 
     def set_field(self, doc_id, key, value, scope, collection):
         # Set a specific field in a document

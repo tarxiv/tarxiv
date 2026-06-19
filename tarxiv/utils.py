@@ -5,9 +5,7 @@ from logstash_async.handler import AsynchronousLogstashHandler
 from logstash_async.handler import LogstashFormatter
 from decimal import Decimal, ROUND_HALF_UP
 from astropy.coordinates import SkyCoord
-import multiprocessing as mp
 import astropy.units as u
-import signal
 import logging
 import string
 import yaml

@@ -1,218 +1,17 @@
 # Listen for new TNS Alerts
 from .utils import TarxivModule
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 
-from queue import Queue, Empty
+from confluent_kafka import Producer
 from bs4 import BeautifulSoup
 import threading
-import base64
-import time
-import os
 import imaplib
-import email
+import socket
 import signal
+import email
+import time
 import re
+import os
 
-
-class Gmail(TarxivModule):
-    """Module for interfacing with gmail and parsing TNS alerts."""
-
-    def __init__(self, script_name, reporting_mode, debug=False):
-        super().__init__(
-            script_name=script_name,
-            module="gmail",
-            reporting_mode=reporting_mode,
-            debug=debug,
-        )
-
-        # Logging
-        status = {"status": "connecting to google mail api"}
-        self.logger.info(status, extra=status)
-        # Get gmail token
-        self.creds = None
-        # Absolute paths
-        token = os.path.join(self.config_dir, self.config["gmail"]["token_name"])
-        secrets = os.path.join(self.config_dir, self.config["gmail"]["secrets_file"])
-        # The file token.json stores the user's access and refresh tokens
-        if os.path.exists(token):
-            self.creds = Credentials.from_authorized_user_file(
-                token, self.config["gmail"]["scopes"]
-            )
-        # If there are no (valid) credentials available, let the user log in.
-        if not self.creds or not self.creds.valid:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                secrets, self.config["gmail"]["scopes"]
-            )
-            self.creds = flow.run_local_server(port=0)
-        else:
-            self.creds.refresh(Request())
-        # Write new token
-        with open(token, "w") as f:
-            f.write(self.creds.to_json())
-        # Connect to service
-        self.service = build("gmail", "v1", credentials=self.creds)
-        # Connect to email
-        status = {"status": "connection success"}
-        self.logger.info(status, extra=status)
-
-        # Create thread value
-        self.t = None
-        # Create internal queue
-        self.q = Queue()
-
-    def poll(self, timeout=1):
-        """Once we have began monitoring notices, poll the queue for new messages and alerts
-
-        :param timeout, seconds; int
-        :return: poll result tuple containing the original message and a list of tns object names; (message, alerts)
-                 if there is nothing in the queue then poll will return None after the timeout has expired.
-        """
-        try:
-            result = self.q.get(block=True, timeout=timeout)
-        except Empty:
-            result = None
-
-        return result
-
-    def parse_message(self, msg):
-        """Parse a gmail message for tns object names
-
-        :param msg: gmail message object
-        :return: list of tns object names
-        """
-        # Result stays non of message is not structured properly or not from TNS
-        result = None
-
-        # Pull message from gmail
-        headers = msg["payload"]["headers"]
-        for hdr in headers:
-            # Only process emails from TNS
-            if hdr["name"] == "From" and self.config["tns"]["email"] in hdr["value"]:
-                # Decode and parse message body for TNS onj names
-                data = msg["payload"]["body"]["data"]
-                byte_code = base64.urlsafe_b64decode(data)
-                text = byte_code.decode("utf-8")
-                soup = BeautifulSoup(text, features="html.parser")
-                obj_list = [a.text for a in soup.find_all("a", href=True) if a.text]
-                result = obj_list
-
-        return result
-
-    def mark_read(self, message):
-        """Marks message as read in gmail, so it won't show up again in our monitoring stream
-
-        :param message: gmail message object
-        :return: void
-        """
-        # Mark as read
-        self.service.users().messages().modify(
-            userId="me", id=message["id"], body={"removeLabelIds": ["UNREAD"]}
-        ).execute()
-        # Log
-        status = {"action": "message_read", "id": message["id"]}
-        self.logger.info(status, extra=status)
-
-    def monitor_notices(self):
-        """Starts thread to monitor gmail account for tns alerts:
-
-        :return: void
-        """
-        self.t = threading.Thread(target=self._monitoring_thread, daemon=True)
-        self.t.start()
-        # Log
-        status = {"status": "starting monitoring thread"}
-        self.logger.info(status, extra=status)
-
-    def stop_monitoring(self):
-        """Kill monitoring thread.
-
-        :return: void
-        """
-        if self.t is not None:
-            # Set the stop event (should kill the thread)
-            self.stop_event.set()
-            self.t.join()
-        # Log
-        status = {"status": "stopping monitoring thread"}
-        self.logger.info(status, extra=status)
-
-    def _monitoring_thread(self):
-        """Open a gmail service object and continuously monitor gmail for new messages.
-
-        Each new message is parsed of tns object alerts and results are submitted to local queue.
-        Also refresh the token every 30 minutes.
-
-        :return: void
-        """
-        # Connect to service
-        service = build("gmail", "v1", credentials=self.creds)
-        last_refresh = time.time()
-        while not self.stop_event.is_set():
-            now = time.time()
-            if now - last_refresh >= (30 * 60):
-                status = {"status": "refreshing token"}
-                self.logger.info(status, extra=status)
-                self.creds.refresh(Request())
-                service = build("gmail", "v1", credentials=self.creds)
-                last_refresh = now
-
-            # Call the Gmail API
-            status = {"status": "checking_messages"}
-            self.logger.info(status, extra=status)
-            time.sleep(self.config["gmail"]["polling_interval"])
-            results = (
-                service
-                .users()
-                .messages()
-                .list(userId="me", labelIds=["INBOX"], q="is:unread")
-                .execute()
-            )
-            messages = results.get("messages", [])
-
-            if not messages:
-                continue
-
-            for message in messages:
-                try:
-                    # Read full message
-                    time.sleep(self.config["gmail"]["polling_interval"])
-                    msg = (
-                        service
-                        .users()
-                        .messages()
-                        .get(userId="me", id=message["id"])
-                        .execute()
-                    )
-                except HttpError:
-                    # Rate limit, wait 10 seconds and try again
-                    status = {"status": "rate_limited, sleeping 12 seconds"}
-                    self.logger.warn(status, extra=status)
-                    time.sleep(self.config["gmail"]["polling_interval"] * 3)
-                    msg = (
-                        service
-                        .users()
-                        .messages()
-                        .get(userId="me", id=message["id"])
-                        .execute()
-                    )
-
-                # Parse message for tns alerts
-                alerts = self.parse_message(msg)
-                self.mark_read(message)
-
-                if not alerts:
-                    continue
-
-                # Log
-                status = {"status": "received alerts", "objects": alerts}
-                self.logger.debug(status, extra=status)
-
-                # Submit to queue for processing
-                self.q.put(alerts)
 
 
 class IMAP(TarxivModule):
@@ -243,10 +42,15 @@ class IMAP(TarxivModule):
             self.logger.error({"status": "connection failed", "error": str(e)})
             raise
 
-        # Create thread value
-        self.t = None
-        # Create internal queue
-        self.q = Queue()
+        # Get kafka configuration
+        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_HOST'] + ":9092",
+                'delivery.timeout.ms': 10000,
+                'queue.buffering.max.messages': 1000000,
+                'queue.buffering.max.ms': 5000,
+                'batch.num.messages': 100,
+                'client.id': socket.gethostname()}
+        self.producer = Producer(conf)
+
         # Create stop flag for monitoring
         self.stop_event = threading.Event()
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -258,22 +62,8 @@ class IMAP(TarxivModule):
             "signal": str(sig),
             "frame": str(frame),
         }
-        self.stop_monitoring()
+        self.stop_event.set()
         self.logger.info(status, extra=status)
-
-    def poll(self, timeout=1):
-        """Once we have began monitoring notices, poll the queue for new messages and alerts
-
-        :param timeout, seconds; int
-        :return: poll result tuple containing the original message id and a list of tns object names; (message_id, alerts)
-                 if there is nothing in the queue then poll will return None after the timeout has expired.
-        """
-        try:
-            result = self.q.get(block=True, timeout=timeout)
-        except Empty:
-            result = None
-
-        return result
 
     def parse_message(self, msg_bytes):
         """Parse a raw email message for tns object names
@@ -340,27 +130,6 @@ class IMAP(TarxivModule):
             self.logger.debug(status)
 
     def monitor_notices(self):
-        """Starts thread to monitor IMAP account for tns alerts:
-
-        :return: void
-        """
-        self.t = threading.Thread(target=self._monitoring_thread, daemon=True)
-        self.t.start()
-        self.logger.info({"status": "starting monitoring thread"})
-
-    def stop_monitoring(self):
-        """Kill monitoring thread.
-
-        :return: void
-        """
-        if self.t is not None:
-            self.stop_event.set()
-            self.t.join()
-        if self.conn:
-            self.conn.logout()
-        self.logger.info({"status": "stopping monitoring thread"})
-
-    def _monitoring_thread(self):
         """Continuously monitor IMAP inbox for new messages.
 
         Each new message is parsed of tns object alerts and results are submitted to local queue.
@@ -393,34 +162,43 @@ class IMAP(TarxivModule):
 
                     raw_email = msg_data[0][1]
                     alerts = self.parse_message(raw_email)
-                    self.mark_read(uid)
 
                     # Treat empty list as "no alerts"
                     if not alerts:
+                        self.mark_read(uid)
                         continue
 
-                    self.logger.info({"status": "received alerts", "objects": alerts})
-                    self.q.put(alerts)
+                    # Show alerts
+                    status = {"status": "received alerts", "objects": alerts}
+                    self.logger.info(status, extra=status)
+                    # Now submit what we have
+                    for tns_obj_id in alerts:
+                        self.producer.produce(topic="internal_tns_alerts", value=tns_obj_id, callback=self.acked)
+                    # Mark read, when submitted all alerts
+                    self.mark_read(uid)
 
+                # sLEEP
                 time.sleep(self.config["imap"]["polling_interval"])
 
             except (imaplib.IMAP4.abort, imaplib.IMAP4.error) as e:
-                self.logger.warning({
-                    "status": "connection error, reconnecting",
-                    "error": str(e),
-                })
+                status = {"status": "connection error, reconnecting", "error": str(e)}
+                self.logger.warning(status, extra=status)
                 try:
                     self.conn = imaplib.IMAP4_SSL(self.config["imap"]["server"])
                     self.conn.login(self.imap_user, self.imap_pass)
                 except Exception as recon_e:
-                    self.logger.error({
-                        "status": "reconnection failed",
-                        "error": str(recon_e),
-                    })
+                    status = {"status": "reconnection failed", "error": str(recon_e) }
+                    self.logger.error(status, extra=status)
                     self.stop_event.set()  # Stop if we can't reconnect
             except Exception as e:
-                self.logger.error({
-                    "status": "unexpected error in monitoring thread",
-                    "error": str(e),
-                })
+                status = {"status": "unexpected error in monitoring thread", "error": str(e)}
+                self.logger.error(status, extra=status)
                 time.sleep(self.config["imap"]["polling_interval"] * 2)
+
+        # Finished monitoring logout
+        self.conn.logout()
+
+    def acked(self, err, msg):
+        if err is not None:
+            status = {"status": "failed kafka publish", "msg": msg}
+            self.logger.error(status, extra=status)

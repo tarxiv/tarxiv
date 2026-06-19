@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from tarxiv.utils import PRINT, LOGFILE, DATABASE
 from tarxiv.pipeline import TNSPipeline
+from tarxiv.alerts import IMAP
 import warnings
 import argparse
 
@@ -13,43 +14,62 @@ parser = argparse.ArgumentParser('tns-ingest',
                                         "Monitor new TNS alerts, and query relevant data into database.'")
 parser.add_argument('--debug', action='store_true', default=False,
                          help='set to enable printing/logging in debug mode')
-group = parser.add_mutually_exclusive_group()
-group.add_argument("--alerts", action="store_true",
-                   help="Ingest live TNS alerts from email")
-group.add_argument("--bulk_missing", action="store_true",
-                   help="Ingest all TNS objects not already in database")
-group.add_argument("--bulk_update", action="store_true",
-                   help="Update all TNS objects, even if in database")
-group.add_argument("--daily_update", action="store_true",
-                   help="Update current active TNS objects")
+module_subparsers = parser.add_subparsers(title="command", dest="command")
+module_subparsers.add_parser("email", help="Turn on email monitor",
+                             description="Watch email for new TNS alerts and submit to internal queue")
+module_subparsers.add_parser("alert_queue", help="Process new alerts from internal queue",
+                             description="Watch internal queue (from TNS emails) and submit new alerts.")
+module_subparsers.add_parser("bulk_queue", help="Process alerts submitted to bulk internal queue",
+                             description="Watch internal queue (from bulk commands) and update objects.")
+bulk = module_subparsers.add_parser("bulk_submit", help="Submit bulk updates or re-compute for TNS objects",
+                                    descrition="Submit bulk updates or re-compute for TNS objects.")
+bulk.add_argument("--all", action="store_true",
+                  help="Pull all TNS objects and re-upsert everything")
+bulk.add_argument("--missing", action="store_true",
+                  help="Pull all missing TNS updates and upsert")
+bulk.add_argument("--active", action="store_true",
+                  help="Pull data for all current active objects and update")
+bulk.add_argument("--data_source", type=str,
+                  help="Add or update a new data source to all objects")
 
 args = parser.parse_args()
 
 
 # Create survey objects
-if args.alerts:
-    txv_tns = TNSPipeline(script_name="tns_alert_pipeline",
-                          reporting_mode=(PRINT | LOGFILE | DATABASE),
-                          debug=args.debug)
+if args.command == "email":
+    tns_mail = IMAP(script_name="tns_email_watch",
+                   reporting_mode=(PRINT | LOGFILE | DATABASE),
+                   debug=args.debbug)
     # Run the pipeline
-    txv_tns.run_pipeline()
+    tns_mail.monitor_notices()
 
-elif args.bulk_missing:
+elif args.command == "alert_queue":
     txv_tns = TNSPipeline(script_name="tns_missing_ingest",
                           reporting_mode=(PRINT | LOGFILE | DATABASE),
                           debug=args.debug)
     # Run the pipeline
-    txv_tns.update_bulk(include_existing=False)
+    txv_tns.run_pipeline(topic="internal_tns_alerts")
 
-elif args.bulk_update:
-    txv_tns = TNSPipeline(script_name="tns_bulk_ingest",
+elif args.command == "bulk_queue":
+    txv_tns = TNSPipeline(script_name="tns_missing_ingest",
                           reporting_mode=(PRINT | LOGFILE | DATABASE),
                           debug=args.debug)
     # Run the pipeline
-    txv_tns.update_bulk(include_existing=True)
+    txv_tns.run_pipeline(topic="internal_tns_bulk")
 
-elif args.daily_update:
+elif args.command == "bulk_submit":
     txv_tns = TNSPipeline(script_name="tns_daily_ingest",
                           reporting_mode=(PRINT | LOGFILE | DATABASE),
                           debug=args.debug)
-    txv_tns.daily_update()
+    if args.all:
+        txv_tns.update_bulk(include_existing=True)
+    elif args.missing:
+        txv_tns.update_bulk(include_existing=False)
+    elif args.active:
+        txv_tns.daily_update()
+    elif args.data_source:
+        pass
+    else:
+        print("Invalid bulk submission option")
+else:
+    print("Invalid command")

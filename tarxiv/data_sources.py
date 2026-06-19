@@ -170,6 +170,7 @@ class ASAS_SN(TarxivModule):  # noqa: N801
                 "source_id_name": "asas_sn_id",
                 "ra_deg": float(nearest["ra_deg"]),
                 "dec_deg": float(nearest["dec_deg"]),
+                "cross_match_distance": float(nearest["angular_dist"]),
                 "catalog_sources": list(nearest["catalog_sources"]),
             }
             # Log
@@ -256,7 +257,7 @@ class ZTF(TarxivModule):
         try:
             # Hit FINK API
             result = requests.post(
-                f"{self.config['fink_ztf_url']}/api/v1/conesearch",
+                f"{self.config['fink_ztf']['url']}/api/v1/conesearch",
                 json={
                     "ra": ra_deg,
                     "dec": dec_deg,
@@ -280,7 +281,7 @@ class ZTF(TarxivModule):
 
             # Query
             result = requests.post(
-                f"{self.config['fink_ztf_url']}/api/v1/objects",
+                f"{self.config['fink_ztf']['url']}/api/v1/objects",
                 json={
                     "objectId": ztf_name,
                     "withupperlim": True,
@@ -297,7 +298,6 @@ class ZTF(TarxivModule):
             meta_line = {k[2:]: v for k, v in meta_line.items()}
             meta_columns = [
                 "classification",
-                "Eridanus",
                 'DR3Name',
                 'anomaly_score',
                 'blazar_stats_m0',
@@ -408,7 +408,7 @@ class TNS(TarxivModule):
         )
 
         # Set attributes
-        self.site = self.config["tns"]["site"]
+        self.site = self.config["tns"]["url"]
         self.api_key = os.getenv("TARXIV_TNS_API_KEY", "")
 
         # Create marker
@@ -463,7 +463,7 @@ class TNS(TarxivModule):
             "object_type": result["object_type"]["name"],
             "redshift": result["redshift"],
             "hostname": result["hostname"],
-            "discovery_date": result["discoverydate"],
+            "discovery_date": result["discoverydate"].replace(" ", "T"),
             "reporting_group": result["reporting_group"]["group_name"],
             "discovery_data_source": result["discovery_data_source"]["group_name"]
         }
@@ -529,7 +529,7 @@ class LSST(TarxivModule):
         )
 
 
-    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=15):
+    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=8):
         status = {"object_id": object_id}
         meta = None
         lc_df = pd.DataFrame()
@@ -554,7 +554,7 @@ class LSST(TarxivModule):
 
             # Query fink
             r1 = requests.post(
-                f"{self.config['fink_lsst_url']}/api/v1/sources",
+                f"{self.config['fink_lsst']['url']}/api/v1/sources",
                 json={
                     "diaObjectId": str(nearest["r:diaObjectId"]),
                     "output-format": "json",
