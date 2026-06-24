@@ -185,11 +185,14 @@ class TarxivDB(TarxivModule):
 
     def get_source_txv_id(self, source_id):
         try:
+            # FIX DUPLICATES LATER!
             statement = f"""
                 SELECT
                   tarxiv_id
                 FROM tarxiv.objects.meta
                 WHERE source_id = '{source_id}'
+                ORDER BY update_date desc 
+                LIMIT 1
             """
             result = list(self.cluster.query(statement))[0]["tarxiv_id"]
             # Order data sources
@@ -263,10 +266,10 @@ class TarxivDB(TarxivModule):
     def get_txv_id(self, year, object_id=None):
         # If we have an object name, the check if there
         if object_id is not None:
-            meta = self.get(object_id, scope="objects", collection="meta")
+            tarxiv_id = self.get_source_txv_id(object_id)
             # If the object exists, then use its txv-idx
-            if meta is not None and "tarxiv_id" in meta.keys():
-                return meta["tarxiv_id"]
+            if tarxiv_id is not None:
+                return tarxiv_id
 
         # Try 5x if necessary
         count = 0
