@@ -16,6 +16,8 @@ authors = [
 readme = "README.md"
 license = { text = "BSD-3" }
 dependencies = [
+    "antares-client",
+    "alerce",
     "atlasapiclient",
     "hop-client",
     "deepdiff",

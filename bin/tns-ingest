@@ -22,7 +22,7 @@ module_subparsers.add_parser("alert_queue", help="Process new alerts from intern
 module_subparsers.add_parser("bulk_queue", help="Process alerts submitted to bulk internal queue",
                              description="Watch internal queue (from bulk commands) and update objects.")
 bulk = module_subparsers.add_parser("bulk_submit", help="Submit bulk updates or re-compute for TNS objects",
-                                    descrition="Submit bulk updates or re-compute for TNS objects.")
+                                    description="Submit bulk updates or re-compute for TNS objects.")
 bulk.add_argument("--all", action="store_true",
                   help="Pull all TNS objects and re-upsert everything")
 bulk.add_argument("--missing", action="store_true",
@@ -39,7 +39,7 @@ args = parser.parse_args()
 if args.command == "email":
     tns_mail = IMAP(script_name="tns_email_watch",
                    reporting_mode=(PRINT | LOGFILE | DATABASE),
-                   debug=args.debbug)
+                   debug=args.debug)
     # Run the pipeline
     tns_mail.monitor_notices()
 

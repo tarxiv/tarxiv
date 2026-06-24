@@ -92,7 +92,7 @@ class TarxivDB(TarxivModule):
         return pd.DataFrame(list(result))
 
     def get_all_catalog_objects(self, catalog):
-        statement = f"SELECT tarxiv_id, source_id AS tarxiv_id FROM tarxiv.objects.meta WHERE source = '{catalog}'"
+        statement = f"SELECT tarxiv_id, source_id FROM tarxiv.objects.meta WHERE source = '{catalog}'"
         result = self.cluster.query(statement)
         return pd.DataFrame(list(result))
 

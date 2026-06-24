@@ -314,7 +314,7 @@ class TNSPipeline(TarxivModule):
                 'session.timeout.ms': 1200000,
                 'heartbeat.interval.ms': 3000}
         self.consumer = Consumer(conf)
-        self.consumer.subscribe(topic, on_assign=self.print_assignment)
+        self.consumer.subscribe([topic], on_assign=self.print_assignment)
         # Start up
         status = {"status": "running pipeline"}
         self.logger.info(status, extra=status)
