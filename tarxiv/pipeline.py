@@ -218,7 +218,6 @@ class TNSPipeline(TarxivModule):
         return txv_id, meta, obj_lc
 
 
->>>>>>> c0ba5b3168bd1831f75812c8c02bb4beb4e5cf51
     def upsert_object(self, object_id, obj_meta, obj_lc):
         """
         Insert a TarXiv TNS object into the database.
