@@ -139,9 +139,9 @@ def int_to_alphanumeric(num, n):
     return "".join(reversed(result)).rjust(n, "0")[:n]
 
 
-def deg2sex(ra_deg, dec_deg):
+def deg2sex(ra_deg, dec_deg, arcsec_precision=4):
     c = SkyCoord(ra=ra_deg * u.degree, dec=dec_deg * u.degree)
-    return c.to_string("hmsdms", sep=":").split()
+    return c.to_string("hmsdms", sep=":", precision=arcsec_precision).split()
 
 
 def camel_to_snake(text: str) -> str:

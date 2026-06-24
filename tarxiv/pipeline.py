@@ -1,8 +1,8 @@
+
 from .utils import TarxivModule, TarxivPipelineError, deg2sex
-from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair
+from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair, ANTARES
 from .database import TarxivDB
-from .alerts import IMAP
-from confluent_kafka import Producer
+from confluent_kafka import Producer, Consumer, KafkaError
 from astropy.time import Time
 from hop.auth import Auth
 from hop import Stream
@@ -36,8 +36,19 @@ class TNSPipeline(TarxivModule):
         self.asas_sn = ASAS_SN(script_name, reporting_mode, debug)
         self.lsst = LSST(script_name, reporting_mode, debug)
         self.lasair = Lasair(script_name, reporting_mode, debug)
-        # Get email interface
-        self.gmail = IMAP(script_name, reporting_mode, debug)
+        self.antares = ANTARES(script_name, reporting_mode, debug)
+
+
+        # Specify data source
+        self.data_sources = {
+            "tns": TNS,
+            "fink_ztf": ZTF,
+            "fink_lsst": LSST,
+            "asas_sn": ASAS_SN,
+            "sherlock": Lasair,
+            "antares": ANTARES,
+        }
+
         # Get database
         self.db = TarxivDB("pipeline", script_name, reporting_mode, debug)
         # Hopskotch authorization
@@ -47,15 +58,14 @@ class TNSPipeline(TarxivModule):
         )
 
         # Get kafka configuration
-        conf = {
-            "bootstrap.servers": "pooskaus.ifa.hawaii.edu:9092",
-            "delivery.timeout.ms": 10000,
-            "queue.buffering.max.messages": 1000000,
-            "queue.buffering.max.ms": 5000,
-            "batch.num.messages": 100,
-            "client.id": socket.gethostname(),
-        }
-        self.kafka = Producer(conf)
+        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_HOST'] + ":9092",
+                'delivery.timeout.ms': 10000,
+                'queue.buffering.max.messages': 1000000,
+                'queue.buffering.max.ms': 5000,
+                'batch.num.messages': 100,
+                'client.id': socket.gethostname()}
+        self.producer = Producer(conf)
+        self.consumer = None
 
         # Signal handling
         self.stop_event = mp.Event()
@@ -70,7 +80,11 @@ class TNSPipeline(TarxivModule):
         }
         self.logger.info(status, extra=status)
         self.stop_event.set()
-        self.gmail.stop_monitoring()
+
+    def print_assignment(self, consumer, partitions):
+        # Logging for kafka
+        status = {"status": "consumer subscribed", "partitions": partitions}
+        self.logger.info(status, extra=status)
 
     def get_object(self, object_id):
         """
@@ -117,8 +131,8 @@ class TNSPipeline(TarxivModule):
         )
         if active_settings is None:
             active_settings = {
-                "prior_days": self.config["tns"]["obj_prior_days"],
-                "active_days": self.config["tns"]["obj_active_days"],
+                "prior_days": self.config["tns_sources"]["obj_prior_days"],
+                "active_days": self.config["tns_sources"]["obj_active_days"],
             }
             self.db.upsert(
                 txv_id, active_settings, scope="misc", collection="active_settings"
@@ -128,19 +142,16 @@ class TNSPipeline(TarxivModule):
         mjd_max = disc_mjd + active_settings["active_days"]
 
         # Now get meta and lightcurves from the surveys
-        fink_ztf_meta, ztf_lc = self.ztf.get_object(
-            object_id, ra_deg, dec_deg, mjd_min, mjd_max
-        )
-        asas_sn_meta, asas_sn_lc = self.asas_sn.get_object(
-            object_id, ra_deg, dec_deg, mjd_min, mjd_max
-        )
-        fink_lsst_meta, lsst_lc = self.lsst.get_object(
-            object_id, ra_deg, dec_deg, mjd_min, mjd_max
-        )
+        fink_ztf_meta, ztf_lc = self.ztf.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
+        asas_sn_meta, asas_sn_lc = self.asas_sn.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
+        fink_lsst_meta, lsst_lc = self.lsst.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
         # Get additional meta from the survey
-        lasair_meta = self.lasair.get_object(object_id, ra_deg, dec_deg)
+        lasair_meta = self.lasair.get_object(txv_id, ra_deg, dec_deg)
+        antares_meta = self.antares.get_object(txv_id, ra_deg, dec_deg)
 
-        # Add data sources to meta dict
+        # Add data sources to meta dictSelf
+        if antares_meta is not None:
+            meta["data_sources"]["antares"] = antares_meta
         if lasair_meta is not None:
             meta["data_sources"]["sherlock"] = lasair_meta
         if fink_ztf_meta is not None:
@@ -158,6 +169,56 @@ class TNSPipeline(TarxivModule):
 
         return txv_id, meta, obj_lc
 
+    def update_active_object(self, txv_id):
+        meta = self.db.get(txv_id, scope="object", collection="meta")
+        lc = self.db.get(txv_id, scope="object", collection="lc")
+        # Read in lc to dataframe
+        lc_df = pd.DataFrame(lc)
+
+        # Get active days
+        active_settings = self.db.get(txv_id, scope="misc", collection="active_settings")
+
+        # See which data sources we need to update now
+        update_date = datetime.datetime.fromisoformat(meta["update_date"])
+        discovery_date = datetime.datetime.fromisoformat(meta["discovery_date"])
+
+        # IF we have a reporting date, WORK ON LATER
+        disc_mjd = Time(discovery_date).mjd
+        # Check if we have special min/max mjds, if not use default
+        mjd_min = disc_mjd - active_settings["prior_days"]
+        mjd_max = disc_mjd + active_settings["active_days"]
+
+        for source_name, source_class in meta["data_sources"]:
+            # How often does this need to be updated
+            update_freq = self.config[source_name]["update_frequency"]
+            # Update if past frequency threshold
+            if update_date + datetime.timedelta(days=update_freq) >= datetime.datetime.now():
+                # Meta only or lightcurve
+                if self.config[source_name]["meta_only"]:
+                    source_meta = source_class.get_object(object_id=txv_id, ra_deg=meta["ra_deg"], dec_deg=meta["dec_deg"])
+                    if source_meta is not None:
+                        meta["data_sources"][source_name] = source_meta
+                else:
+                    # We arre going to pull the whole new C
+                    source_meta, source_lc = source_class.get_object(object_id=txv_id,
+                                                                     ra_deg=meta["ra_deg"],
+                                                                     dec_deg=meta["dec_deg"],
+                                                                     mjd_min=mjd_min,
+                                                                     mjd_max=mjd_max)
+                    if source_meta is not None:
+                        meta["data_sources"][source_name] = source_meta
+                        # Drop all previous source points and replace
+                        source_mask = lc_df["survey"] == self.config[source_name]["survey_name"]
+                        lc_df = lc_df[~source_mask]
+                        # Replace
+                        lc_df = pd.concat([lc_df, source_lc])
+
+        # Convert to json for submission
+        obj_lc = json.loads(lc_df.to_json(orient="records"))
+        return txv_id, meta, obj_lc
+
+
+>>>>>>> c0ba5b3168bd1831f75812c8c02bb4beb4e5cf51
     def upsert_object(self, object_id, obj_meta, obj_lc):
         """
         Insert a TarXiv TNS object into the database.
@@ -202,97 +263,80 @@ class TNSPipeline(TarxivModule):
         """
         # First get whole dataframe
         tns_df = self.get_tns_bulk_df()
+        all_tns_ids = tns_df["name"].tolist()
 
         if not include_existing:
             # Only ingest TNS objects NOT already in the database
-            db_object_ids = self.db.get_all_objects()
-            object_ids = list(set(tns_df["name"].tolist()) - set(db_object_ids))
-            tns_df = tns_df[tns_df["name"].isin(object_ids)]
+            cur_tns_df = self.db.get_all_catalog_objects("tns")
+            cur_tns_ids = cur_tns_df["source_id"].tolist()
+            missing_ids = list(set(all_tns_ids) - set(cur_tns_ids))
+            tns_df = tns_df[tns_df["name"].isin(missing_ids)]
 
         status = {"status": "processing bulk object list", "n_objs": len(tns_df)}
         self.logger.info(status, extra=status)
         for _, obj in tns_df.iterrows():
-            if self.stop_event.is_set():
-                break
             # FRB Naming conventions are weird
             if obj["type"] == "FRB" and obj["name"][:3] != "FRB":
                 object_id = "FRB" + obj["name"]
             else:
                 object_id = obj["name"]
-            try:
-                # Get survey information
-                txv_id, obj_meta, obj_lc = self.get_object(object_id)
-                # Add reporting date
-                obj_meta["reporting_date"] = obj["time_received"]
-                # Upsert to database
-                self.upsert_object(txv_id, obj_meta, obj_lc)
 
-            except Exception:
-                stack_trace = traceback.format_exc()
-                self.logger.error({
-                    "status": "failed pipeline operation",
-                    "object_id": object_id,
-                    "exception": stack_trace,
-                })
+            # Push to bulk update
+            self.producer.produce(topic="internal_tns_bulk", value=object_id, callback=self.acked)
 
     def daily_update(self):
         # Get all targets still in "active" window for update
-        daily_objects = self.db.get_all_active_objects()
-        # First get whole dataframe
-        tns_df = self.get_tns_bulk_df()
-        # Pull TNS info and update
-        for object_id in daily_objects:
-            try:
-                if self.stop_event.is_set():
-                    break
-                # Get survey information
-                txv_id, obj_meta, obj_lc = self.get_object(object_id)
-                # Add reporting date
-                try:
-                    obj = tns_df[tns_df["name"] == object_id].iloc[0].to_dict()
-                    obj_meta["reporting_date"] = obj["time_received"]
-                except Exception:
-                    status = {
-                        "status": "no cooresponding reporting date",
-                        "object_id": object_id,
-                    }
-                    self.logger.error(status, extra=status)
+        daily_obj_df = self.db.get_all_active_objects("tns")
+        daily_tns_ids = daily_obj_df["source_id"].tolist()
 
-                # Get timestamp
-                timestamp = datetime.datetime.now().isoformat()
-                # Add insertion date to internal meta as well
-                obj_meta["update_date"] = timestamp
+        # Also see if there are missing objects
+        all_tns_df = self.get_tns_bulk_df()
+        all_tns_ids = all_tns_df["name"].tolist()
+        cur_tns_df = self.db.get_all_catalog_objects("tns")
+        cur_tns_ids = cur_tns_df["source_id"].tolist()
+        missing_ids = list(set(all_tns_ids) - set(cur_tns_ids))
+        # Combine 2
+        update_objects = daily_tns_ids + missing_ids
 
-                # Upsert to database
-                self.upsert_object(txv_id, obj_meta, obj_lc)
+        # Pull TNS info and submit to bulk update queue
+        for object_id in update_objects:
+            self.producer.produce(topic="internal_tns_bulk", value=object_id, callback=self.acked)
 
-            except Exception:
-                stack_trace = traceback.format_exc()
-                self.logger.error({
-                    "status": "failed pipeline operation",
-                    "object_id": object_id,
-                    "exception": stack_trace,
-                })
+        # Finish by flushing
+        self.producer.flush(timeout=10.0)
 
-    def run_pipeline(self):
+    def run_pipeline(self, topic):
+        # Connect to kafka consumer
+        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_HOST'] + ":9092",
+                'group.id': "internal_kafka_pipeline",
+                'auto.offset.reset': 'earliest',
+                'enable.auto.commit': False,
+                'max.poll.interval.ms': 3600000,
+                'session.timeout.ms': 1200000,
+                'heartbeat.interval.ms': 3000}
+        self.consumer = Consumer(conf)
+        self.consumer.subscribe(topic, on_assign=self.print_assignment)
+        # Start up
+        status = {"status": "running pipeline"}
+        self.logger.info(status, extra=status)
 
-        # Start monitoring notices
-        self.gmail.monitor_notices()
-
-        # Run logic loop
-        while not self.stop_event.is_set():
+        while self.stop_event.is_set() is False:
             # Get next message
-            alerts = self.gmail.poll(timeout=1)
-
-            # Repeat if none
-            if not alerts:
+            msg = self.consumer.poll(timeout=1.0)
+            # No message, try again
+            if msg is None:
                 continue
-
-            # Each result contains message and list of objects
-            for object_id in alerts:
+            if msg.error():
+                if msg.error().code() == KafkaError._PARTITION_EOF:
+                    status = {"status": "reached end of partition"}
+                else:
+                    status = {"status": "kafka error", "error": msg.error()}
+                self.logger.error(status, extra=status)
+            else:
+                tns_object_id = msg.value().decode("utf-8")
                 try:
                     # Get survey information
-                    txv_id, obj_meta, obj_lc = self.get_object(object_id)
+                    txv_id, obj_meta, obj_lc = self.get_object(tns_object_id)
 
                     # Get timestamp
                     timestamp = datetime.datetime.now().isoformat()
@@ -302,30 +346,34 @@ class TNSPipeline(TarxivModule):
                     # Upsert to database
                     self.upsert_object(txv_id, obj_meta, obj_lc)
 
-                    stream = Stream(self.hop_auth)
                     # Submit to hopskotch
+                    stream = Stream(self.hop_auth)
                     with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
                         # Additional information for hopskotch
-                        # hop_msg = {}
-                        # update_meta | {"title": "TNS Public Alert"}
                         s.write(obj_meta)
                         status = {
                             "status": "submitted hopskotch alert",
-                            "object_id": object_id,
+                            "object_id": tns_object_id,
                         }
                         self.logger.info(status, extra=status)
 
                     # Submit kafka alert
-                    msg = json.dumps(obj_meta).encode("utf-8")
-                    self.kafka.produce(topic="tns", value=msg, callback=self.acked)
+                    msg = json.dumps(obj_meta).encode('utf-8')
+                    self.producer.produce(topic='tns', value=msg, callback=self.acked)
+                    self.consumer.commit(asynchronous=False)
 
                 except Exception:
                     stack_trace = traceback.format_exc()
-                    self.logger.error({
+                    status = {
                         "status": "failed pipeline operation",
-                        "object_id": object_id,
+                        "object_id": tns_object_id,
                         "exception": stack_trace,
-                    })
+                    }
+                    self.logger.error(status, extra=status)
+
+        # Close out at end of loop
+        self.consumer.close()
+        self.producer.flush()
 
     def acked(self, err, msg):
         if err is not None:

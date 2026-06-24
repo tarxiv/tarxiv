@@ -8,9 +8,13 @@ from .utils import (
 )
 
 from pyasassn.client import SkyPatrolClient
+from antares_client.search import cone_search
 from astropy.time import Time
+from astropy.coordinates import Angle, SkyCoord
+import astropy.units as u
 from collections import OrderedDict
 from lasair import lasair_client
+from alerce import Alerce
 import numpy as np
 import pandas as pd
 import requests
@@ -126,7 +130,7 @@ class ASAS_SN(TarxivModule):  # noqa: N801
         # Also need ASAS-SN client
         self.client = SkyPatrolClient(verbose=False)
 
-    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=15):
+    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=8):
         """Get ASAS-SN Lightcurve curve from coordinates using cone_search.
 
         :param object_id: name of object (used for logging); str
@@ -171,6 +175,7 @@ class ASAS_SN(TarxivModule):  # noqa: N801
                 "source_id_name": "asas_sn_id",
                 "ra_deg": float(nearest["ra_deg"]),
                 "dec_deg": float(nearest["dec_deg"]),
+                "cross_match_distance": float(nearest["angular_dist"]),
                 "catalog_sources": list(nearest["catalog_sources"]),
             }
             # Log
@@ -234,12 +239,12 @@ class ZTF(TarxivModule):
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
-            module="ztf",
+            module="fink_ztf",
             reporting_mode=reporting_mode,
             debug=debug,
         )
 
-    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=15):
+    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=8):
         """Get ZTF Lightcurve from coordinates using cone_search.
 
         :param object_id: name of object (used for logging); str
@@ -255,7 +260,7 @@ class ZTF(TarxivModule):
         try:
             # Hit FINK API
             result = requests.post(
-                f"{self.config['fink_ztf_url']}/api/v1/conesearch",
+                f"{self.config['fink_ztf']['url']}/api/v1/conesearch",
                 json={
                     "ra": ra_deg,
                     "dec": dec_deg,
@@ -279,7 +284,7 @@ class ZTF(TarxivModule):
 
             # Query
             result = requests.post(
-                f"{self.config['fink_ztf_url']}/api/v1/objects",
+                f"{self.config['fink_ztf']['url']}/api/v1/objects",
                 json={
                     "objectId": ztf_name,
                     "withupperlim": True,
@@ -296,33 +301,32 @@ class ZTF(TarxivModule):
             meta_line = {k[2:]: v for k, v in meta_line.items()}
             meta_columns = [
                 "classification",
-                "Eridanus",
-                "DR3Name",
-                "anomaly_score",
-                "blazar_stats_m0",
-                "blazar_stats_m1",
-                "blazar_stats_m2",
-                "cdsxmatch",
-                "gaiaClass",
-                "gaiaVarFlag",
-                "gcvs",
-                "is_transient",
-                "mangrove_2MASS_name",
-                "mangrove_HyperLEDA_name",
-                "mangrove_ang_dist",
-                "mangrove_lum_dist",
-                "mulens",
-                "rf_kn_vs_nonkn",
-                "rf_snia_vs_nonia",
-                "slsn_score",
-                "snn_sn_vs_all",
-                "snn_snia_vs_nonia",
-                "spicy_class",
-                "spicy_id",
-                "tns",
-                "vsx",
-                "x3hsp",
-                "x4lac",
+                'DR3Name',
+                'anomaly_score',
+                'blazar_stats_m0',
+                'blazar_stats_m1',
+                'blazar_stats_m2',
+                'cdsxmatch',
+                'gaiaClass',
+                'gaiaVarFlag',
+                'gcvs',
+                'is_transient',
+                'mangrove_2MASS_name',
+                'mangrove_HyperLEDA_name',
+                'mangrove_ang_dist',
+                'mangrove_lum_dist',
+                'mulens',
+                'rf_kn_vs_nonkn',
+                'rf_snia_vs_nonia',
+                'slsn_score',
+                'snn_sn_vs_all',
+                'snn_snia_vs_nonia',
+                'spicy_class',
+                'spicy_id',
+                'tns',
+                'vsx',
+                'x3hsp',
+                'x4lac',
             ]
             meta = {
                 k: v
@@ -343,7 +347,7 @@ class ZTF(TarxivModule):
                 "d:tag": "detection",
                 "i:fwhm": "fwhm",
             }
-            filter_map = {"1": "g", "2": "R", "3": "i"}
+            filter_map = {"1": "g", "2": "r", "3": "i"}
             detection_map = {"valid": 1, "badquality": -1, "upperlim": 0}
             # Push into DataFrame
             lc_df = pd.read_json(io.BytesIO(result.content))
@@ -411,7 +415,7 @@ class TNS(TarxivModule):
         )
 
         # Set attributes
-        self.site = self.config["tns"]["site"]
+        self.site = self.config["tns"]["url"]
         self.api_key = os.getenv("TARXIV_TNS_API_KEY", "")
 
         # Create marker
@@ -466,7 +470,7 @@ class TNS(TarxivModule):
             "object_type": result["object_type"]["name"],
             "redshift": result["redshift"],
             "hostname": result["hostname"],
-            "discovery_date": result["discoverydate"],
+            "discovery_date": result["discoverydate"].replace(" ", "T"),
             "reporting_group": result["reporting_group"]["group_name"],
             "discovery_data_source": result["discovery_data_source"]["group_name"],
         }
@@ -526,12 +530,12 @@ class LSST(TarxivModule):
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
-            module="lsst",
+            module="fink_lsst",
             reporting_mode=reporting_mode,
             debug=debug,
         )
 
-    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=15):
+    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=8):
         status = {"object_id": object_id}
         meta = None
         lc_df = pd.DataFrame()
@@ -558,7 +562,7 @@ class LSST(TarxivModule):
 
             # Query fink
             r1 = requests.post(
-                f"{self.config['fink_lsst_url']}/api/v1/sources",
+                f"{self.config['fink_lsst']['url']}/api/v1/sources",
                 json={
                     "diaObjectId": str(nearest["r:diaObjectId"]),
                     "output-format": "json",
@@ -626,6 +630,157 @@ class LSST(TarxivModule):
         self.logger.info(status, extra=status)
         return meta, lc_df
 
+
+class ANTARES(TarxivModule):
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(
+            script_name=script_name,
+            module="antares",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
+    def get_object(self, object_id=None, ra_deg=None, dec_deg=None, radius=8):
+        status = {"object_id": object_id}
+        meta = None
+        try:
+            center = SkyCoord(ra=ra_deg, dec=dec_deg, unit="deg")
+            radius = Angle(radius * u.arcsec)
+            result = list(cone_search(center, radius))
+            if not result:
+                raise SurveyMetaMissingError
+            # Get meta from our result object
+            meta = dict()
+            locus = result[0]
+            meta["object_id"] = locus.locus_id
+            meta["ra_deg"] = locus.ra
+            meta["dec_deg"] = locus.dec
+            hit = SkyCoord(locus.ra, locus.dec, unit="deg")
+            meta["cross_match_distance"] = precision(float(center.separation(hit).arcsec), 6)
+            meta["tags"] = locus.tags
+
+        except SurveyMetaMissingError:
+            status["status"] = "no match"
+
+        except Exception as e:
+            status.update({
+                "status": "encontered unexpected error",
+                "error_message": str(e),
+                "details": traceback.format_exc(),
+            })
+        self.logger.info(status, extra=status)
+        return meta
+
+
+class AlerceZTF(TarxivModule):
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(
+            script_name=script_name,
+            module="alerce_ztf",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
+        self.client = Alerce()
+
+    def get_object(self, object_id=None, ra_deg=None, dec_deg=None, radius=8):
+        # Check both ztf and lsst
+        status = {"object_id": object_id}
+        meta = None
+        try:
+            ztf_df = self.client.query_objects(ra=ra_deg, dec=dec_deg, radius=radius, survey="ztf")
+            if ztf_df.empty:
+                raise SurveyMetaMissingError
+
+            # Get object
+            ztf_obj = ztf_df.iloc[0]
+            # Get probabilities
+            result = self.client.query_probabilities(oid=ztf_obj.oid, survey="ztf")
+            prob_df = pd.DataFrame(result)
+            prob_info = prob_df[
+                (prob_df["classifier_name"] == self.config["alerce_ztf"]["classifier"])
+                & (prob_df["ranking"] == 1)]
+
+            meta = {
+                "object_id": ztf_obj.oid,
+                "classifier": {
+                    "name": prob_info.classifier_name,
+                    "version": prob_info.classifier_version,
+                    "probability": prob_info.probability,
+                    "result": prob_info.class_name
+                }
+            }
+            result = self.client.query_features(oid=ztf_obj.oid, survey="ztf")
+            feat_df = pd.DataFrame(result)
+            # Reduce to SPM features
+            feat_df = feat_df[feat_df["name"].str.startswith("SPM")]
+            # Band lookup
+            bands = {1: "g", 2: "r", 3: "i"}
+            feat_df["filter"] = feat_df["fid"].map(bands)
+            meta["features"] = {"bands": {}, "version": feat_df.iloc[0]["version"]}
+            for band, grp_df in feat_df.groupby('filter'):
+                meta["features"][band] = {f['name']: f["value"] for _, f in grp_df.iterrows()}
+
+        except SurveyMetaMissingError:
+            status["status"] = "no match"
+
+        except Exception as e:
+            status.update({
+                "status": "encontered unexpected error",
+                "error_message": str(e),
+                "details": traceback.format_exc(),
+            })
+        self.logger.info(status, extra=status)
+        return meta
+
+class AlerceLSST(TarxivModule):
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(
+            script_name=script_name,
+            module="alerce_lsst",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
+        self.client = Alerce()
+
+    def get_object(self, object_id=None, ra_deg=None, dec_deg=None, radius=8):
+        # Check both ztf and lsst
+        status = {"object_id": object_id}
+        meta = None
+        try:
+            lsst_df = self.client.query_objects(ra=ra_deg, dec=dec_deg, radius=radius, survey="ztf")
+            if lsst_df.empty:
+                raise SurveyMetaMissingError
+
+            # Get object
+            lsst_obj = lsst_df.iloc[0]
+            # Get probabilities
+            result = self.client.query_probabilities(oid=lsst_obj.oid, survey="lsst")
+            prob_df = pd.DataFrame(result)
+            prob_info = prob_df[
+                (prob_df["classifier_name"] == self.config["alerce_lsst"]["classifier"])
+                & (prob_df["ranking"] == 1)]
+
+            meta = {
+                "object_id": lsst_obj.oid,
+                "classifier": {
+                    "name": prob_info.classifier_name,
+                    "version": prob_info.classifier_version,
+                    "probability": prob_info.probability,
+                    "result": prob_info.class_name
+                }
+            }
+
+
+        except SurveyMetaMissingError:
+            status["status"] = "no match"
+
+        except Exception as e:
+            status.update({
+                "status": "encontered unexpected error",
+                "error_message": str(e),
+                "details": traceback.format_exc(),
+            })
+        self.logger.info(status, extra=status)
+        return meta
 
 if __name__ == "__main__":
     """Execute the test suite"""
