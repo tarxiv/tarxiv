@@ -68,6 +68,10 @@ lasair:
   kafka_endpoint: "lasair-lsst-kafka_pub.lsst.ac.uk:9092"
   kafka_topic: "lasair_18tarxiv_nostars"
 
+antares:
+  meta_only: true
+  update_frequency: 10
+
 asas_sn:
   meta_only: false
   survey_name: "asas-sn"

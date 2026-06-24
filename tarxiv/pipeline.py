@@ -1,6 +1,6 @@
 
 from .utils import TarxivModule, TarxivPipelineError, deg2sex
-from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair
+from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair, ANTARES
 from .database import TarxivDB
 from confluent_kafka import Producer, Consumer, KafkaError
 from astropy.time import Time
@@ -36,6 +36,7 @@ class TNSPipeline(TarxivModule):
         self.asas_sn = ASAS_SN(script_name, reporting_mode, debug)
         self.lsst = LSST(script_name, reporting_mode, debug)
         self.lasair = Lasair(script_name, reporting_mode, debug)
+        self.antares = ANTARES(script_name, reporting_mode, debug)
 
 
         # Specify data source
@@ -44,7 +45,8 @@ class TNSPipeline(TarxivModule):
             "fink_ztf": ZTF,
             "fink_lsst": LSST,
             "asas_sn": ASAS_SN,
-            "sherlock": Lasair
+            "sherlock": Lasair,
+            "antares": ANTARES,
         }
 
         # Get database
@@ -142,8 +144,11 @@ class TNSPipeline(TarxivModule):
         fink_lsst_meta, lsst_lc = self.lsst.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
         # Get additional meta from the survey
         lasair_meta = self.lasair.get_object(txv_id, ra_deg, dec_deg)
+        antares_meta = self.antares.get_object(txv_id, ra_deg, dec_deg)
 
-        # Add data sources to meta dict
+        # Add data sources to meta dictSelf
+        if antares_meta is not None:
+            meta["data_sources"]["antares"] = antares_meta
         if lasair_meta is not None:
             meta["data_sources"]["sherlock"] = lasair_meta
         if fink_ztf_meta is not None:
