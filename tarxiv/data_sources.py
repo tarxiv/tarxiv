@@ -74,16 +74,38 @@ def summarize_lc_mags(obj_meta, lc_df):
             )
             # Now sort and get the rate
             sorted_detections = detections_non_dup.sort_values("mjd")
-            # Get mag rate for each point in the filter_wise group
-            sorted_detections["mag_rate"] = -(
-                sorted_detections["mag"].diff() / sorted_detections["mjd"].diff()
-            )
-            # Replace nan
-            sorted_detections["mag_rate"] = sorted_detections["mag_rate"].replace(
-                np.nan, None
-            )
-            # Get the most recent row and append the information
-            recent_row = sorted_detections.loc[sorted_detections["mjd"].idxmax()]
+
+            if "atlas" in obj_meta.keys():
+                # Get nights then group
+                sorted_detections["night"] = sorted_detections["mjd"].astype(int)
+                night_sorted_detections = sorted_detections.groupby('night')[["night", "mag"]].mean()
+
+                # Get mag rate for each point in the filter_wise group
+                night_sorted_detections["mag_rate"] = -(
+                    night_sorted_detections["mag"].diff() / night_sorted_detections["night"].diff()
+                )
+                # Replace nan
+                night_sorted_detections["mag_rate"] = night_sorted_detections["mag_rate"].replace(
+                    np.nan, None
+                )
+                # Get the most recent row and append the information
+                recent_row = night_sorted_detections.loc[night_sorted_detections["night"].idxmax()]
+
+                # Put jd back in recent row
+                recent_row["mjd"] = sorted_detections.loc[sorted_detections["mjd"].idxmax()]["mjd"]
+
+            else:
+                # Get mag rate for each point in the filter_wise group
+                sorted_detections["mag_rate"] = -(
+                    sorted_detections["mag"].diff() / sorted_detections["mjd"].diff()
+                )
+                # Replace nan
+                sorted_detections["mag_rate"] = sorted_detections["mag_rate"].replace(
+                    np.nan, None
+                )
+                # Get the most recent row and append the information
+                recent_row = sorted_detections.loc[sorted_detections["mjd"].idxmax()]
+
             recent_det = {
                 "filter": filter_name,
                 "mag": precision(float(peak_row["mag"]), 8),
@@ -193,6 +215,7 @@ class ATLAS(TarxivModule):
             lc_df["survey"] = "atlas"
             # Put in dummy meta
             meta = {
+                "atlas": "dummy value",
                 "ra_deg": precision(float(lc_df.iloc[0].RA), 6),
                 "dec_deg": precision(float(lc_df.iloc[0].Dec), 6),
             }
@@ -230,6 +253,7 @@ class ATLAS(TarxivModule):
             ]
             # Append information on recent detections and peak mags, etc
             meta = summarize_lc_mags(obj_meta=meta, lc_df=lc_df)
+            del meta["atlas"]
             # Update
             status["lc_count"] = len(lc_df)
 
@@ -847,17 +871,11 @@ class AlerceMod(TarxivModule):
                     # Might not have info for this classifier
                     if not prob_info.empty:
                         prob_info = prob_info.iloc[0].to_dict()
-                        print(prob_info)
                         # Add to meta
-                        meta["lsst_classifier"] = (prob_info["classifier_name"]
-                                                  if type(prob_info["classifier_name"]) == str
-                                                  else prob_info["classifier_name"][0],)
-                        meta["lsst_class_name"] = (prob_info["class_name"]
-                                                  if type(prob_info["class_name"]) == str
-                                                  else prob_info["class_name"][0],)
-                        meta["lsst_class_prob"] = (prob_info["probability"]
-                                                  if type(prob_info["probability"]) == float
-                                                  else prob_info["probability"][0],)
+                        meta["lsst_object_id"] = str(lsst_obj.oid)
+                        meta["lsst_classifier"] = prob_info["classifier_name"] if type(prob_info["classifier_name"]) == str else prob_info["classifier_name"][0]
+                        meta["lsst_class_name"] = prob_info["class_name"] if type(prob_info["class_name"]) == str else prob_info["class_name"][0]
+                        meta["lsst_class_prob"] = prob_info["probability"] if type(prob_info["probability"]) == float else prob_info["probability"][0]
                         meta["lsst_class_version"] = prob_info["classifier_version"]
 
             # Now get ZTF
@@ -878,15 +896,9 @@ class AlerceMod(TarxivModule):
                         prob_info = prob_info.iloc[0].to_dict()
                         # Add to meta
                         meta["ztf_object_id"] = str(ztf_obj.oid),
-                        meta["ztf_classifier"] = (prob_info["classifier_name"]
-                                                  if type(prob_info["classifier_name"]) == str
-                                                  else prob_info["classifier_name"][0],)
-                        meta["ztf_class_name"] = (prob_info["class_name"]
-                                                  if type(prob_info["class_name"]) == str
-                                                  else prob_info["class_name"][0],)
-                        meta["ztf_class_prob"] = (prob_info["probability"]
-                                                  if type(prob_info["probability"]) == float
-                                                  else prob_info["probability"][0],)
+                        meta["ztf_classifier"] = prob_info["classifier_name"] if type(prob_info["classifier_name"]) == str else prob_info["classifier_name"][0]
+                        meta["ztf_class_name"] = prob_info["class_name"] if type(prob_info["class_name"]) == str else prob_info["class_name"][0]
+                        meta["ztf_class_prob"] = prob_info["probability"] if type(prob_info["probability"]) == float else prob_info["probability"][0]
                         meta["ztf_class_version"] = prob_info["classifier_version"]
 
                 # Get featurs
