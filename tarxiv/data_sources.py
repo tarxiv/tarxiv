@@ -708,6 +708,7 @@ class AlerceZTF(TarxivModule):
                     "result": prob_info.class_name
                 }
             }
+            self.logger.debug(meta, extra=meta)
             result = self.client.query_features(oid=ztf_obj.oid, survey="ztf")
             feat_df = pd.DataFrame(result)
             # Reduce to SPM features
