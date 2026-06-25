@@ -737,7 +737,7 @@ class AlerceMod(TarxivModule):
                     meta["features"] = []
 
                     for _, row in feat_df.iterrows():
-                        feat = {"name": row["name"], "value": row["value"], "survey": "ZTF", "filter": row["band"]}
+                        feat = {"name": row["name"], "value": row["value"], "survey": "ZTF", "filter": row["filter"]}
                         meta["features"].append(feat)
                     meta["ztf_feature_version"] = feat_df.iloc[0]["version"]
 
