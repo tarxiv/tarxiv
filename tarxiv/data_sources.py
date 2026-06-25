@@ -845,14 +845,13 @@ class AlerceMod(TarxivModule):
                     # Might not have info for this classifier
                     if not prob_info.empty:
                         prob_info = prob_info.iloc[0].to_dict()
-                    # Add to meta
-                    meta["lsst_info"] = {
-                            "object_id": str(lsst_obj.oid),
-                            "classifier": prob_info["classifier_name"],
-                            "class_name": prob_info["class_name"],
-                            "probability": prob_info["probability"],
-                            "version": prob_info["classifier_version"]
-                        }
+                        # Add to meta
+                        meta["lsst_object_id"] = str(lsst_obj.oid),
+                        meta["lsst_classifier"] = prob_info["classifier_name"],
+                        meta["lsst_class_name"] = prob_info["class_name"],
+                        meta["lsst_class_prob"] = prob_info["probability"],
+                        meta["lsst_class_version"] = prob_info["classifier_version"]
+
             # Now get ZTF
             ztf_df = self.client.query_objects(ra=ra_deg, dec=dec_deg, radius=radius, survey="ztf")
             if not ztf_df.empty:
@@ -870,13 +869,12 @@ class AlerceMod(TarxivModule):
                     if not prob_info.empty:
                         prob_info = prob_info.iloc[0].to_dict()
                         # Add to meta
-                        meta["ztf_info"] = {
-                                "object_id": str(ztf_obj.oid),
-                                "classifier": prob_info["classifier_name"],
-                                "class_name": prob_info["class_name"],
-                                "probability": prob_info["probability"],
-                                "version": prob_info["classifier_version"]
-                            }
+                        meta["ztf_object_id"] = str(ztf_obj.oid),
+                        meta["ztf_classifier"] = prob_info["classifier_name"],
+                        meta["ztf_class_name"] = prob_info["class_name"],
+                        meta["ztf_class_prob"] = prob_info["probability"],
+                        meta["ztf_class_version"] = prob_info["classifier_version"]
+
                 # Get featurs
                 result = self.client.query_features(oid=ztf_obj.oid, survey="ztf")
                 feat_df = pd.DataFrame(result)
