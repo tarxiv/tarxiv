@@ -712,7 +712,7 @@ class AlerceMod(TarxivModule):
                 meta["lsst_object_id"] = str(lsst_obj.oid)
                 meta["lsst_classifier"] = prob_info["classifier_name"]
                 meta["lsst_class_name"] = prob_info["class_name"]
-                meta["lsst_class_prob"] = prob_info["probability"]
+                meta["lsst_class_prob"] = prob_info["probability"].replace(np.nan, None)
                 meta["lsst_class_version"] = prob_info["classifier_version"]
 
             # Now get ZTF
@@ -731,7 +731,7 @@ class AlerceMod(TarxivModule):
                 meta["ztf_object_id"] = ztf_obj.oid
                 meta["ztf_classifier"] = prob_info["classifier_name"]
                 meta["ztf_class_name"] = prob_info["class_name"]
-                meta["ztf_class_prob"] = prob_info["probability"]
+                meta["ztf_class_prob"] = prob_info["probability"].replace(np.nan, None)
                 meta["ztf_class_version"] = prob_info["classifier_version"]
 
                 result = self.client.query_features(oid=ztf_obj.oid, survey="ztf")
@@ -746,7 +746,7 @@ class AlerceMod(TarxivModule):
                     meta["features"] = []
 
                     for _, row in feat_df.iterrows():
-                        feat = {"name": row["name"], "value": row["value"], "survey": "ZTF", "filter": row["filter"]}
+                        feat = {"name": row["name"], "value": row["value"].replace(np.nan, None), "survey": "ZTF", "filter": row["filter"]}
                         meta["features"].append(feat)
                     meta["ztf_feature_version"] = feat_df.iloc[0]["version"]
 
