@@ -187,8 +187,51 @@ class ATLAS(TarxivModule):
             # Record time for logs
             status["job_time"] = int(time.time() - start_time)
             # Here is our phot df
-            phot_df = pd.read_csv(io.StringIO(textdata.replace("###", "")), sep=r"\s+")
+            lc_df = pd.read_csv(io.StringIO(textdata.replace("###", "")), sep=r"\s+")
+            # Get unit
+            lc_df["unit"] = lc_df["Obs"].str[:2]
+            lc_df["survey"] = "atlas"
+            # Put in dummy meta
+            meta = {
+                "ra_deg": precision(float(lc_df.iloc[0].RA), 6),
+                "dec_deg": precision(float(lc_df.iloc[0].Dec), 6),
+            }
+
             # Rename columns
+            lc_df = lc_df.rename(columns={
+                "MJD": "mJD",
+                "m": "mag",
+                "dm": "mag_err",
+                "mag5sig": "limit",
+                "maj": "fwhm",
+                "F": "filter",
+            })
+            # Make mags positive
+            lc_df["mag"] = np.sign(lc_df['limit']) * lc_df['mag'].abs()
+
+            # Calculate detections
+            lc_df["detection"] = np.where(lc_df["limit"] > lc_df["mag"], 0, 1)
+            # If we have no detections, dont bother
+            if not lc_df["detection"].any():
+                raise SurveyLightCurveMissingError
+            # Parse down columns
+            lc_df = lc_df[
+                [
+                    "mjd",
+                    "mag",
+                    "mag_err",
+                    "limit",
+                    "fwhm",
+                    "filter",
+                    "detection",
+                    "camera",
+                    "survey",
+                ]
+            ]
+            # Append information on recent detections and peak mags, etc
+            meta = summarize_lc_mags(obj_meta=meta, lc_df=lc_df)
+            # Update
+            status["lc_count"] = len(lc_df)
 
         except SurveyMetaMissingError:
             status["status"] = "no match"
@@ -799,14 +842,14 @@ class AlerceMod(TarxivModule):
                     prob_info = prob_df[
                         (prob_df["classifier_name"] == self.config["alerce"]["lsst_classifier"])
                         & (prob_df["ranking"] == 1)].iloc[0].to_dict()
-
                     # Add to meta
-                    meta["lsst_object_id"] = str(lsst_obj.oid)
-                    meta["lsst_classifier"] = prob_info["classifier_name"]
-                    meta["lsst_class_name"] = prob_info["class_name"]
-                    meta["lsst_class_prob"] = prob_info["probability"]
-                    meta["lsst_class_version"] = prob_info["classifier_version"]
-
+                    meta["lsst_info"] = {
+                            "object_id": str(lsst_obj.oid),
+                            "classifier": prob_info["classifier_name"],
+                            "class_name": prob_info["class_name"],
+                            "probability": prob_info["probability"],
+                            "version": prob_info["classifier_version"]
+                        }
             # Now get ZTF
             ztf_df = self.client.query_objects(ra=ra_deg, dec=dec_deg, radius=radius, survey="ztf")
             if not ztf_df.empty:
@@ -820,14 +863,15 @@ class AlerceMod(TarxivModule):
                     prob_info = prob_df[
                         (prob_df["classifier_name"] == self.config["alerce"]["ztf_classifier"])
                         & (prob_df["ranking"] == 1)].iloc[0].to_dict()
-
                     # Add to meta
-                    meta["ztf_object_id"] = ztf_obj.oid
-                    meta["ztf_classifier"] = prob_info["classifier_name"]
-                    meta["ztf_class_name"] = prob_info["class_name"]
-                    meta["ztf_class_prob"] = prob_info["probability"]
-                    meta["ztf_class_version"] = prob_info["classifier_version"]
-
+                    meta["ztf_info"] = {
+                            "object_id": str(ztf_obj.oid),
+                            "classifier": prob_info["classifier_name"],
+                            "class_name": prob_info["class_name"],
+                            "probability": prob_info["probability"],
+                            "version": prob_info["classifier_version"]
+                        }
+                # Get featurs
                 result = self.client.query_features(oid=ztf_obj.oid, survey="ztf")
                 feat_df = pd.DataFrame(result)
                 if not feat_df.empty:
@@ -855,6 +899,7 @@ class AlerceMod(TarxivModule):
             status["status"] = "no match"
 
         except Exception as e:
+            meta = None
             status.update({
                 "status": "encontered unexpected error",
                 "error_message": str(e),
