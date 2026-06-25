@@ -704,6 +704,7 @@ class AlerceMod(TarxivModule):
                 # Get probabilities
                 result = self.client.query_probabilities(oid=lsst_obj.oid, survey="lsst")
                 prob_df = pd.DataFrame(result)
+                prob_df["probability"] = prob_df["probability"].replace(np.nan, None)
                 prob_info = prob_df[
                     (prob_df["classifier_name"] == self.config["alerce"]["lsst_classifier"])
                     & (prob_df["ranking"] == 1)].iloc[0].to_dict()
@@ -723,6 +724,7 @@ class AlerceMod(TarxivModule):
                 # Get probabilities
                 result = self.client.query_probabilities(oid=ztf_obj.oid, survey="ztf")
                 prob_df = pd.DataFrame(result)
+                prob_df["probability"] = prob_df["probability"].replace(np.nan, None)
                 prob_info = prob_df[
                     (prob_df["classifier_name"] == self.config["alerce"]["ztf_classifier"])
                     & (prob_df["ranking"] == 1)].iloc[0].to_dict()
@@ -731,7 +733,7 @@ class AlerceMod(TarxivModule):
                 meta["ztf_object_id"] = ztf_obj.oid
                 meta["ztf_classifier"] = prob_info["classifier_name"]
                 meta["ztf_class_name"] = prob_info["class_name"]
-                meta["ztf_class_prob"] = prob_info["probability"].replace(np.nan, None)
+                meta["ztf_class_prob"] = prob_info["probability"]
                 meta["ztf_class_version"] = prob_info["classifier_version"]
 
                 result = self.client.query_features(oid=ztf_obj.oid, survey="ztf")
@@ -739,6 +741,8 @@ class AlerceMod(TarxivModule):
                 if not feat_df.empty:
                     # Reduce to SPM features
                     feat_df = feat_df[feat_df["name"].str.startswith("SPM")]
+                    # Replace nans
+                    feat_df["value"] = feat_df["value"].replace(np.nan, None)
                     # Band lookup
                     bands = {1: "g", 2: "r", 3: "i"}
                     feat_df["filter"] = feat_df["fid"].map(bands)
@@ -746,7 +750,7 @@ class AlerceMod(TarxivModule):
                     meta["features"] = []
 
                     for _, row in feat_df.iterrows():
-                        feat = {"name": row["name"], "value": row["value"].replace(np.nan, None), "survey": "ZTF", "filter": row["filter"]}
+                        feat = {"name": row["name"], "value": row["value"], "survey": "ZTF", "filter": row["filter"]}
                         meta["features"].append(feat)
                     meta["ztf_feature_version"] = feat_df.iloc[0]["version"]
 
