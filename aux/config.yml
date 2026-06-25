@@ -77,7 +77,15 @@ asas_sn:
   survey_name: "asas-sn"
   update_frequency: 1
 
-data_source_order: ["tns", "sherlock", "fink_ztf", "fink_lsst", "asas_sn"]
+alerce_ztf:
+  classifier: "lc_classifier_BHRF_forced_phot"
+  update_frequency: 10
+
+alerce_lsst:
+  classifier: "stamp_classifier_rubin_beta_20260421"
+  update_frequency: 10
+
+data_source_order: ["tns", "sherlock", "fink_ztf", "fink_lsst", "antares", "asas_sn"]
 
 # ingesting TNS notices by IMAP
 imap:
