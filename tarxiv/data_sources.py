@@ -115,6 +115,96 @@ def summarize_lc_mags(obj_meta, lc_df):
 
     return obj_meta
 
+class ATLAS(TarxivModule):
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(
+            script_name=script_name,
+            module="atlas",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
+        # Validate TOKEN
+        response = requests.post(url=f"{self.config['url']}/api-token-auth/",
+                                 data={
+                                     'username': os.environ['TARXIV_ATLAS_USER'],
+                                     'password': os.environ['TARXIV_ATLAS_PASS']})
+        if response.status_code == 200:
+            token = response.json()['token']
+            self.headers = {'Authorization': f'Token {token}', 'Accept': 'application/json'}
+        else:
+            status = {"status": "atlas falling star validation error", "error": response.json()}
+            self.logger.error(status, extra=status)
+            sys.exit(1)
+
+    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max):
+        # Set meta and lc_df empty to start
+        meta, lc_df = None, pd.DataFrame()
+        # Initial status
+        status = {"object_id": object_id}
+        try:
+            start_time = time.time()
+            task_url = None
+            while not task_url:
+                with requests.Session() as s:
+                    response = s.post(url=f"{self.config['url']}/queue/", headers=self.headers,
+                                      data={'ra': ra_deg, 'dec': dec_deg, 'mjd_min': mjd_min, 'mjd_max': mjd_max})
+                    if response.status_code == 201:  # successfully queued
+                        task_url = response.json()['url']
+
+                    elif response.status_code == 429:  # throttled
+                        message = response.json()["detail"]
+                        t_sec = re.findall(r'available in (\d+) seconds', message)
+                        t_min = re.findall(r'available in (\d+) minutes', message)
+                        if t_sec:
+                            waittime = int(t_sec[0])
+                        elif t_min:
+                            waittime = int(t_min[0]) * 60
+                        else:
+                            waittime = 10
+                        time.sleep(waittime)
+                    else:
+                        status = {"status": "atlas falling star validation error", "error": response.json()}
+                        self.logger.error(status, extra=status)
+                        raise SurveyMetaMissingError
+
+            result_url = None
+            while not result_url:
+                with requests.Session() as s:
+                    resp = s.get(task_url, headers=self.headers)
+                    if resp.status_code == 200:  # HTTP OK
+                        if resp.json()['finishtimestamp']:
+                            result_url = resp.json()['result_url']
+                            break
+
+                        time.sleep(10)
+                    else:
+                        status = {"status": "atlas falling star job error", "error": response.json()}
+                        self.logger.error(status, extra=status)
+                        raise SurveyMetaMissingError
+
+            with requests.Session() as s:
+                textdata = s.get(result_url, headers=self.headers).text
+            # Record time for logs
+            status["job_time"] = int(time.time() - start_time)
+            # Here is our phot df
+            phot_df = pd.read_csv(io.StringIO(textdata.replace("###", "")), sep=r"\s+")
+            # Rename columns
+
+        except SurveyMetaMissingError:
+            status["status"] = "no match"
+
+        except SurveyLightCurveMissingError:
+            status["status"] += "|no light curve"
+        except Exception as e:
+            status.update({
+                "status": "encontered unexpected error",
+                "error_message": str(e),
+                "details": traceback.format_exc(),
+                })
+
+        self.logger.info(status, extra=status)
+        return meta, lc_df
+
 
 class ASAS_SN(TarxivModule):  # noqa: N801
     """Interface to ASAS-SN SkyPatrol."""
@@ -713,7 +803,7 @@ class AlerceMod(TarxivModule):
                 meta["lsst_object_id"] = str(lsst_obj.oid)
                 meta["lsst_classifier"] = prob_info["classifier_name"]
                 meta["lsst_class_name"] = prob_info["class_name"]
-                meta["lsst_class_prob"] = prob_info["probability"].replace(np.nan, None)
+                meta["lsst_class_prob"] = prob_info["probability"]
                 meta["lsst_class_version"] = prob_info["classifier_version"]
 
             # Now get ZTF

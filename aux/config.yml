@@ -31,9 +31,8 @@ tns:
   rate_limit: 4
 
 atlas:
-  url: "none"
-  survey_name: "atlas"
-  data_type: ["meta", "lightcurve"]
+  url: "https://fallingstar-data.com/forcedphot"
+  meta_only: false
   update_frequency: 30
 
 fink_ztf:
