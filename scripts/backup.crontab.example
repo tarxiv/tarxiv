@@ -1,0 +1,60 @@
+# ---------------------------------------------------------------------------
+# Example crontab for tarxiv database backups.
+#
+# Install with:  crontab -e   (paste below)   or   crontab scripts/backup.crontab.example
+# Inspect with:  crontab -l
+#
+# This runs ON the server that hosts the Docker stack, so both scripts talk to
+# a LOCAL Docker engine / Couchbase — no SSH or remote hosts involved. The two
+# scripts handle their own GFS rotation, so cron just fires them once a day.
+#
+# To keep an off-site copy, run a separate rsync job on your OTHER box that
+# pulls $TARXIV_BACKUP_DIR / $TARXIV_COUCHBASE_BACKUP_DIR from here (see the
+# note at the bottom).
+#
+# Cron runs with a bare environment (no login shell), so we set PATH and the
+# paths explicitly here. Adjust them to your server.
+# ---------------------------------------------------------------------------
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+# Email any stderr/cron output here (needs a working MTA); leave blank to disable.
+MAILTO=""
+
+# Absolute path to your checkout of the repo on the server.
+TARXIV_REPO=/opt/tarxiv
+
+# Where the dumps are written. Defaults live under the repo's .data dir, but a
+# dedicated location is easier for the rsync job on the other box to target.
+TARXIV_BACKUP_DIR=/srv/backups/tarxiv/postgres
+TARXIV_COUCHBASE_BACKUP_DIR=/srv/backups/tarxiv/couchbase
+
+# Optional: override the GFS retention windows (defaults shown).
+# TARXIV_KEEP_DAILY_DAYS=7
+# TARXIV_KEEP_WEEKLY_DAYS=90
+# TARXIV_KEEP_MONTHLY_DAYS=365
+
+#   min  hour  dom  mon  dow   command
+# Postgres dump every day at 02:30.
+30   2    *    *    *    cd $TARXIV_REPO && ./scripts/backup_postgres.sh >> /var/log/tarxiv/pg-backup.log 2>&1
+
+# Couchbase dump (both scopes) every day at 03:00.
+0    3    *    *    *    cd $TARXIV_REPO && uv run python scripts/db_utils.py --backup >> /var/log/tarxiv/couchbase-backup.log 2>&1
+
+# ---------------------------------------------------------------------------
+# Notes
+# ---------------------------------------------------------------------------
+# * mkdir -p /var/log/tarxiv  (and chown it to the cron user) first, or the
+#   redirects above will fail silently.
+# * `uv` must be on PATH for the cron user. If it lives in ~/.local/bin or
+#   ~/.cargo/bin, add that dir to PATH above, or call it by absolute path.
+# * The postgres script auto-loads setup/.env for credentials and talks to the
+#   local compose `postgres` service. db_utils.py connects via TarxivDB using
+#   the usual local Couchbase config (TARXIV_COUCHBASE_HOST etc.), so make sure
+#   that resolves for the cron user — typically localhost when run on the host.
+# * Off-site copy: on your other box, a pull-based rsync keeps a remote copy,
+#   e.g. a cron line there like:
+#       15 4 * * * rsync -az --delete \
+#         server.internal:/srv/backups/tarxiv/ /srv/backups/tarxiv-mirror/
+#   Schedule it after these jobs finish (here 04:15, comfortably after 03:00).
+# ---------------------------------------------------------------------------

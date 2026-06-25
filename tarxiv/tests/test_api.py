@@ -550,3 +550,95 @@ def test_delete_object_tag_success(mock_api, auth_token):
 
     assert response.status_code == 200
     assert response.json["status"] == "deleted"
+
+
+def test_tns_alerts_success(mock_api, auth_token):
+    # The alerts page reads obj_name/discovery_date/object_type/ra_hms/dec_dms/...
+    # so the endpoint must emit exactly those keys. We stub the data layer to
+    # return one such row and assert it is serialized back.
+    client = mock_api.app.test_client()
+    mock_api.txv_db.query.return_value = [
+        {
+            "discovery_date": "2018-05-05 04:10:48.996",
+            "obj_name": "2018mqw",
+            "object_type": "SN",
+            "ra_hms": "12:38:29.211744",
+            "dec_dms": "+39:00:11.0061",
+            "redshift": None,
+            "reporting_group": "ZTF",
+            "discovery_source": "ZTF",
+        }
+    ]
+
+    response = client.post(
+        "/tns_alerts",
+        json={"n_rows": 25, "offset": 0},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 200
+    assert response.json[0]["obj_name"] == "2018mqw"
+    assert response.json[0]["ra_hms"] == "12:38:29.211744"
+
+
+def test_tns_alerts_query_reads_source_keyed_schema(mock_api, auth_token):
+    """Alerts query must read TNS fields from the source-keyed schema.
+
+    Regression: under the source-keyed schema the TNS fields live under
+    ``data_sources.tns``, not ``meta.tns``. The old query selected ``meta.tns.*``
+    (and ``meta.tns.object_id``), so every per-source field came back missing and
+    the alerts table rendered empty. Guard the new paths/aliases.
+    """
+    client = mock_api.app.test_client()
+    mock_api.txv_db.query.return_value = []
+
+    response = client.post(
+        "/tns_alerts",
+        json={"n_rows": 25, "offset": 0},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 200
+    statement = mock_api.txv_db.query.call_args.args[0]
+    assert "meta.data_sources.tns.object_type" in statement
+    assert "meta.source_id AS obj_name" in statement
+    # The pre-fix, wrong path must be gone.
+    assert "meta.tns." not in statement
+
+
+def test_tns_alerts_requires_token(mock_api):
+    client = mock_api.app.test_client()
+    response = client.post(
+        "/tns_alerts",
+        json={"n_rows": 25, "offset": 0},
+        headers={"Authorization": "WRONG"},
+    )
+    assert response.status_code == 401
+
+
+def test_tns_alerts_rejects_non_integer_paging(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    response = client.post(
+        "/tns_alerts",
+        json={"n_rows": "lots", "offset": 0},
+        headers={"Authorization": auth_token},
+    )
+    assert response.status_code == 500
+    assert response.json["type"] == "server"
+
+
+def test_cone_search_route_returns_results(mock_api):
+    # cone_search needs no token; it forwards ra/dec/radius to the data layer and
+    # returns the rows verbatim. The rows are already obj_name/ra/dec/distance_deg.
+    client = mock_api.app.test_client()
+    mock_api.txv_db.cone_search.return_value = [
+        {"obj_name": "2018mqw", "ra": 189.62, "dec": 39.0, "distance_deg": 0.0001}
+    ]
+
+    response = client.post(
+        "/cone_search", json={"ra": 189.62, "dec": 39.0, "radius": 5.0}
+    )
+
+    assert response.status_code == 200
+    assert response.json[0]["obj_name"] == "2018mqw"
+    mock_api.txv_db.cone_search.assert_called_once_with(189.62, 39.0, 5.0)

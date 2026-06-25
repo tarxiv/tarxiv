@@ -2,7 +2,18 @@ import os
 from typing import cast
 
 import dash
-from dash import html, Input, Output, State, no_update, callback, dcc, ctx
+from dash import (
+    html,
+    Input,
+    Output,
+    State,
+    no_update,
+    callback,
+    clientside_callback,
+    ClientsideFunction,
+    dcc,
+    ctx,
+)
 import dash_mantine_components as dmc
 from dash_extensions import Keyboard
 from astropy.coordinates import Angle
@@ -17,6 +28,7 @@ from ..components import (
     title_card,
     expressive_card,
     format_cone_search_results,
+    build_cone_result_cards_page,
     create_message_banner,
 )
 from ...dto import ConeSearchResponseModel
@@ -29,6 +41,35 @@ dash.register_page(
     order=2,
     icon="lucide:cone",
 )
+
+
+# Initialise the Aladin Lite widget for the cone-search results: centre on the
+# search position, draw the search radius as a subtle ring, drop a marker per
+# result, and hook up hover-linking from result cards to marker highlights.
+#
+# The JS body lives in assets/cone_aladin.js as window.dash_clientside.cone_aladin
+# rather than an inline-string callback — inline strings under Dash 4 can fail
+# to register with `dc[namespace][function_name] is undefined`, and the asset
+# file is easier to debug in the browser too.
+clientside_callback(
+    ClientsideFunction(namespace="cone_aladin", function_name="initialize"),
+    Output("cone-aladin-status", "children"),
+    Input("cone-search-store", "data"),
+)
+
+
+# Re-render the cone-search results list when the user changes the pagination
+# page. The Aladin widget is unaffected — it always shows every marker.
+@callback(
+    Output("cone-results-list", "children"),
+    Input("cone-results-pagination", "value"),
+    State("cone-search-store", "data"),
+    prevent_initial_call=True,
+)
+def update_cone_results_page(page, store_data):
+    if not page or not store_data or not store_data.get("results"):
+        return no_update
+    return build_cone_result_cards_page(store_data["results"], page)
 
 
 def layout(**kwargs):
@@ -142,6 +183,43 @@ def layout(**kwargs):
                                 style={"marginTop": "21px"},
                             ),
                         ]),
+                        dmc.Divider(label="OR", labelPosition="center"),
+                        dmc.Text(
+                            "Option 3: Enter a single RA/Dec string "
+                            "(space-separated h:m:s and d:m:s) and radius (arcsec)"
+                        ),
+                        dmc.Group([
+                            Keyboard(
+                                children=dmc.Group([
+                                    dmc.TextInput(
+                                        id="radec-combined-input",
+                                        placeholder="21:01:36.90 +68:09:48.0",
+                                        label="RA/Dec (HMS DMS):",
+                                        style={
+                                            "width": "310px",
+                                        },
+                                    ),
+                                    dmc.NumberInput(
+                                        id="radius-combined-input",
+                                        placeholder=">0",
+                                        min=0,
+                                        label="Radius (arcsec):",
+                                        style={
+                                            "width": "150px",
+                                        },
+                                    ),
+                                ]),
+                                captureKeys=["Enter"],
+                                n_keydowns=0,
+                                id="cone-search-combined-keyboard",
+                            ),
+                            dmc.Button(
+                                "Search",
+                                id="cone-search-combined-button",
+                                n_clicks=0,
+                                style={"marginTop": "21px"},
+                            ),
+                        ]),
                     ]),
                 ],
             ),
@@ -197,6 +275,29 @@ def parse_hms_dms_coordinates(ra_hms: str, dec_dms: str) -> tuple[float, float]:
     return cast(float, ra_angle.degree), cast(float, dec_angle.degree)
 
 
+def parse_combined_coordinates(combined: str) -> tuple[float, float]:
+    """Parse a single combined 'RA Dec' string into degrees.
+
+    Accepts space-separated sexagesimal coordinates where RA is in h:m:s and
+    Dec in d:m:s, e.g. '21:01:36.90 +68:09:48.0'. A comma between the two parts
+    is also tolerated ('21:01:36.90, +68:09:48.0'). The RA and Dec components
+    must use colon separators internally so the pair splits cleanly on the space.
+    """
+    if not combined or not combined.strip():
+        raise ValueError("Please provide a combined RA/Dec coordinate string.")
+
+    tokens = combined.replace(",", " ").split()
+    if len(tokens) != 2:
+        raise ValueError(
+            "Could not parse the combined coordinates. Use colon-separated "
+            "sexagesimal values separated by a space, e.g. "
+            "'21:01:36.90 +68:09:48.0'."
+        )
+
+    ra_hms, dec_dms = tokens
+    return parse_hms_dms_coordinates(ra_hms, dec_dms)
+
+
 @callback(
     [
         Output("results-container", "children", allow_duplicate=True),
@@ -210,6 +311,8 @@ def parse_hms_dms_coordinates(ra_hms: str, dec_dms: str) -> tuple[float, float]:
         Input("cone-search-keyboard", "n_keydowns"),
         Input("cone-search-hmsdms-button", "n_clicks"),
         Input("cone-search-hmsdms-keyboard", "n_keydowns"),
+        Input("cone-search-combined-button", "n_clicks"),
+        Input("cone-search-combined-keyboard", "n_keydowns"),
     ],
     [
         State("ra-input", "value"),
@@ -218,6 +321,8 @@ def parse_hms_dms_coordinates(ra_hms: str, dec_dms: str) -> tuple[float, float]:
         State("ra-hms-input", "value"),
         State("dec-dms-input", "value"),
         State("radius-hmsdms-input", "value"),
+        State("radec-combined-input", "value"),
+        State("radius-combined-input", "value"),
         State("active-settings-store", "data"),
     ],
     prevent_initial_call=True,
@@ -227,12 +332,16 @@ def handle_cone_search(
     n_keydowns,
     n_hmsdms_clicks,
     n_hmsdms_keydowns,
+    n_combined_clicks,
+    n_combined_keydowns,
     ra,
     dec,
     radius,
     ra_hms,
     dec_dms,
     radius_hmsdms,
+    radec_combined,
+    radius_combined,
     settings,
 ):
     """Handle cone search button clicks."""
@@ -267,8 +376,31 @@ def handle_cone_search(
         "cone-search-hmsdms-button",
         "cone-search-hmsdms-keyboard",
     }
+    use_combined_input = trigger_id in {
+        "cone-search-combined-button",
+        "cone-search-combined-keyboard",
+    }
 
-    if use_hmsdms_input:
+    if use_combined_input:
+        if not radec_combined or not str(radec_combined).strip():
+            warning_banner = create_message_banner(
+                "Please provide a combined RA/Dec coordinate string.", "warning"
+            )
+            return html.Div(), "", warning_banner, no_update, no_update
+        if radius_combined is None or radius_combined <= 0:
+            warning_banner = create_message_banner(
+                "Please provide a radius greater than zero.", "warning"
+            )
+            return html.Div(), "", warning_banner, no_update, no_update
+
+        try:
+            ra, dec = parse_combined_coordinates(radec_combined)
+        except ValueError as exc:
+            warning_banner = create_message_banner(str(exc), "warning")
+            return html.Div(), "", warning_banner, no_update, no_update
+
+        radius = float(radius_combined)
+    elif use_hmsdms_input:
         if (
             not ra_hms
             or not str(ra_hms).strip()
@@ -322,7 +454,12 @@ def handle_cone_search(
         )
         logger.info({"info": f"Cone search found {len(results)} objects."})
 
-        store_data = {"results": results, "ra": ra, "dec": dec}
+        store_data = {
+            "results": results,
+            "ra": ra,
+            "dec": dec,
+            "radius": radius,
+        }
 
         return result, status_msg, success_banner, store_data, settings
     except Unauthorized as e:
@@ -368,10 +505,7 @@ def get_cone_search_results(ra, dec, radius, token, logger) -> list:
 
     results = []
     logger.info({"info": f"Cone search response status: {response_cone.status_code}"})
-
-    print(response_cone.text)  # Debug: Print raw response text
-    print(response_cone.headers)  # Debug: Print response headers
-    print(response_cone.status_code)
+    logger.debug({"debug": f"Cone search raw response: {response_cone.text}"})
 
     if response_cone.status_code == 200:
         try:

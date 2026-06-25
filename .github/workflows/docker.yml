@@ -90,7 +90,10 @@ jobs:
           docker ps -a
       - name: Load test data
         run: |
+          # Load test data into the database with both scopes
+          uv run --env-file setup/.env scripts/db_utils.py -l --legacy -f setup/example_dataset_legacy.json
           uv run --env-file setup/.env scripts/db_utils.py -l -f setup/example_dataset.json
+
 
       # This is skipped because we are now building the image in the previous job
       # - name: Build tarxiv API image

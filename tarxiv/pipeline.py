@@ -89,7 +89,9 @@ class TNSPipeline(TarxivModule):
     def get_object(self, object_id):
         """
         Queries TNS for an object then finds all associated survey data.
+
         Same as get object, but with split schema
+
         :param object_id:
         :return:
         """
@@ -116,9 +118,7 @@ class TNSPipeline(TarxivModule):
             "source": "tns",
             "source_id": object_id,
             "discovery_date": tns_meta["discovery_date"],
-            "data_sources": {
-                "tns": tns_meta
-            }
+            "data_sources": {"tns": tns_meta},
         }
 
         # Cut on time (1 month before DISCOVERY, 6 months after)
@@ -126,17 +126,20 @@ class TNSPipeline(TarxivModule):
         disc_mjd = Time(tns_meta["discovery_date"]).mjd
 
         # Check if we have a document giving the settings
-        active_settings = self.db.get(txv_id, scope="misc", collection="active_settings")
+        active_settings = self.db.get(
+            txv_id, scope="misc", collection="active_settings"
+        )
         if active_settings is None:
             active_settings = {
                 "prior_days": self.config["tns_sources"]["obj_prior_days"],
                 "active_days": self.config["tns_sources"]["obj_active_days"],
             }
-            self.db.upsert(txv_id, active_settings, scope="misc", collection="active_settings")
+            self.db.upsert(
+                txv_id, active_settings, scope="misc", collection="active_settings"
+            )
         # Check if we have special min/max mjds, if not use default
         mjd_min = disc_mjd - active_settings["prior_days"]
         mjd_max = disc_mjd + active_settings["active_days"]
-
 
         # Now get meta and lightcurves from the surveys
         fink_ztf_meta, ztf_lc = self.ztf.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
@@ -311,7 +314,7 @@ class TNSPipeline(TarxivModule):
                 'session.timeout.ms': 1200000,
                 'heartbeat.interval.ms': 3000}
         self.consumer = Consumer(conf)
-        self.consumer.subscribe(topic, on_assign=self.print_assignment)
+        self.consumer.subscribe([topic], on_assign=self.print_assignment)
         # Start up
         status = {"status": "running pipeline"}
         self.logger.info(status, extra=status)

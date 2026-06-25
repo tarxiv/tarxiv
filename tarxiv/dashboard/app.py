@@ -31,7 +31,7 @@ class TarxivDashboard(TarxivModule):
         generate_css()
 
         # Get couchbase connection
-        self.txv_db = TarxivDB("tns", "api", script_name, reporting_mode, debug)
+        self.txv_db = TarxivDB("api", script_name, reporting_mode, debug)
 
         # Build Dash application
         status = {"status": "setting up dash application"}

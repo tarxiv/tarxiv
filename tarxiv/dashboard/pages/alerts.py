@@ -129,11 +129,11 @@ def update_alerts_table(page_number):
 
     rows = [
         dmc.TableTr([
-            dmc.TableTd(display_value(alert.get("date_received"))),
+            dmc.TableTd(display_value(alert.get("discovery_date"))),
             dmc.TableTd(
                 dcc.Link(
                     display_value(alert.get("obj_name")),
-                    href=f"/lightcurve?id={alert.get('obj_name')}",
+                    href=f"/lightcurve/{alert.get('obj_name')}",
                     refresh=False,
                 )
             ),
@@ -145,8 +145,8 @@ def update_alerts_table(page_number):
                 )
             ),
             dmc.TableTd(display_value(alert.get("object_type"))),
-            dmc.TableTd(display_value(alert.get("ra"))),
-            dmc.TableTd(display_value(alert.get("dec"))),
+            dmc.TableTd(display_value(alert.get("ra_hms"))),
+            dmc.TableTd(display_value(alert.get("dec_dms"))),
             dmc.TableTd(display_value(alert.get("discovery_source"))),
             dmc.TableTd(display_value(alert.get("reporting_group"))),
             dmc.TableTd(display_value(alert.get("redshift"))),
@@ -158,7 +158,7 @@ def update_alerts_table(page_number):
         [
             dmc.TableThead(
                 dmc.TableTr([
-                    dmc.TableTh("Received"),
+                    dmc.TableTh("Discovered"),
                     dmc.TableTh("Object"),
                     dmc.TableTh("TNS Link"),
                     dmc.TableTh("Type"),

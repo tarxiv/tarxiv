@@ -1,0 +1,264 @@
+{
+  "sources": [
+    {
+      "name": "tns",
+      "bibcode": "2021AAS...23742305G",
+      "reference": "Gal-Yam et al. 2021",
+      "alias": 0
+    },
+    {
+      "name": "atlas_survey",
+      "bibcode": "2018PASP..130f4505T",
+      "reference": "Tonry et al. 2018",
+      "alias": 1
+    },
+    {
+      "name": "atlas_twb",
+      "bibcode": "2020PASP..132h5002S",
+      "reference": "Smith et al. 2020",
+      "alias": 2
+    },
+    {
+      "name": "sherlock",
+      "bibcode": "10.5281/zenodo.8038057",
+      "reference": "Young et al. 2023",
+      "alias": 7
+    },
+    {
+      "name": "ztf_survey",
+      "bibcode": "2019PASP..131a8002B",
+      "reference": "Belim et al. 2019",
+      "alias": 3
+    },
+    {
+      "name": "fink",
+      "bibcode": "2021MNRAS.501.3272M",
+      "reference": "M\u00f6ller et al. 2020",
+      "alias": 4
+    },
+    {
+      "name": "mangrove",
+      "bibcode": "2020MNRAS.492.4768D",
+      "reference": "Ducoin et al. 2020",
+      "alias": 8
+    },
+    {
+      "name": "asas-sn_survey",
+      "bibcode": "2014ApJ...788...48S",
+      "reference": "Shappee et al. 2014",
+      "alias": 5
+    },
+    {
+      "name": "asas-sn_skypatrol",
+      "bibcode": "2023arXiv230403791H",
+      "reference": "Hart et al. 2023",
+      "alias": 6
+    }
+  ],
+  "identifiers": [
+    {
+      "name": "2025abov",
+      "source": "tns"
+    },
+    {
+      "name": 1030655660115855100,
+      "source": "atlas"
+    },
+    {
+      "name": "ATLAS25njr",
+      "source": "atlas_twb"
+    },
+    {
+      "name": "ZTF25acbsugc",
+      "source": "ztf"
+    },
+    {
+      "name": "661432068951",
+      "source": "asas-sn"
+    }
+  ],
+  "ra_deg": [
+    {
+      "value": 46.7317828801,
+      "source": "tns"
+    },
+    {
+      "value": 46.73174,
+      "source": "atlas"
+    },
+    {
+      "value": 46.7317439,
+      "source": "ztf"
+    },
+    {
+      "value": 46.733154,
+      "source": "asas-sn"
+    }
+  ],
+  "dec_deg": [
+    {
+      "value": -11.982086061,
+      "source": "tns"
+    },
+    {
+      "value": -11.98205,
+      "source": "atlas"
+    },
+    {
+      "value": -11.9821092,
+      "source": "ztf"
+    },
+    {
+      "value": -11.983448,
+      "source": "asas-sn"
+    }
+  ],
+  "ra_hms": [
+    {
+      "value": "03:06:55.628",
+      "source": "tns"
+    }
+  ],
+  "dec_dms": [
+    {
+      "value": "-11:58:55.51",
+      "source": "tns"
+    }
+  ],
+  "object_type": [
+    {
+      "value": "SN",
+      "source": "tns"
+    },
+    {
+      "value": "SN Ia",
+      "source": "tns"
+    }
+  ],
+  "discovery_date": [
+    {
+      "value": "2025-10-25 13:01:50.016",
+      "source": "tns"
+    }
+  ],
+  "reporting_group": [
+    {
+      "value": "GOTO",
+      "source": "tns"
+    }
+  ],
+  "discovery_data_source": [
+    {
+      "value": "GOTO",
+      "source": "tns"
+    }
+  ],
+  "redshift": [
+    {
+      "value": 0.01346,
+      "source": "tns"
+    },
+    {
+      "value": 0.013319,
+      "source": "sherlock"
+    }
+  ],
+  "peak_mag": [
+    {
+      "value": 15.945535,
+      "source": "ztf",
+      "filter": "R",
+      "date": "2025-12-06 07:16:53.000",
+      "mag_rate": null
+    },
+    {
+      "value": 14.97,
+      "source": "atlas",
+      "filter": "c",
+      "date": "2025-11-14 05:12:31.224",
+      "mag_rate": null
+    },
+    {
+      "value": 17.02721,
+      "source": "ztf",
+      "filter": "g",
+      "date": "2025-12-06 05:36:02.002",
+      "mag_rate": null
+    },
+    {
+      "value": 14.983,
+      "source": "atlas",
+      "filter": "o",
+      "date": "2025-11-11 05:28:31.274",
+      "mag_rate": null
+    },
+    {
+      "value": 14.88,
+      "source": "atlas",
+      "filter": "w",
+      "date": "2025-11-10 00:29:40.445",
+      "mag_rate": null
+    }
+  ],
+  "latest_detection": [
+    {
+      "value": 16.901502999999998,
+      "source": "ztf",
+      "filter": "R",
+      "date": "2025-12-22 03:59:29.003",
+      "mag_rate": -0.057192
+    },
+    {
+      "value": 17.265,
+      "source": "atlas",
+      "filter": "c",
+      "date": "2025-12-20 21:00:34.115",
+      "mag_rate": -0.033711
+    },
+    {
+      "value": 17.859348,
+      "source": "ztf",
+      "filter": "g",
+      "date": "2025-12-22 05:04:52.997",
+      "mag_rate": -0.053274
+    },
+    {
+      "value": 16.831,
+      "source": "atlas",
+      "filter": "o",
+      "date": "2025-12-23 02:39:35.068",
+      "mag_rate": -0.089595
+    },
+    {
+      "value": 17.114,
+      "source": "atlas",
+      "filter": "w",
+      "date": "2025-12-22 22:02:12.394",
+      "mag_rate": -0.050822
+    }
+  ],
+  "latest_nondetection": [
+    {
+      "value": 19.64,
+      "source": "atlas",
+      "filter": "c",
+      "date": "2025-10-21 22:54:28.994",
+      "mag_rate": null
+    },
+    {
+      "value": 19.08,
+      "source": "atlas",
+      "filter": "o",
+      "date": "2025-12-08 01:48:35.990",
+      "mag_rate": null
+    },
+    {
+      "value": 20.13,
+      "source": "atlas",
+      "filter": "w",
+      "date": "2025-10-24 00:59:37.565",
+      "mag_rate": null
+    }
+  ],
+  "latest_change": []
+}

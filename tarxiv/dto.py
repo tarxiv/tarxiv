@@ -1,74 +1,41 @@
-"""DTO - Data Transfer Objects for TarXiv."""
+"""DTO - Data Transfer Objects for TarXiv.
+
+This is the single source of truth for the API/dashboard data-transfer models.
+(The dashboard previously kept a parallel copy in ``dashboard/schemas.py``; that
+duplicate has been removed in favour of importing from here.)
+"""
 
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-# from datetime import datetime
-
-
-# class SearchIDRequest(BaseModel):
-#     search_id: str
-
-
-# class ConeSearchRequest(BaseModel):
-#     ra: float
-#     dec: float
-#     radius: float  # in arcseconds
-
-
-class Source(BaseModel):
-    """Source of the data for a given property."""
-
-    name: str
-    bibcode: str
-    reference: str
-    alias: int
-
-
-class Identifier(BaseModel):
-    """An identifier for the object from a given source."""
-
-    name: str | int
-    source: str
-
-
-class PropertyValue(BaseModel):
-    """A value for a given property from a given source."""
-
-    value: str | float | None
-    source: str | None
-
-
-class Detection(PropertyValue):
-    """A detection, nondetection, or change with additional fields."""
-
-    filter: str
-    # date: datetime | str
-    date: str
-    mag_rate: Optional[float] = None
-
 
 class MetadataResponseModel(BaseModel):
-    """Schema for the metadata response from an object query."""
+    """Schema for the metadata response from an object query.
 
-    sources: list[Source]
-    identifiers: list[Identifier]
-    ra_deg: list[PropertyValue] | None = None
-    dec_deg: list[PropertyValue] | None = None
-    ra_hms: list[PropertyValue] | None = None
-    dec_dms: list[PropertyValue] | None = None
-    object_type: list[PropertyValue] | None = None
-    discovery_date: list[PropertyValue] | None = None
-    reporting_group: list[PropertyValue] | None = None
-    discovery_data_source: list[PropertyValue] | None = None
-    redshift: list[PropertyValue] | None = None
-    peak_mag: list[Detection] | None = None
-    latest_detection: list[Detection] | None = None
-    latest_nondetection: list[Detection] | None = None
-    latest_change: Optional[list[Detection]] = Field(default_factory=list)
+    The metadata is source-keyed: every per-source payload lives under
+    ``data_sources[<source>]`` and each source carries its own field set
+    (e.g. ``tns`` provides discovery info, ``sherlock`` provides host
+    associations, survey sources provide photometry arrays). The shape of
+    each source dict therefore varies, so ``data_sources`` is kept permissive.
+
+    The top-level fields carry the canonical object coordinates and provenance
+    that the database now stores directly on the meta document: decimal
+    (``ra_deg``/``dec_deg``) and sexagesimal (``ra_hms``/``dec_dms``)
+    coordinates, plus discovery/update provenance.
+    """
+
+    tarxiv_id: str
+    source: str | None = None
+    source_id: str | None = None
+    ra_deg: float | None = None
+    dec_deg: float | None = None
+    ra_hms: str | None = None  # sexagesimal HMS string
+    dec_dms: str | None = None  # sexagesimal DMS string
+    discovery_date: str | None = None
+    update_date: str | None = None
+    data_sources: dict[str, dict] = Field(default_factory=dict)
 
 
 class LightcurveResponseSingle(BaseModel):
@@ -81,7 +48,7 @@ class LightcurveResponseSingle(BaseModel):
     fwhm: float | None
     filter: str | None
     detection: int | None
-    tel_unit: str | None
+    camera: str | None
     survey: str | None
 
 

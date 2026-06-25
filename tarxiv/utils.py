@@ -1,5 +1,4 @@
 # Misc. utility functions
-import time
 
 from logstash_async.handler import AsynchronousLogstashHandler
 from logstash_async.handler import LogstashFormatter
@@ -12,6 +11,7 @@ import yaml
 import sys
 import os
 import re
+
 
 # Reporting mode flags
 PRINT = 1
@@ -88,7 +88,6 @@ class TarxivModule:
         self.logger.info(status, extra=status)
 
 
-
 class SurveyMetaMissingError(Exception):
     """TBD"""
 
@@ -144,8 +143,8 @@ def deg2sex(ra_deg, dec_deg, arcsec_precision=4):
     c = SkyCoord(ra=ra_deg * u.degree, dec=dec_deg * u.degree)
     return c.to_string("hmsdms", sep=":", precision=arcsec_precision).split()
 
+
 def camel_to_snake(text: str) -> str:
     # Match lowercase/digit followed by an uppercase letter and split them with an underscore
-    str1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', text)
-    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', str1).lower()
-
+    str1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", text)
+    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", str1).lower()

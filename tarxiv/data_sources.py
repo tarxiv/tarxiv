@@ -27,15 +27,13 @@ import re
 import os
 
 
-
-
 def summarize_lc_mags(obj_meta, lc_df):
     # We are interested in peak mag, most recent detection, most recent non detection, and recent change
     peak_mags = []
     recent_dets = []
     recent_nondets = []
 
-    for filter_name, grp_df in lc_df.groupby('filter'):
+    for filter_name, grp_df in lc_df.groupby("filter"):
         detections = grp_df[grp_df["detection"] == 1].copy()
         non_detections = grp_df[grp_df["detection"] == 0].copy()
         if len(detections) > 0:
@@ -44,9 +42,9 @@ def summarize_lc_mags(obj_meta, lc_df):
             peak_mag = {
                 "filter": filter_name,
                 "limit": precision(float(peak_row["mag"]), 8),
-                "date": Time(
-                    peak_row["mjd"], format="mjd", scale="utc"
-                ).isot.replace("T", " "),
+                "date": Time(peak_row["mjd"], format="mjd", scale="utc").isot.replace(
+                    "T", " "
+                ),
             }
             peak_mags.append(peak_mag)
             # For mag_rate first get most recent non detection if one exists
@@ -57,7 +55,7 @@ def summarize_lc_mags(obj_meta, lc_df):
                 valid_non_dets = non_detections[
                     (non_detections["mjd"] <= earliest_det["mjd"])
                     & (non_detections["limit"] >= earliest_det["mag"])
-                    ].copy()
+                ].copy()
                 # Append to data frame if we have any
                 if len(valid_non_dets) > 0:
                     valid_non_dets["mag"] = valid_non_dets["limit"]
@@ -66,16 +64,19 @@ def summarize_lc_mags(obj_meta, lc_df):
 
                     with warnings.catch_warnings():
                         warnings.simplefilter(action="ignore", category=FutureWarning)
-                        detections = pd.concat( [detections, recent_non_det], ignore_index=True)
+                        detections = pd.concat(
+                            [detections, recent_non_det], ignore_index=True
+                        )
 
             # Remove duplcate MJDs if exist (avoid divide by zero)
-            detections_non_dup = detections.drop_duplicates(subset=["mjd"], keep="first")
+            detections_non_dup = detections.drop_duplicates(
+                subset=["mjd"], keep="first"
+            )
             # Now sort and get the rate
             sorted_detections = detections_non_dup.sort_values("mjd")
             # Get mag rate for each point in the filter_wise group
             sorted_detections["mag_rate"] = -(
-                    sorted_detections["mag"].diff()
-                    / sorted_detections["mjd"].diff()
+                sorted_detections["mag"].diff() / sorted_detections["mjd"].diff()
             )
             # Replace nan
             sorted_detections["mag_rate"] = sorted_detections["mag_rate"].replace(
@@ -87,9 +88,9 @@ def summarize_lc_mags(obj_meta, lc_df):
                 "filter": filter_name,
                 "mag": precision(float(peak_row["mag"]), 8),
                 "mag_rate": precision(recent_row["mag_rate"], 6),
-                "date": Time(
-                    recent_row["mjd"], format="mjd", scale="utc"
-                ).isot.replace("T", " "),
+                "date": Time(recent_row["mjd"], format="mjd", scale="utc").isot.replace(
+                    "T", " "
+                ),
             }
             recent_dets.append(recent_det)
         # Now get the most recent non-detection value
@@ -99,9 +100,9 @@ def summarize_lc_mags(obj_meta, lc_df):
             recent_nondet = {
                 "filter": filter_name,
                 "mag": precision(float(nondet_row["limit"]), 8),
-                "date": Time(
-                    nondet_row["mjd"], format="mjd", scale="utc"
-                ).isot.replace("T", " "),
+                "date": Time(nondet_row["mjd"], format="mjd", scale="utc").isot.replace(
+                    "T", " "
+                ),
             }
             recent_nondets.append(recent_nondet)
     # Append to meta and return
@@ -187,9 +188,7 @@ class ASAS_SN(TarxivModule):  # noqa: N801
             lc_df["mjd"] = lc_df.apply(
                 lambda row: Time(row["jd"], format="jd").mjd, axis=1
             )
-            lc_df = lc_df.rename(
-                {"phot_filter": "filter"}, axis=1
-            )
+            lc_df = lc_df.rename({"phot_filter": "filter"}, axis=1)
             # Do not return data from bad images
             lc_df = lc_df[lc_df["quality"] != "B"]
             # Flag non-detections
@@ -209,7 +208,7 @@ class ASAS_SN(TarxivModule):  # noqa: N801
                     "filter",
                     "detection",
                     "camera",
-                    "survey"
+                    "survey",
                 ]
             ]
             # Now let us cut the mjd of this
@@ -329,8 +328,12 @@ class ZTF(TarxivModule):
                 'x3hsp',
                 'x4lac',
             ]
-            meta = {k :v for k, v in meta_line.items() if k in meta_columns
-                           if v not in [None, 'nan', 'None']}
+            meta = {
+                k: v
+                for k, v in meta_line.items()
+                if k in meta_columns
+                if v not in [None, "nan", "None"]
+            }
             meta["object_id"] = ztf_name
             meta["source_id_name"] = "objectId"
 
@@ -373,7 +376,7 @@ class ZTF(TarxivModule):
                     "filter",
                     "detection",
                     "camera",
-                    "survey"
+                    "survey",
                 ]
             ]
 
@@ -430,7 +433,7 @@ class TNS(TarxivModule):
         :return: metadata dictionary
         """
         # Set meta empty to start
-        meta= None
+        meta = None
         # Initial status
         status = {"object_id": object_id}
         # Wait to avoid rate limiting
@@ -469,7 +472,7 @@ class TNS(TarxivModule):
             "hostname": result["hostname"],
             "discovery_date": result["discoverydate"].replace(" ", "T"),
             "reporting_group": result["reporting_group"]["group_name"],
-            "discovery_data_source": result["discovery_data_source"]["group_name"]
+            "discovery_data_source": result["discovery_data_source"]["group_name"],
         }
 
         self.logger.info(status, extra=status)
@@ -503,7 +506,7 @@ class Lasair(TarxivModule):
             meta["ra_deg"] = meta["raDeg"]
             meta["dec_deg"] = meta["decDeg"]
             meta["redshift"] = meta["z"]
-            del meta['transient_object_id'], meta["raDeg"], meta["decDeg"], meta["z"]
+            del meta["transient_object_id"], meta["raDeg"], meta["decDeg"], meta["z"]
 
             status["status"] = "query success"
 
@@ -532,7 +535,6 @@ class LSST(TarxivModule):
             debug=debug,
         )
 
-
     def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=8):
         status = {"object_id": object_id}
         meta = None
@@ -554,7 +556,9 @@ class LSST(TarxivModule):
                 raise SurveyMetaMissingError
 
             # Get nearest
-            nearest = objects[np.argmin([obj["v:separation_degree"] for obj in objects])]
+            nearest = objects[
+                np.argmin([obj["v:separation_degree"] for obj in objects])
+            ]
 
             # Query fink
             r1 = requests.post(
@@ -576,7 +580,7 @@ class LSST(TarxivModule):
             meta["dec_deg"] = dec_deg
             # Put all the rest of the meta in
             for k, v in meta_line.items():
-                if k[0] == "f" and v != 'nan' and "tns" not in k and "version" not in k:
+                if k[0] == "f" and v != "nan" and "tns" not in k and "version" not in k:
                     meta[k[2:]] = v
 
             # Format output in a DataFrame
@@ -587,8 +591,21 @@ class LSST(TarxivModule):
             df["camera"] = "main"
             df["detection"] = 1
 
-            df = df.rename({"r:midpointMjdTai": "mjd", "r:band": "filter", "r:snr": "snr"}, axis=1)
-            lc_df = df[["mjd", "mag", "mag_err", "filter", "snr", "detection", "limit", "camera"]]
+            df = df.rename(
+                {"r:midpointMjdTai": "mjd", "r:band": "filter", "r:snr": "snr"}, axis=1
+            )
+            lc_df = df[
+                [
+                    "mjd",
+                    "mag",
+                    "mag_err",
+                    "filter",
+                    "snr",
+                    "detection",
+                    "limit",
+                    "camera",
+                ]
+            ]
             lc_df["survey"] = "lsst"
 
             # Now let us cut the mjd of this

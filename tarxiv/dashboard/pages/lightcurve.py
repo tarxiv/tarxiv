@@ -12,8 +12,8 @@ from ..components import (
     create_message_banner,
 )
 from ...dto import (
-    MetadataResponseModel,
     LightcurveResponseModel,
+    MetadataResponseModel,
 )
 from ...auth import (
     get_authenticated_user,
@@ -45,16 +45,25 @@ def layout(id=None, **kwargs):
 
     if id and user:
         # User came via deep link and has a saved session
-        results, status, banner, lc_store, aladin_store = perform_search(
-            id, token, logger
-        )
-        print(f"aladin_store: {aladin_store}")
+        (
+            results_top,
+            citations_card,
+            full_metadata,
+            status,
+            banner,
+            lc_store,
+            aladin_store,
+        ) = perform_search(id, token, logger)
     elif id and not user:
         validation = validate_token(token)
 
         # Deep link but no token: Show the search bar pre-filled with ID
         # but warn the user that a token is missing.
-        results = html.Div()
+        results_top, citations_card, full_metadata = (
+            html.Div(),
+            html.Div(),
+            html.Div(),
+        )
         status = "Authentication required"
 
         if validation["status"] == TokenStatus.EXPIRED:
@@ -72,13 +81,15 @@ def layout(id=None, **kwargs):
         aladin_store = None
     else:
         # Default empty search page
-        results, status, banner, lc_store, aladin_store = (
+        results_top, citations_card, full_metadata, status, banner = (
+            html.Div(),
+            html.Div(),
             html.Div(),
             "",
             html.Div(),
-            None,
-            None,
         )
+        lc_store = None
+        aladin_store = None
 
     return dmc.Stack(
         children=[
@@ -150,9 +161,23 @@ def layout(id=None, **kwargs):
                     ),
                     dmc.Stack(
                         id="results-container",
-                        children=[results],
+                        children=[results_top],
                     ),
-                    html.Div(id="object-tagging-container"),
+                    # Citations sits half-half with the object tagging panel. The
+                    # tagging container lives here in the base layout (not inside
+                    # the search results) so its callbacks always have a target,
+                    # even on the empty page.
+                    dmc.Grid(
+                        [
+                            dmc.GridCol(citations_card, span=6),
+                            dmc.GridCol(
+                                html.Div(id="object-tagging-container"), span=6
+                            ),
+                        ],
+                        gutter="md",
+                    ),
+                    # Full metadata JSON dump pinned to the very bottom.
+                    full_metadata,
                 ],
             ),
         ],
@@ -228,31 +253,64 @@ clientside_callback(
 )
 
 
-def _extract_tns_coordinate(meta, field_name):
-    entries = meta.get(field_name, [])
-    if not isinstance(entries, list):
-        entries = [entries]
+# Map source-keyed metadata source names to citation .bib file stems.
+# New-schema source keys use underscores (e.g. asas_sn) while the bib files
+# in aux/citations use hyphens (asas-sn.bib); this bridges the two.
+SOURCE_TO_BIB = {
+    "tns": "tns",
+    "ztf": "ztf",
+    "atlas": "atlas",
+    "atlas_twb": "atlas_twb",
+    "fink": "fink",
+    "mangrove": "mangrove",
+    "sherlock": "sherlock",
+    "asas_sn": "asas-sn",
+    "asas-sn": "asas-sn",
+    "asas_sn_skypatrol": "asas-sn_skypatrol",
+    "asas-sn_skypatrol": "asas-sn_skypatrol",
+    "lasair": "lasair",
+    "lsst": "lsst",
+}
 
-    for entry in entries:
-        if (
-            isinstance(entry, dict)
-            and entry.get("source") == "tns"
-            and "value" in entry
-        ):
-            return entry["value"]
 
-    return None
+def _extract_object_coordinates(meta):
+    """Return (ra, dec) for the Aladin target from source-keyed metadata.
+
+    Prefers the top-level decimal coordinates (``ra_deg``/``dec_deg``), then TNS
+    and any other source providing ``ra_deg``/``dec_deg``, and finally the
+    top-level sexagesimal strings (Aladin accepts sexagesimal targets too).
+    Returns (None, None) if nothing usable is found.
+    """
+    ra = meta.get("ra_deg")
+    dec = meta.get("dec_deg")
+    if ra is not None and dec is not None:
+        return ra, dec
+
+    data_sources = meta.get("data_sources") or {}
+    preferred = ["tns"] + [key for key in data_sources if key != "tns"]
+    for source in preferred:
+        payload = data_sources.get(source) or {}
+        ra = payload.get("ra_deg")
+        dec = payload.get("dec_deg")
+        if ra is not None and dec is not None:
+            return ra, dec
+
+    ra = meta.get("ra_hms") or meta.get("ra")
+    dec = meta.get("dec_dms") or meta.get("dec")
+    if ra and dec:
+        return ra, dec
+
+    return None, None
 
 
 def _build_aladin_store(meta):
-    ra_tns = _extract_tns_coordinate(meta, "ra_deg")
-    dec_tns = _extract_tns_coordinate(meta, "dec_deg")
-    if ra_tns is None or dec_tns is None:
+    ra, dec = _extract_object_coordinates(meta)
+    if ra is None or dec is None:
         return None
     return {
         "source": "tns",
-        "ra_deg": ra_tns,
-        "dec_deg": dec_tns,
+        "ra_deg": ra,
+        "dec_deg": dec,
     }
 
 
@@ -447,6 +505,68 @@ def get_metadata_data(object_id, token, logger):
     return None
 
 
+def get_citations_data(sources, token, logger):
+    """Fetch concatenated BibTeX citations for a list of metadata source keys.
+
+    The ``/citations`` endpoint takes a JSON body of bib-file stems and returns
+    ``{"citations": "<concatenated bibtex>"}``. Source keys with no matching
+    .bib file are skipped. Returns the citation string, or None on failure /
+    when no sources resolve to a citation.
+    """
+    bib_names = []
+    unmapped = []
+    for source in sources or []:
+        bib = SOURCE_TO_BIB.get(source)
+        if bib:
+            if bib not in bib_names:
+                bib_names.append(bib)
+        else:
+            unmapped.append(source)
+    if unmapped:
+        logger.warning({"warning": f"No citation .bib mapping for sources: {unmapped}"})
+    logger.info({"info": f"Citations: requesting bib files for {bib_names}"})
+    if not bib_names:
+        return None
+
+    host = os.getenv("TARXIV_API_HOST", "tarxiv-api")
+    port = os.getenv("TARXIV_API_PORT", "9001")
+    api_url = os.getenv("TARXIV_INTERNAL_API_URL", f"http://{host}:{port}")
+    try:
+        response = requests.post(
+            url=f"{api_url}/citations",
+            json={"sources": bib_names},
+            timeout=10,
+            headers={
+                "accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}",
+            },
+        )
+    except requests.RequestException as e:
+        logger.error({"error": f"Citations request failed: {str(e)}"})
+        return None
+
+    logger.info({"info": f"citations response status: {response.status_code}"})
+    if response.status_code == 200:
+        try:
+            citation_str = response.json().get("citations")
+        except ValueError as e:
+            logger.error({"error": f"Failed to parse citations response: {str(e)}"})
+            return None
+        logger.info({
+            "info": f"Citations: received {len(citation_str or '')} chars from API"
+        })
+        return citation_str or None
+
+    logger.warning({
+        "warning": (
+            f"Citations request returned status {response.status_code}: "
+            f"{response.text[:200]}"
+        )
+    })
+    return None
+
+
 def get_lightcurve_data(object_id, token, logger):
     """Fetch lightcurve data for an object."""
     response = fetch_api_data("get_object_lc", object_id, token, logger)
@@ -471,7 +591,17 @@ def get_lightcurve_data(object_id, token, logger):
 
 
 def perform_search(object_id, token, logger):
-    """The core logic shared by both Button and URL triggers."""
+    """The core logic shared by both Button and URL triggers.
+
+    Returns a tuple of
+    ``(results_top, citations_card, full_metadata, status, banner, lc_store,
+    aladin_store)``. The three render slots correspond to the pieces produced by
+    ``format_object_metadata``; ``layout`` drops them into the page so the
+    object-tagging container can stay in the always-present base layout.
+    """
+    # Render slots used by every non-success early return (no object to show).
+    empty_render = (html.Div(), html.Div(), html.Div())
+
     status_msg = f"Searching for object: {object_id}"
     logger.info({"search_type": "id", "object_id": object_id})
 
@@ -480,7 +610,7 @@ def perform_search(object_id, token, logger):
         meta = get_metadata_data(object_id, token, logger)
     except Unauthorized as e:
         return (
-            html.Div(),
+            *empty_render,
             "Authentication required",
             create_message_banner(str(e), "error"),
             None,
@@ -492,7 +622,7 @@ def perform_search(object_id, token, logger):
         })
         logger.exception(e)
         return (
-            html.Div(),
+            *empty_render,
             "Error",
             create_message_banner(f"Failed to fetch metadata: {str(e)}", "error"),
             None,
@@ -504,13 +634,30 @@ def perform_search(object_id, token, logger):
             f"No object found with ID: {object_id}", "error"
         )
         logger.warning({"warning": f"Object ID not found: {object_id}"})
-        return html.Div(), status_msg, error_banner, None, None
+        return (*empty_render, status_msg, error_banner, None, None)
+
+    tarxiv_id = meta.get("tarxiv_id")
+    if not tarxiv_id:
+        error_banner = create_message_banner(
+            f"Object {object_id} has no associated TarXiv ID.", "error"
+        )
+        logger.warning({"warning": f"Object {object_id} missing TarXiv ID."})
+        return (*empty_render, status_msg, error_banner, None, None)
 
     # Fetch Lightcurve
-    lc_data = get_lightcurve_data(object_id, token, logger)
+    lc_data = get_lightcurve_data(tarxiv_id, token, logger)
+    logger.info({"info": f"Lightcurve data fetched for object {object_id}."})
+    logger.debug({"debug": f"Lightcurve data: {lc_data}"})
+
+    # Fetch citations for the sources present in the metadata.
+    citation_str = get_citations_data(
+        list((meta.get("data_sources") or {}).keys()), token, logger
+    )
 
     # Display metadata
-    result = format_object_metadata(object_id, meta, logger)
+    results_top, citations_card, full_metadata = format_object_metadata(
+        object_id, meta, citation_str, logger
+    )
     success_banner = create_message_banner(
         f"Successfully loaded object: {object_id}", "success"
     )
@@ -526,7 +673,15 @@ def perform_search(object_id, token, logger):
             )
         })
 
-    return result, status_msg, success_banner, lc_store, aladin_store
+    return (
+        results_top,
+        citations_card,
+        full_metadata,
+        status_msg,
+        success_banner,
+        lc_store,
+        aladin_store,
+    )
 
 
 @callback(
@@ -539,18 +694,21 @@ def perform_search(object_id, token, logger):
     prevent_initial_call=False,
 )
 def load_object_tagging_panel(lightcurve_store):
+    # The tagging container only exists inside the loaded-object results, so when
+    # no object is shown (empty page / deep link without auth) we must no_update
+    # rather than write to a component that isn't in the layout.
     if not lightcurve_store or not isinstance(lightcurve_store, dict):
-        return html.Div(), [], []
+        return no_update, no_update, no_update
 
     object_id = lightcurve_store.get("id")
     if not object_id:
-        return html.Div(), [], []
+        return no_update, no_update, no_update
 
     logger = current_app.config["TXV_LOGGER"]
     token = get_jwt_from_request(request)
     validation = validate_token(token)
     if validation["status"] != TokenStatus.VALID:
-        return html.Div(), [], []
+        return no_update, no_update, no_update
 
     tags_response = fetch_visible_tags(token, logger)
     object_tags_response = fetch_object_tags(object_id, token, logger)

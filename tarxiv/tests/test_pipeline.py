@@ -2,7 +2,12 @@
 
 import os
 
-from tarxiv.data_sources import TNS, ATLAS, ASAS_SN, ZTF
+from tarxiv.data_sources import (
+    TNS,
+    ASAS_SN,
+    ZTF,
+    # ATLAS,
+)
 
 PATH = os.path.join(os.path.dirname(__file__), "../../aux")
 
@@ -29,33 +34,33 @@ def get_tns_meta(obj_name, path=PATH):
     return tns_meta
 
 
-def get_atlas_data(obj_name, ra_deg, dec_deg, path=PATH):
-    """Get data and metadata from ATLAS
+# def get_atlas_data(obj_name, ra_deg, dec_deg, path=PATH):
+#     """Get data and metadata from ATLAS
 
-    Parameters
-    ----------
-    obj_name: str
-        Object name
-    ra_deg: float
-        RA for the object, in degree
-    dec_deg: float
-        Declination for the object, in degree
-    conffolder: str
-        Folder name with conf files.
-        Defaut is aux/
+#     Parameters
+#     ----------
+#     obj_name: str
+#         Object name
+#     ra_deg: float
+#         RA for the object, in degree
+#     dec_deg: float
+#         Declination for the object, in degree
+#     conffolder: str
+#         Folder name with conf files.
+#         Defaut is aux/
 
-    Returns
-    -------
-    atlas_meta: dict
-        Dictionary with ATLAS metadata
-    atlas_lc: dict
-        ATLAS light curve
+#     Returns
+#     -------
+#     atlas_meta: dict
+#         Dictionary with ATLAS metadata
+#     atlas_lc: dict
+#         ATLAS light curve
 
-    """
-    txv_atlas = ATLAS(path)
-    atlas_meta, atlas_lc, status = txv_atlas.get_object(obj_name, ra_deg, dec_deg)
-    assert status["status"] == "match", status
-    return atlas_meta, atlas_lc
+#     """
+#     txv_atlas = ATLAS(path)
+#     atlas_meta, atlas_lc, status = txv_atlas.get_object(obj_name, ra_deg, dec_deg)
+#     assert status["status"] == "match", status
+#     return atlas_meta, atlas_lc
 
 
 def get_ztf_data(obj_name, ra_deg, dec_deg, path=PATH):
