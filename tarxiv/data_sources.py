@@ -130,7 +130,7 @@ class ASAS_SN(TarxivModule):  # noqa: N801
         # Also need ASAS-SN client
         self.client = SkyPatrolClient(verbose=False)
 
-    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=8):
+    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=5):
         """Get ASAS-SN Lightcurve curve from coordinates using cone_search.
 
         :param object_id: name of object (used for logging); str
@@ -244,7 +244,7 @@ class ZTF(TarxivModule):
             debug=debug,
         )
 
-    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=8):
+    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=5):
         """Get ZTF Lightcurve from coordinates using cone_search.
 
         :param object_id: name of object (used for logging); str
@@ -535,7 +535,7 @@ class LSST(TarxivModule):
             debug=debug,
         )
 
-    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=8):
+    def get_object(self, object_id, ra_deg, dec_deg, mjd_min, mjd_max, radius=5):
         status = {"object_id": object_id}
         meta = None
         lc_df = pd.DataFrame()
@@ -639,7 +639,7 @@ class ANTARES(TarxivModule):
             reporting_mode=reporting_mode,
             debug=debug,
         )
-    def get_object(self, object_id=None, ra_deg=None, dec_deg=None, radius=8):
+    def get_object(self, object_id=None, ra_deg=None, dec_deg=None, radius=5):
         status = {"object_id": object_id}
         meta = None
         try:
@@ -671,55 +671,80 @@ class ANTARES(TarxivModule):
         return meta
 
 
-class AlerceZTF(TarxivModule):
+class Alerce(TarxivModule):
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
-            module="alerce_ztf",
+            module="alerce",
             reporting_mode=reporting_mode,
             debug=debug,
         )
         self.client = Alerce()
 
-    def get_object(self, object_id=None, ra_deg=None, dec_deg=None, radius=8):
+    def get_object(self, object_id=None, ra_deg=None, dec_deg=None, radius=5):
         # Check both ztf and lsst
         status = {"object_id": object_id}
-        meta = None
+        meta = {}
+
         try:
+            # Now get lsst
+            lsst_df = self.client.query_objects(ra=ra_deg, dec=dec_deg, radius=radius, survey="lsst")
+            if not lsst_df.empty:
+                # Get object
+                lsst_obj = lsst_df.iloc[0]
+                # Get probabilities
+                result = self.client.query_probabilities(oid=lsst_obj.oid, survey="lsst")
+                prob_df = pd.DataFrame(result)
+                prob_info = prob_df[
+                    (prob_df["classifier_name"] == self.config["alerce"]["lsst_classifier"])
+                    & (prob_df["ranking"] == 1)].iloc[0].to_dict()
+
+                # Add to meta
+                meta["lsst_object_id"] = lsst_obj.oid
+                meta["lsst_classifier"] = prob_info["classifier_name"]
+                meta["lsst_class_name"] = prob_info["class_name"]
+                meta["lsst_class_prob"] = prob_info["probability"]
+                meta["lsst_class_version"] = prob_info["classifier_version"]
+
+            # Now get ZTF
             ztf_df = self.client.query_objects(ra=ra_deg, dec=dec_deg, radius=radius, survey="ztf")
-            if ztf_df.empty:
+            if not ztf_df.empty:
+                # Get object
+                ztf_obj = ztf_df.iloc[0]
+                # Get probabilities
+                result = self.client.query_probabilities(oid=ztf_obj.oid, survey="ztf")
+                prob_df = pd.DataFrame(result)
+                prob_info = prob_df[
+                    (prob_df["classifier_name"] == self.config["alerce"]["ztf_classifier"])
+                    & (prob_df["ranking"] == 1)].iloc[0].to_dict()
+
+                # Add to meta
+                meta["ztf_object_id"] = ztf_obj.oid
+                meta["ztf_classifier"] = prob_info["classifier_name"]
+                meta["ztf_class_name"] = prob_info["class_name"]
+                meta["ztf_class_prob"] = prob_info["probability"]
+                meta["ztf_class_version"] = prob_info["classifier_version"]
+
+                result = self.client.query_features(oid=ztf_obj.oid, survey="ztf")
+                feat_df = pd.DataFrame(result)
+                if not feat_df.empty:
+                    # Reduce to SPM features
+                    feat_df = feat_df[feat_df["name"].str.startswith("SPM")]
+                    # Band lookup
+                    bands = {1: "g", 2: "r", 3: "i"}
+                    feat_df["filter"] = feat_df["fid"].map(bands)
+
+                    meta["features"] = []
+
+                    for _, row in feat_df.iterrows():
+                        feat = {"name": row["name"], "value": row["value"], "survey": "ZTF", "filter": row["band"]}
+                        meta["features"].append(feat)
+                    meta["ztf_feature_version"] = feat_df.iloc[0]["version"]
+
+            # If we have nothing then raise error
+            if not meta:
+                meta = None
                 raise SurveyMetaMissingError
-
-            # Get object
-            ztf_obj = ztf_df.iloc[0]
-            # Get probabilities
-            result = self.client.query_probabilities(oid=ztf_obj.oid, survey="ztf")
-            prob_df = pd.DataFrame(result)
-            prob_info = prob_df[
-                (prob_df["classifier_name"] == self.config["alerce_ztf"]["classifier"])
-                & (prob_df["ranking"] == 1)]
-
-            meta = {
-                "object_id": ztf_obj.oid,
-                "classifier": {
-                    "name": prob_info.classifier_name,
-                    "version": prob_info.classifier_version,
-                    "probability": prob_info.probability,
-                    "result": prob_info.class_name
-                }
-            }
-            self.logger.debug(meta, extra=meta)
-            result = self.client.query_features(oid=ztf_obj.oid, survey="ztf")
-            feat_df = pd.DataFrame(result)
-            print(feat_df)
-            # Reduce to SPM features
-            feat_df = feat_df[feat_df["name"].str.startswith("SPM")]
-            # Band lookup
-            bands = {1: "g", 2: "r", 3: "i"}
-            feat_df["filter"] = feat_df["fid"].map(bands)
-            meta["features"] = {"bands": {}, "version": feat_df.iloc[0]["version"]}
-            for band, grp_df in feat_df.groupby('filter'):
-                meta["features"][band] = {f['name']: f["value"] for _, f in grp_df.iterrows()}
 
         except SurveyMetaMissingError:
             status["status"] = "no match"
@@ -733,56 +758,6 @@ class AlerceZTF(TarxivModule):
         self.logger.info(status, extra=status)
         return meta
 
-class AlerceLSST(TarxivModule):
-    def __init__(self, script_name, reporting_mode, debug=False):
-        super().__init__(
-            script_name=script_name,
-            module="alerce_lsst",
-            reporting_mode=reporting_mode,
-            debug=debug,
-        )
-        self.client = Alerce()
-
-    def get_object(self, object_id=None, ra_deg=None, dec_deg=None, radius=8):
-        # Check both ztf and lsst
-        status = {"object_id": object_id}
-        meta = None
-        try:
-            lsst_df = self.client.query_objects(ra=ra_deg, dec=dec_deg, radius=radius, survey="ztf")
-            if lsst_df.empty:
-                raise SurveyMetaMissingError
-
-            # Get object
-            lsst_obj = lsst_df.iloc[0]
-            # Get probabilities
-            result = self.client.query_probabilities(oid=lsst_obj.oid, survey="lsst")
-            prob_df = pd.DataFrame(result)
-            prob_info = prob_df[
-                (prob_df["classifier_name"] == self.config["alerce_lsst"]["classifier"])
-                & (prob_df["ranking"] == 1)]
-
-            meta = {
-                "object_id": lsst_obj.oid,
-                "classifier": {
-                    "name": prob_info.classifier_name,
-                    "version": prob_info.classifier_version,
-                    "probability": prob_info.probability,
-                    "result": prob_info.class_name
-                }
-            }
-
-
-        except SurveyMetaMissingError:
-            status["status"] = "no match"
-
-        except Exception as e:
-            status.update({
-                "status": "encontered unexpected error",
-                "error_message": str(e),
-                "details": traceback.format_exc(),
-            })
-        self.logger.info(status, extra=status)
-        return meta
 
 if __name__ == "__main__":
     """Execute the test suite"""
