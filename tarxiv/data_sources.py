@@ -671,7 +671,7 @@ class ANTARES(TarxivModule):
         return meta
 
 
-class Alerce(TarxivModule):
+class AlerceMod(TarxivModule):
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
