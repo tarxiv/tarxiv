@@ -1,6 +1,6 @@
 
 from .utils import TarxivModule, TarxivPipelineError, deg2sex
-from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair, ANTARES
+from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair, ANTARES, AlerceMod
 from .database import TarxivDB
 from confluent_kafka import Producer, Consumer, KafkaError
 from astropy.time import Time
@@ -37,16 +37,17 @@ class TNSPipeline(TarxivModule):
         self.lsst = LSST(script_name, reporting_mode, debug)
         self.lasair = Lasair(script_name, reporting_mode, debug)
         self.antares = ANTARES(script_name, reporting_mode, debug)
-
+        self.alerce = AlerceMod(script_name, reporting_mode, debug)
 
         # Specify data source
         self.data_sources = {
-            "tns": TNS,
-            "fink_ztf": ZTF,
-            "fink_lsst": LSST,
-            "asas_sn": ASAS_SN,
-            "sherlock": Lasair,
-            "antares": ANTARES,
+            "tns": self.tns,
+            "fink_ztf": self.ztf,
+            "fink_lsst": self.lsst,
+            "asas_sn": self.asas_sn,
+            "sherlock": self.lasair,
+            "antares": self.antares,
+            "alerce": self.alerce,
         }
 
         # Get database
@@ -148,18 +149,21 @@ class TNSPipeline(TarxivModule):
         # Get additional meta from the survey
         lasair_meta = self.lasair.get_object(txv_id, ra_deg, dec_deg)
         antares_meta = self.antares.get_object(txv_id, ra_deg, dec_deg)
+        alerce_meta = self.alerce.get_object(txv_id, ra_deg, dec_deg)
 
         # Add data sources to meta dictSelf
-        if antares_meta is not None:
-            meta["data_sources"]["antares"] = antares_meta
         if lasair_meta is not None:
             meta["data_sources"]["sherlock"] = lasair_meta
+        if alerce_meta is not None:
+            meta["data_sources"]["alerce"] = alerce_meta
+        if antares_meta is not None:
+            meta["data_sources"]["antares"] = antares_meta
         if fink_ztf_meta is not None:
             meta["data_sources"]["fink_ztf"] = fink_ztf_meta
-        if asas_sn_meta is not None:
-            meta["data_sources"]["asas_sn"] = asas_sn_meta
         if fink_lsst_meta is not None:
             meta["data_sources"]["fink_lsst"] = fink_lsst_meta
+        if asas_sn_meta is not None:
+            meta["data_sources"]["asas_sn"] = asas_sn_meta
 
         # Collate lightcurves and add peak mag measurements to schema
         lc_df = pd.concat([ztf_lc, asas_sn_lc, lsst_lc])
@@ -188,7 +192,7 @@ class TNSPipeline(TarxivModule):
         mjd_min = disc_mjd - active_settings["prior_days"]
         mjd_max = disc_mjd + active_settings["active_days"]
 
-        for source_name, source_class in meta["data_sources"]:
+        for source_name, source_class in self.data_sources.items():
             # How often does this need to be updated
             update_freq = self.config[source_name]["update_frequency"]
             # Update if past frequency threshold
@@ -199,7 +203,7 @@ class TNSPipeline(TarxivModule):
                     if source_meta is not None:
                         meta["data_sources"][source_name] = source_meta
                 else:
-                    # We arre going to pull the whole new C
+                    # We are going to pull the whole new C
                     source_meta, source_lc = source_class.get_object(object_id=txv_id,
                                                                      ra_deg=meta["ra_deg"],
                                                                      dec_deg=meta["dec_deg"],
@@ -293,13 +297,15 @@ class TNSPipeline(TarxivModule):
         all_tns_ids = all_tns_df["name"].tolist()
         cur_tns_df = self.db.get_all_catalog_objects("tns")
         cur_tns_ids = cur_tns_df["source_id"].tolist()
-        missing_ids = list(set(all_tns_ids) - set(cur_tns_ids))
-        # Combine 2
-        update_objects = daily_tns_ids + missing_ids
 
-        # Pull TNS info and submit to bulk update queue
-        for object_id in update_objects:
+        # Submit missing IDs for bulk pulls
+        missing_ids = list(set(all_tns_ids) - set(cur_tns_ids))
+        for object_id in missing_ids:
             self.producer.produce(topic="internal_tns_bulk", value=object_id, callback=self.acked)
+
+        # Submit updates to update pipeline
+        for object_id in missing_ids:
+            self.producer.produce(topic="internal_tns_updates", value=object_id, callback=self.acked)
 
         # Finish by flushing
         self.producer.flush(timeout=10.0)
@@ -334,32 +340,45 @@ class TNSPipeline(TarxivModule):
             else:
                 tns_object_id = msg.value().decode("utf-8")
                 try:
-                    # Get survey information
-                    txv_id, obj_meta, obj_lc = self.get_object(tns_object_id)
+                    if topic in ["internal_tns_alerts", "internal_tns_bulk"]:
+                        # Get survey information
+                        txv_id, obj_meta, obj_lc = self.get_object(tns_object_id)
+                        # Get timestamp
+                        timestamp = datetime.datetime.now().isoformat()
+                        # Add insertion date to internal meta as well
+                        obj_meta["update_date"] = timestamp
+                        # Upsert to database
+                        self.upsert_object(txv_id, obj_meta, obj_lc)
 
-                    # Get timestamp
-                    timestamp = datetime.datetime.now().isoformat()
-                    # Add insertion date to internal meta as well
-                    obj_meta["update_date"] = timestamp
+                        # Submit to hopskotch
+                        stream = Stream(self.hop_auth)
+                        with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
+                            # Additional information for hopskotch
+                            s.write(obj_meta)
+                            status = {
+                                "status": "submitted hopskotch alert",
+                                "object_id": tns_object_id,
+                            }
+                            self.logger.info(status, extra=status)
+                        # Submit kafka alert
+                        msg = json.dumps(obj_meta).encode('utf-8')
+                        self.producer.produce(topic='tns', value=msg, callback=self.acked)
+                        self.consumer.commit(asynchronous=False)
 
-                    # Upsert to database
-                    self.upsert_object(txv_id, obj_meta, obj_lc)
+                    elif topic in ["internal_tns_updates"]:
+                        txv_id, obj_meta, obj_lc = self.update_active_object(tns_object_id)
+                        # Get timestamp
+                        timestamp = datetime.datetime.now().isoformat()
+                        # Add insertion date to internal meta as well
+                        obj_meta["update_date"] = timestamp
+                        # Upsert to database
+                        self.upsert_object(txv_id, obj_meta, obj_lc)
+                        self.consumer.commit(asynchronous=False)
 
-                    # Submit to hopskotch
-                    stream = Stream(self.hop_auth)
-                    with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
-                        # Additional information for hopskotch
-                        s.write(obj_meta)
-                        status = {
-                            "status": "submitted hopskotch alert",
-                            "object_id": tns_object_id,
-                        }
-                        self.logger.info(status, extra=status)
+                    else:
+                        status = {"status": "bad topic somehow", "topic": topic}
+                        self.logger.error(status, extra=status)
 
-                    # Submit kafka alert
-                    msg = json.dumps(obj_meta).encode('utf-8')
-                    self.producer.produce(topic='tns', value=msg, callback=self.acked)
-                    self.consumer.commit(asynchronous=False)
 
                 except Exception:
                     stack_trace = traceback.format_exc()

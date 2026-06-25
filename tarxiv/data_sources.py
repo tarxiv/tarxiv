@@ -436,45 +436,54 @@ class TNS(TarxivModule):
         meta = None
         # Initial status
         status = {"object_id": object_id}
-        # Wait to avoid rate limiting
-        time.sleep(self.config["tns"]["rate_limit"])
-        # Run request to TNS server
-        get_url = self.site + "/api/get/object"
-        headers = {"User-Agent": self.marker}
-        obj_request = OrderedDict([
-            ("objid", ""),
-            ("objname", object_id),
-            ("photometry", "0"),
-            ("spectra", "0"),
-        ])
-        get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
-        response = requests.post(get_url, headers=headers, data=get_data)
-        if response.status_code != 200:
-            raise SurveyMetaMissingError(response.content)
+        try:
+            # Wait to avoid rate limiting
+            time.sleep(self.config["tns"]["rate_limit"])
+            # Run request to TNS server
+            get_url = self.site + "/api/get/object"
+            headers = {"User-Agent": self.marker}
+            obj_request = OrderedDict([
+                ("objid", ""),
+                ("objname", object_id),
+                ("photometry", "0"),
+                ("spectra", "0"),
+            ])
+            get_data = {"api_key": self.api_key, "data": json.dumps(obj_request)}
+            response = requests.post(get_url, headers=headers, data=get_data)
+            if response.status_code != 200:
+                raise SurveyMetaMissingError(response.content)
 
-        # Convert to json
-        response_json = response.json()
-        if "data" not in response_json.keys():
-            raise SurveyMetaMissingError("no 'data' in response")
+            # Convert to json
+            response_json = response.json()
+            if "data" not in response_json.keys():
+                raise SurveyMetaMissingError("no 'data' in response")
 
-        # Reduce meta to what we want
-        status["status"] = "query success"
-        result = response_json["data"]
-        meta = {
-            "object_id": result["objname"],
-            "source_id_name": "objname",
-            "ra_deg": result["radeg"],
-            "dec_deg": result["decdeg"],
-            "ra_hms": result["ra"],
-            "dec_dms": result["dec"],
-            "object_type": result["object_type"]["name"],
-            "redshift": result["redshift"],
-            "hostname": result["hostname"],
-            "discovery_date": result["discoverydate"].replace(" ", "T"),
-            "reporting_group": result["reporting_group"]["group_name"],
-            "discovery_data_source": result["discovery_data_source"]["group_name"],
-        }
+            # Reduce meta to what we want
+            status["status"] = "query success"
+            result = response_json["data"]
+            meta = {
+                "object_id": result["objname"],
+                "source_id_name": "objname",
+                "ra_deg": result["radeg"],
+                "dec_deg": result["decdeg"],
+                "ra_hms": result["ra"],
+                "dec_dms": result["dec"],
+                "object_type": result["object_type"]["name"],
+                "redshift": result["redshift"],
+                "hostname": result["hostname"],
+                "discovery_date": result["discoverydate"].replace(" ", "T"),
+                "reporting_group": result["reporting_group"]["group_name"],
+                "discovery_data_source": result["discovery_data_source"]["group_name"],
+            }
+        except SurveyMetaMissingError:
+            status["status"] = "no match"
 
+        except Exception as e:
+            status.update({
+                "status": "encontered unexpected error",
+                "error_message": str(e),
+                "details": traceback.format_exc(),
+            })
         self.logger.info(status, extra=status)
         return meta
 
@@ -700,7 +709,7 @@ class AlerceMod(TarxivModule):
                     & (prob_df["ranking"] == 1)].iloc[0].to_dict()
 
                 # Add to meta
-                meta["lsst_object_id"] = lsst_obj.oid
+                meta["lsst_object_id"] = str(lsst_obj.oid)
                 meta["lsst_classifier"] = prob_info["classifier_name"]
                 meta["lsst_class_name"] = prob_info["class_name"]
                 meta["lsst_class_prob"] = prob_info["probability"]

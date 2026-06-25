@@ -17,9 +17,11 @@ parser.add_argument('--debug', action='store_true', default=False,
 module_subparsers = parser.add_subparsers(title="command", dest="command")
 module_subparsers.add_parser("email", help="Turn on email monitor",
                              description="Watch email for new TNS alerts and submit to internal queue")
-module_subparsers.add_parser("alert_queue", help="Process new alerts from internal queue",
+module_subparsers.add_parser("alert_queue", help="Process objects to internal alert queue",
                              description="Watch internal queue (from TNS emails) and submit new alerts.")
-module_subparsers.add_parser("bulk_queue", help="Process alerts submitted to bulk internal queue",
+module_subparsers.add_parser("bulk_queue", help="Process objects submitted to internal bulk queue",
+                             description="Watch internal queue (from bulk commands) and submit objects.")
+module_subparsers.add_parser("update_queue", help="Process objects submitted to internal update queue",
                              description="Watch internal queue (from bulk commands) and update objects.")
 bulk = module_subparsers.add_parser("bulk_submit", help="Submit bulk updates or re-compute for TNS objects",
                                     description="Submit bulk updates or re-compute for TNS objects.")
@@ -51,6 +53,13 @@ elif args.command == "alert_queue":
     txv_tns.run_pipeline(topic="internal_tns_alerts")
 
 elif args.command == "bulk_queue":
+    txv_tns = TNSPipeline(script_name="tns_missing_ingest",
+                          reporting_mode=(PRINT | LOGFILE | DATABASE),
+                          debug=args.debug)
+    # Run the pipeline
+    txv_tns.run_pipeline(topic="internal_tns_bulk")
+
+elif args.command == "update_queue":
     txv_tns = TNSPipeline(script_name="tns_missing_ingest",
                           reporting_mode=(PRINT | LOGFILE | DATABASE),
                           debug=args.debug)

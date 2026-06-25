@@ -78,9 +78,10 @@ asas_sn:
   update_frequency: 1
 
 alerce:
+  meta_only: true
+  update_frequency: 10
   lsst_classifier: "stamp_classifier_rubin_beta_20260421"
   ztf_classifier: "lc_classifier_BHRF_forced_phot"
-  update_frequency: 10
 
 data_source_order: ["tns", "sherlock", "fink_ztf", "fink_lsst", "antares", "asas_sn"]
 
