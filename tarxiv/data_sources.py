@@ -146,7 +146,7 @@ class ATLAS(TarxivModule):
             task_url = None
             while not task_url:
                 with requests.Session() as s:
-                    response = s.post(url=f"{self.config['url']}/queue/", headers=self.headers,
+                    response = s.post(url=f"{self.config['atlas']['url']}/queue/", headers=self.headers,
                                       data={'ra': ra_deg, 'dec': dec_deg, 'mjd_min': mjd_min, 'mjd_max': mjd_max})
                     if response.status_code == 201:  # successfully queued
                         task_url = response.json()['url']
@@ -846,10 +846,15 @@ class AlerceMod(TarxivModule):
                     if not prob_info.empty:
                         prob_info = prob_info.iloc[0].to_dict()
                         # Add to meta
-                        meta["lsst_object_id"] = str(lsst_obj.oid),
-                        meta["lsst_classifier"] = prob_info["classifier_name"],
-                        meta["lsst_class_name"] = prob_info["class_name"],
-                        meta["lsst_class_prob"] = prob_info["probability"],
+                        meta["lsst_classifier"] = (prob_info["classifier_name"]
+                                                  if type(prob_info["classifier_name"]) == str
+                                                  else prob_info["classifier_name"][0],)
+                        meta["lsst_class_name"] = (prob_info["class_name"]
+                                                  if type(prob_info["class_name"]) == str
+                                                  else prob_info["class_name"][0],)
+                        meta["lsst_class_prob"] = (prob_info["probability"]
+                                                  if type(prob_info["probability"]) == float
+                                                  else prob_info["probability"][0],)
                         meta["lsst_class_version"] = prob_info["classifier_version"]
 
             # Now get ZTF
@@ -870,9 +875,15 @@ class AlerceMod(TarxivModule):
                         prob_info = prob_info.iloc[0].to_dict()
                         # Add to meta
                         meta["ztf_object_id"] = str(ztf_obj.oid),
-                        meta["ztf_classifier"] = prob_info["classifier_name"],
-                        meta["ztf_class_name"] = prob_info["class_name"],
-                        meta["ztf_class_prob"] = prob_info["probability"],
+                        meta["ztf_classifier"] = (prob_info["classifier_name"]
+                                                  if type(prob_info["classifier_name"]) == str
+                                                  else prob_info["classifier_name"][0],)
+                        meta["ztf_class_name"] = (prob_info["class_name"]
+                                                  if type(prob_info["class_name"]) == str
+                                                  else prob_info["class_name"][0],)
+                        meta["ztf_class_prob"] = (prob_info["probability"]
+                                                  if type(prob_info["probability"]) == float
+                                                  else prob_info["probability"][0],)
                         meta["ztf_class_version"] = prob_info["classifier_version"]
 
                 # Get featurs
