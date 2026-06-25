@@ -895,7 +895,7 @@ class AlerceMod(TarxivModule):
                     if not prob_info.empty:
                         prob_info = prob_info.iloc[0].to_dict()
                         # Add to meta
-                        meta["ztf_object_id"] = str(ztf_obj.oid),
+                        meta["ztf_object_id"] = ztf_obj.oid[0] if type(ztf_obj.oid) == tuple else ztf_obj.oid,
                         meta["ztf_classifier"] = prob_info["classifier_name"] if type(prob_info["classifier_name"]) == str else prob_info["classifier_name"][0]
                         meta["ztf_class_name"] = prob_info["class_name"] if type(prob_info["class_name"]) == str else prob_info["class_name"][0]
                         meta["ztf_class_prob"] = prob_info["probability"] if type(prob_info["probability"]) == float else prob_info["probability"][0]
