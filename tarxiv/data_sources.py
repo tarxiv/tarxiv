@@ -794,17 +794,18 @@ class AlerceMod(TarxivModule):
                 # Get probabilities
                 result = self.client.query_probabilities(oid=lsst_obj.oid, survey="lsst")
                 prob_df = pd.DataFrame(result)
-                prob_df["probability"] = prob_df["probability"].replace(np.nan, None)
-                prob_info = prob_df[
-                    (prob_df["classifier_name"] == self.config["alerce"]["lsst_classifier"])
-                    & (prob_df["ranking"] == 1)].iloc[0].to_dict()
+                if not prob_df.empty:
+                    prob_df["probability"] = prob_df["probability"].replace(np.nan, None)
+                    prob_info = prob_df[
+                        (prob_df["classifier_name"] == self.config["alerce"]["lsst_classifier"])
+                        & (prob_df["ranking"] == 1)].iloc[0].to_dict()
 
-                # Add to meta
-                meta["lsst_object_id"] = str(lsst_obj.oid)
-                meta["lsst_classifier"] = prob_info["classifier_name"]
-                meta["lsst_class_name"] = prob_info["class_name"]
-                meta["lsst_class_prob"] = prob_info["probability"]
-                meta["lsst_class_version"] = prob_info["classifier_version"]
+                    # Add to meta
+                    meta["lsst_object_id"] = str(lsst_obj.oid)
+                    meta["lsst_classifier"] = prob_info["classifier_name"]
+                    meta["lsst_class_name"] = prob_info["class_name"]
+                    meta["lsst_class_prob"] = prob_info["probability"]
+                    meta["lsst_class_version"] = prob_info["classifier_version"]
 
             # Now get ZTF
             ztf_df = self.client.query_objects(ra=ra_deg, dec=dec_deg, radius=radius, survey="ztf")
@@ -814,17 +815,18 @@ class AlerceMod(TarxivModule):
                 # Get probabilities
                 result = self.client.query_probabilities(oid=ztf_obj.oid, survey="ztf")
                 prob_df = pd.DataFrame(result)
-                prob_df["probability"] = prob_df["probability"].replace(np.nan, None)
-                prob_info = prob_df[
-                    (prob_df["classifier_name"] == self.config["alerce"]["ztf_classifier"])
-                    & (prob_df["ranking"] == 1)].iloc[0].to_dict()
+                if not prob_df.empty:
+                    prob_df["probability"] = prob_df["probability"].replace(np.nan, None)
+                    prob_info = prob_df[
+                        (prob_df["classifier_name"] == self.config["alerce"]["ztf_classifier"])
+                        & (prob_df["ranking"] == 1)].iloc[0].to_dict()
 
-                # Add to meta
-                meta["ztf_object_id"] = ztf_obj.oid
-                meta["ztf_classifier"] = prob_info["classifier_name"]
-                meta["ztf_class_name"] = prob_info["class_name"]
-                meta["ztf_class_prob"] = prob_info["probability"]
-                meta["ztf_class_version"] = prob_info["classifier_version"]
+                    # Add to meta
+                    meta["ztf_object_id"] = ztf_obj.oid
+                    meta["ztf_classifier"] = prob_info["classifier_name"]
+                    meta["ztf_class_name"] = prob_info["class_name"]
+                    meta["ztf_class_prob"] = prob_info["probability"]
+                    meta["ztf_class_version"] = prob_info["classifier_version"]
 
                 result = self.client.query_features(oid=ztf_obj.oid, survey="ztf")
                 feat_df = pd.DataFrame(result)
