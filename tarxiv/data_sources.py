@@ -124,7 +124,7 @@ class ATLAS(TarxivModule):
             debug=debug,
         )
         # Validate TOKEN
-        response = requests.post(url=f"{self.config['url']}/api-token-auth/",
+        response = requests.post(url=f"{self.config['atlas']['url']}/api-token-auth/",
                                  data={
                                      'username': os.environ['TARXIV_ATLAS_USER'],
                                      'password': os.environ['TARXIV_ATLAS_PASS']})
@@ -841,7 +841,10 @@ class AlerceMod(TarxivModule):
                     prob_df["probability"] = prob_df["probability"].replace(np.nan, None)
                     prob_info = prob_df[
                         (prob_df["classifier_name"] == self.config["alerce"]["lsst_classifier"])
-                        & (prob_df["ranking"] == 1)].iloc[0].to_dict()
+                        & (prob_df["ranking"] == 1)]
+                    # Might not have info for this classifier
+                    if not prob_info.empty:
+                        prob_info = prob_info.iloc[0].to_dict()
                     # Add to meta
                     meta["lsst_info"] = {
                             "object_id": str(lsst_obj.oid),
@@ -862,15 +865,18 @@ class AlerceMod(TarxivModule):
                     prob_df["probability"] = prob_df["probability"].replace(np.nan, None)
                     prob_info = prob_df[
                         (prob_df["classifier_name"] == self.config["alerce"]["ztf_classifier"])
-                        & (prob_df["ranking"] == 1)].iloc[0].to_dict()
-                    # Add to meta
-                    meta["ztf_info"] = {
-                            "object_id": str(ztf_obj.oid),
-                            "classifier": prob_info["classifier_name"],
-                            "class_name": prob_info["class_name"],
-                            "probability": prob_info["probability"],
-                            "version": prob_info["classifier_version"]
-                        }
+                        & (prob_df["ranking"] == 1)]
+                    # Might not have info for this classifier
+                    if not prob_info.empty:
+                        prob_info = prob_info.iloc[0].to_dict()
+                        # Add to meta
+                        meta["ztf_info"] = {
+                                "object_id": str(ztf_obj.oid),
+                                "classifier": prob_info["classifier_name"],
+                                "class_name": prob_info["class_name"],
+                                "probability": prob_info["probability"],
+                                "version": prob_info["classifier_version"]
+                            }
                 # Get featurs
                 result = self.client.query_features(oid=ztf_obj.oid, survey="ztf")
                 feat_df = pd.DataFrame(result)
