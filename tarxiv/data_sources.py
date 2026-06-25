@@ -711,6 +711,7 @@ class AlerceZTF(TarxivModule):
             self.logger.debug(meta, extra=meta)
             result = self.client.query_features(oid=ztf_obj.oid, survey="ztf")
             feat_df = pd.DataFrame(result)
+            print(feat_df)
             # Reduce to SPM features
             feat_df = feat_df[feat_df["name"].str.startswith("SPM")]
             # Band lookup
