@@ -179,8 +179,8 @@ class TNSPipeline(TarxivModule):
 
     def append_atlas(self, txv_id):
         # Get existing data
-        init_meta = self.db.get(txv_id, scope="object", collection="meta")
-        init_lc = self.db.get(txv_id, scope="object", collection="lc")
+        init_meta = self.db.get(txv_id, scope="objects", collection="meta")
+        init_lc = self.db.get(txv_id, scope="objects", collection="lightcurves")
 
         # Cut on time (1 month before DISCOVERY, 6 months after)
         # IF we have a reporting date, WORK ON LATER
@@ -212,13 +212,17 @@ class TNSPipeline(TarxivModule):
         if obj_meta is not None:
             init_meta["data_sources"]["atlas"] = obj_meta
             init_lc += obj_lc
+            # Get timestamp
+            timestamp = datetime.datetime.now().replace(microsecond=0).isoformat()
+            # Add insertion date to internal meta as well
+            init_meta["update_date"] = timestamp
             self.upsert_object(txv_id, init_meta, init_lc)
 
 
 
     def update_active_object(self, txv_id):
-        meta = self.db.get(txv_id, scope="object", collection="meta")
-        lc = self.db.get(txv_id, scope="object", collection="lc")
+        meta = self.db.get(txv_id, scope="objects", collection="meta")
+        lc = self.db.get(txv_id, scope="objects", collection="lightcurves")
         # Read in lc to dataframe
         lc_df = pd.DataFrame(lc)
 
@@ -387,7 +391,7 @@ class TNSPipeline(TarxivModule):
                         # Get survey information
                         txv_id, obj_meta, obj_lc = self.get_object(tns_object_id)
                         # Get timestamp
-                        timestamp = datetime.datetime.now().isoformat()
+                        timestamp = datetime.datetime.now().replace(microsecond=0).isoformat()
                         # Add insertion date to internal meta as well
                         obj_meta["update_date"] = timestamp
                         # Upsert to database
@@ -411,7 +415,7 @@ class TNSPipeline(TarxivModule):
                     elif topic in ["internal_tns_updates"]:
                         txv_id, obj_meta, obj_lc = self.update_active_object(tns_object_id)
                         # Get timestamp
-                        timestamp = datetime.datetime.now().isoformat()
+                        timestamp = datetime.datetime.now().replace(microsecond=0).isoformat()
                         # Add insertion date to internal meta as well
                         obj_meta["update_date"] = timestamp
                         # Upsert to database
