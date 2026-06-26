@@ -211,7 +211,7 @@ class ATLAS(TarxivModule):
             # Here is our phot df
             lc_df = pd.read_csv(io.StringIO(textdata.replace("###", "")), sep=r"\s+")
             # Get unit
-            lc_df["tel_unit"] = lc_df["Obs"].str[:2]
+            lc_df["camera"] = lc_df["Obs"].str[:2]
             lc_df["survey"] = "atlas"
             # Put in dummy meta
             meta = {
@@ -247,7 +247,7 @@ class ATLAS(TarxivModule):
                     "fwhm",
                     "filter",
                     "detection",
-                    "tel_unit",
+                    "camera",
                     "survey",
                 ]
             ]
@@ -355,7 +355,7 @@ class ASAS_SN(TarxivModule):  # noqa: N801
             # Set survey
             lc_df["survey"] = "asas-sn"
             # Change name
-            lc_df = lc_df.rename(columns={"camera": "tel_unit"})
+            lc_df = lc_df.rename(columns={"camera": "camera"})
             # Reorder cols
             lc_df = lc_df[
                 [
@@ -366,7 +366,7 @@ class ASAS_SN(TarxivModule):  # noqa: N801
                     "fwhm",
                     "filter",
                     "detection",
-                    "tel_unit",
+                    "camera",
                     "survey",
                 ]
             ]
@@ -521,7 +521,7 @@ class ZTF(TarxivModule):
             lc_df = lc_df[lc_df["detection"] >= 0]
             # JD now unneeded
             lc_df = lc_df.drop("jd", axis=1)
-            lc_df["tel_unit"] = "main"
+            lc_df["camera"] = "main"
             lc_df["survey"] = "ztf"
 
             # Reorder cols
@@ -534,7 +534,7 @@ class ZTF(TarxivModule):
                     "fwhm",
                     "filter",
                     "detection",
-                    "tel_unit",
+                    "camera",
                     "survey",
                 ]
             ]
@@ -756,7 +756,7 @@ class LSST(TarxivModule):
             df["mag_err"] = np.abs(1.0857 * df["r:psfFluxErr"] / df["r:psfFlux"])
             # Specific to lightcurves
             df["limit"] = None
-            df["tel_unit"] = "main"
+            df["camera"] = "main"
             df["detection"] = 1
 
             df = df.rename(
@@ -771,7 +771,7 @@ class LSST(TarxivModule):
                     "snr",
                     "detection",
                     "limit",
-                    "tel_unit",
+                    "camera",
                 ]
             ]
             lc_df["survey"] = "lsst"
