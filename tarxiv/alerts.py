@@ -32,6 +32,7 @@ class IMAP(TarxivModule):
         self.conn = None
         self.imap_user = os.getenv("TARXIV_IMAP_USERNAME", "")
         self.imap_pass = os.getenv("TARXIV_IMAP_PASSWORD", "")
+        self.kafka_host = os.getenv("TARXIV_KAFKA_HOST", "localhost")
         try:
             self.conn = imaplib.IMAP4_SSL(self.config["imap"]["server"])
             self.conn.login(self.imap_user, self.imap_pass)
@@ -43,7 +44,7 @@ class IMAP(TarxivModule):
 
         # Get kafka configuration
         conf = {
-            "bootstrap.servers": os.environ["TARXIV_KAFKA_HOST"] + ":9092",
+            "bootstrap.servers": self.kafka_host + ":9092",
             "delivery.timeout.ms": 10000,
             "queue.buffering.max.messages": 1000000,
             "queue.buffering.max.ms": 5000,
