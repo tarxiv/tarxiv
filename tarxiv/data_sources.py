@@ -262,7 +262,8 @@ class ATLAS(TarxivModule):
             status["status"] = "no match"
 
         except SurveyLightCurveMissingError:
-            status["status"] += "|no light curve"
+            status["status"] = "no light curve"
+
         except Exception as e:
             status.update({
                 "status": "encontered unexpected error",
