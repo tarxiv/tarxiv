@@ -301,32 +301,32 @@ class ZTF(TarxivModule):
             meta_line = {k[2:]: v for k, v in meta_line.items()}
             meta_columns = [
                 "classification",
-                'DR3Name',
-                'anomaly_score',
-                'blazar_stats_m0',
-                'blazar_stats_m1',
-                'blazar_stats_m2',
-                'cdsxmatch',
-                'gaiaClass',
-                'gaiaVarFlag',
-                'gcvs',
-                'is_transient',
-                'mangrove_2MASS_name',
-                'mangrove_HyperLEDA_name',
-                'mangrove_ang_dist',
-                'mangrove_lum_dist',
-                'mulens',
-                'rf_kn_vs_nonkn',
-                'rf_snia_vs_nonia',
-                'slsn_score',
-                'snn_sn_vs_all',
-                'snn_snia_vs_nonia',
-                'spicy_class',
-                'spicy_id',
-                'tns',
-                'vsx',
-                'x3hsp',
-                'x4lac',
+                "DR3Name",
+                "anomaly_score",
+                "blazar_stats_m0",
+                "blazar_stats_m1",
+                "blazar_stats_m2",
+                "cdsxmatch",
+                "gaiaClass",
+                "gaiaVarFlag",
+                "gcvs",
+                "is_transient",
+                "mangrove_2MASS_name",
+                "mangrove_HyperLEDA_name",
+                "mangrove_ang_dist",
+                "mangrove_lum_dist",
+                "mulens",
+                "rf_kn_vs_nonkn",
+                "rf_snia_vs_nonia",
+                "slsn_score",
+                "snn_sn_vs_all",
+                "snn_snia_vs_nonia",
+                "spicy_class",
+                "spicy_id",
+                "tns",
+                "vsx",
+                "x3hsp",
+                "x4lac",
             ]
             meta = {
                 k: v
@@ -639,6 +639,7 @@ class ANTARES(TarxivModule):
             reporting_mode=reporting_mode,
             debug=debug,
         )
+
     def get_object(self, object_id=None, ra_deg=None, dec_deg=None, radius=8):
         status = {"object_id": object_id}
         meta = None
@@ -655,7 +656,9 @@ class ANTARES(TarxivModule):
             meta["ra_deg"] = locus.ra
             meta["dec_deg"] = locus.dec
             hit = SkyCoord(locus.ra, locus.dec, unit="deg")
-            meta["cross_match_distance"] = precision(float(center.separation(hit).arcsec), 6)
+            meta["cross_match_distance"] = precision(
+                float(center.separation(hit).arcsec), 6
+            )
             meta["tags"] = locus.tags
 
         except SurveyMetaMissingError:
@@ -686,7 +689,9 @@ class AlerceZTF(TarxivModule):
         status = {"object_id": object_id}
         meta = None
         try:
-            ztf_df = self.client.query_objects(ra=ra_deg, dec=dec_deg, radius=radius, survey="ztf")
+            ztf_df = self.client.query_objects(
+                ra=ra_deg, dec=dec_deg, radius=radius, survey="ztf"
+            )
             if ztf_df.empty:
                 raise SurveyMetaMissingError
 
@@ -697,7 +702,8 @@ class AlerceZTF(TarxivModule):
             prob_df = pd.DataFrame(result)
             prob_info = prob_df[
                 (prob_df["classifier_name"] == self.config["alerce_ztf"]["classifier"])
-                & (prob_df["ranking"] == 1)]
+                & (prob_df["ranking"] == 1)
+            ]
 
             meta = {
                 "object_id": ztf_obj.oid,
@@ -705,8 +711,8 @@ class AlerceZTF(TarxivModule):
                     "name": prob_info.classifier_name,
                     "version": prob_info.classifier_version,
                     "probability": prob_info.probability,
-                    "result": prob_info.class_name
-                }
+                    "result": prob_info.class_name,
+                },
             }
             result = self.client.query_features(oid=ztf_obj.oid, survey="ztf")
             feat_df = pd.DataFrame(result)
@@ -716,8 +722,10 @@ class AlerceZTF(TarxivModule):
             bands = {1: "g", 2: "r", 3: "i"}
             feat_df["filter"] = feat_df["fid"].map(bands)
             meta["features"] = {"bands": {}, "version": feat_df.iloc[0]["version"]}
-            for band, grp_df in feat_df.groupby('filter'):
-                meta["features"][band] = {f['name']: f["value"] for _, f in grp_df.iterrows()}
+            for band, grp_df in feat_df.groupby("filter"):
+                meta["features"][band] = {
+                    f["name"]: f["value"] for _, f in grp_df.iterrows()
+                }
 
         except SurveyMetaMissingError:
             status["status"] = "no match"
@@ -730,6 +738,7 @@ class AlerceZTF(TarxivModule):
             })
         self.logger.info(status, extra=status)
         return meta
+
 
 class AlerceLSST(TarxivModule):
     def __init__(self, script_name, reporting_mode, debug=False):
@@ -746,7 +755,9 @@ class AlerceLSST(TarxivModule):
         status = {"object_id": object_id}
         meta = None
         try:
-            lsst_df = self.client.query_objects(ra=ra_deg, dec=dec_deg, radius=radius, survey="ztf")
+            lsst_df = self.client.query_objects(
+                ra=ra_deg, dec=dec_deg, radius=radius, survey="ztf"
+            )
             if lsst_df.empty:
                 raise SurveyMetaMissingError
 
@@ -757,7 +768,8 @@ class AlerceLSST(TarxivModule):
             prob_df = pd.DataFrame(result)
             prob_info = prob_df[
                 (prob_df["classifier_name"] == self.config["alerce_lsst"]["classifier"])
-                & (prob_df["ranking"] == 1)]
+                & (prob_df["ranking"] == 1)
+            ]
 
             meta = {
                 "object_id": lsst_obj.oid,
@@ -765,10 +777,9 @@ class AlerceLSST(TarxivModule):
                     "name": prob_info.classifier_name,
                     "version": prob_info.classifier_version,
                     "probability": prob_info.probability,
-                    "result": prob_info.class_name
-                }
+                    "result": prob_info.class_name,
+                },
             }
-
 
         except SurveyMetaMissingError:
             status["status"] = "no match"
@@ -781,6 +792,7 @@ class AlerceLSST(TarxivModule):
             })
         self.logger.info(status, extra=status)
         return meta
+
 
 if __name__ == "__main__":
     """Execute the test suite"""

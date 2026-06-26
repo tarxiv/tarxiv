@@ -56,6 +56,9 @@ def main():
     print("Press Ctrl+C to stop")
     print("=" * 60)
 
+    print(f"Reporting mode: {args.reporting_mode}")
+    print(f"Debug mode: {args.debug}")
+
     try:
         # Initialize dashboard
         dashboard = TarxivDashboard(

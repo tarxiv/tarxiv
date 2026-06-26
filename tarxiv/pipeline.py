@@ -1,4 +1,3 @@
-
 from .utils import TarxivModule, TarxivPipelineError, deg2sex
 from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair, ANTARES
 from .database import TarxivDB
@@ -38,7 +37,6 @@ class TNSPipeline(TarxivModule):
         self.lasair = Lasair(script_name, reporting_mode, debug)
         self.antares = ANTARES(script_name, reporting_mode, debug)
 
-
         # Specify data source
         self.data_sources = {
             "tns": TNS,
@@ -58,12 +56,14 @@ class TNSPipeline(TarxivModule):
         )
 
         # Get kafka configuration
-        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_HOST'] + ":9092",
-                'delivery.timeout.ms': 10000,
-                'queue.buffering.max.messages': 1000000,
-                'queue.buffering.max.ms': 5000,
-                'batch.num.messages': 100,
-                'client.id': socket.gethostname()}
+        conf = {
+            "bootstrap.servers": os.environ["TARXIV_KAFKA_HOST"] + ":9092",
+            "delivery.timeout.ms": 10000,
+            "queue.buffering.max.messages": 1000000,
+            "queue.buffering.max.ms": 5000,
+            "batch.num.messages": 100,
+            "client.id": socket.gethostname(),
+        }
         self.producer = Producer(conf)
         self.consumer = None
 
@@ -142,9 +142,15 @@ class TNSPipeline(TarxivModule):
         mjd_max = disc_mjd + active_settings["active_days"]
 
         # Now get meta and lightcurves from the surveys
-        fink_ztf_meta, ztf_lc = self.ztf.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
-        asas_sn_meta, asas_sn_lc = self.asas_sn.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
-        fink_lsst_meta, lsst_lc = self.lsst.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
+        fink_ztf_meta, ztf_lc = self.ztf.get_object(
+            txv_id, ra_deg, dec_deg, mjd_min, mjd_max
+        )
+        asas_sn_meta, asas_sn_lc = self.asas_sn.get_object(
+            txv_id, ra_deg, dec_deg, mjd_min, mjd_max
+        )
+        fink_lsst_meta, lsst_lc = self.lsst.get_object(
+            txv_id, ra_deg, dec_deg, mjd_min, mjd_max
+        )
         # Get additional meta from the survey
         lasair_meta = self.lasair.get_object(txv_id, ra_deg, dec_deg)
         antares_meta = self.antares.get_object(txv_id, ra_deg, dec_deg)
@@ -176,7 +182,9 @@ class TNSPipeline(TarxivModule):
         lc_df = pd.DataFrame(lc)
 
         # Get active days
-        active_settings = self.db.get(txv_id, scope="misc", collection="active_settings")
+        active_settings = self.db.get(
+            txv_id, scope="misc", collection="active_settings"
+        )
 
         # See which data sources we need to update now
         update_date = datetime.datetime.fromisoformat(meta["update_date"])
@@ -192,23 +200,32 @@ class TNSPipeline(TarxivModule):
             # How often does this need to be updated
             update_freq = self.config[source_name]["update_frequency"]
             # Update if past frequency threshold
-            if update_date + datetime.timedelta(days=update_freq) >= datetime.datetime.now():
+            if (
+                update_date + datetime.timedelta(days=update_freq)
+                >= datetime.datetime.now()
+            ):
                 # Meta only or lightcurve
                 if self.config[source_name]["meta_only"]:
-                    source_meta = source_class.get_object(object_id=txv_id, ra_deg=meta["ra_deg"], dec_deg=meta["dec_deg"])
+                    source_meta = source_class.get_object(
+                        object_id=txv_id, ra_deg=meta["ra_deg"], dec_deg=meta["dec_deg"]
+                    )
                     if source_meta is not None:
                         meta["data_sources"][source_name] = source_meta
                 else:
                     # We arre going to pull the whole new C
-                    source_meta, source_lc = source_class.get_object(object_id=txv_id,
-                                                                     ra_deg=meta["ra_deg"],
-                                                                     dec_deg=meta["dec_deg"],
-                                                                     mjd_min=mjd_min,
-                                                                     mjd_max=mjd_max)
+                    source_meta, source_lc = source_class.get_object(
+                        object_id=txv_id,
+                        ra_deg=meta["ra_deg"],
+                        dec_deg=meta["dec_deg"],
+                        mjd_min=mjd_min,
+                        mjd_max=mjd_max,
+                    )
                     if source_meta is not None:
                         meta["data_sources"][source_name] = source_meta
                         # Drop all previous source points and replace
-                        source_mask = lc_df["survey"] == self.config[source_name]["survey_name"]
+                        source_mask = (
+                            lc_df["survey"] == self.config[source_name]["survey_name"]
+                        )
                         lc_df = lc_df[~source_mask]
                         # Replace
                         lc_df = pd.concat([lc_df, source_lc])
@@ -216,7 +233,6 @@ class TNSPipeline(TarxivModule):
         # Convert to json for submission
         obj_lc = json.loads(lc_df.to_json(orient="records"))
         return txv_id, meta, obj_lc
-
 
     def upsert_object(self, object_id, obj_meta, obj_lc):
         """
@@ -281,7 +297,9 @@ class TNSPipeline(TarxivModule):
                 object_id = obj["name"]
 
             # Push to bulk update
-            self.producer.produce(topic="internal_tns_bulk", value=object_id, callback=self.acked)
+            self.producer.produce(
+                topic="internal_tns_bulk", value=object_id, callback=self.acked
+            )
 
     def daily_update(self):
         # Get all targets still in "active" window for update
@@ -299,20 +317,24 @@ class TNSPipeline(TarxivModule):
 
         # Pull TNS info and submit to bulk update queue
         for object_id in update_objects:
-            self.producer.produce(topic="internal_tns_bulk", value=object_id, callback=self.acked)
+            self.producer.produce(
+                topic="internal_tns_bulk", value=object_id, callback=self.acked
+            )
 
         # Finish by flushing
         self.producer.flush(timeout=10.0)
 
     def run_pipeline(self, topic):
         # Connect to kafka consumer
-        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_HOST'] + ":9092",
-                'group.id': "internal_kafka_pipeline",
-                'auto.offset.reset': 'earliest',
-                'enable.auto.commit': False,
-                'max.poll.interval.ms': 3600000,
-                'session.timeout.ms': 1200000,
-                'heartbeat.interval.ms': 3000}
+        conf = {
+            "bootstrap.servers": os.environ["TARXIV_KAFKA_HOST"] + ":9092",
+            "group.id": "internal_kafka_pipeline",
+            "auto.offset.reset": "earliest",
+            "enable.auto.commit": False,
+            "max.poll.interval.ms": 3600000,
+            "session.timeout.ms": 1200000,
+            "heartbeat.interval.ms": 3000,
+        }
         self.consumer = Consumer(conf)
         self.consumer.subscribe([topic], on_assign=self.print_assignment)
         # Start up
@@ -357,8 +379,8 @@ class TNSPipeline(TarxivModule):
                         self.logger.info(status, extra=status)
 
                     # Submit kafka alert
-                    msg = json.dumps(obj_meta).encode('utf-8')
-                    self.producer.produce(topic='tns', value=msg, callback=self.acked)
+                    msg = json.dumps(obj_meta).encode("utf-8")
+                    self.producer.produce(topic="tns", value=msg, callback=self.acked)
                     self.consumer.commit(asynchronous=False)
 
                 except Exception:
