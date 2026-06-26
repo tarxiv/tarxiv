@@ -2,7 +2,7 @@
 
 import dash
 from ..database import TarxivDB
-from ..utils import TarxivModule
+from ..utils import TarxivModule, serve_wsgi
 from .layouts import create_layout
 from .callbacks import (
     register_cookie_callbacks,
@@ -81,11 +81,21 @@ class TarxivDashboard(TarxivModule):
             port: Port number
             host: Host address
         """
-        status = {"status": "starting dash server", "port": port, "host": host}
+        status = {
+            "status": "starting dash server",
+            "port": port,
+            "host": host,
+            "debug": self.debug,
+        }
         self.logger.info(status, extra=status)
-        self.app.run(
-            debug=self.debug, host=host, port=port, dev_tools_hot_reload=self.debug
-        )
+        if self.debug:
+            # Local development: Dash dev server with hot-reload.
+            self.app.run(
+                debug=True, host=host, port=port, dev_tools_hot_reload=True
+            )
+        else:
+            # Production: serve the underlying Flask WSGI app via CherryPy/cheroot.
+            serve_wsgi(self.app.server, host, port, self.debug, self.logger)
 
     def close(self):
         """Close database connection."""
