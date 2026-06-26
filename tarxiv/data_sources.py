@@ -232,8 +232,9 @@ class ATLAS(TarxivModule):
             # Make mags positive
             lc_df["mag"] = np.sign(lc_df['limit']) * lc_df['mag'].abs()
 
-            # Calculate detections
-            lc_df["detection"] = np.where(lc_df["limit"] > lc_df["mag"], 0, 1)
+            # Calculate detections (5 sigma)
+            sigma = 5.0
+            lc_df["detection"] = np.where(sigma * lc_df["duJy"] > lc_df["uJy"], 0, 1)
             # If we have no detections, dont bother
             if not lc_df["detection"].any():
                 raise SurveyLightCurveMissingError
