@@ -758,6 +758,8 @@ class LSST(TarxivModule):
             df["limit"] = None
             df["camera"] = "main"
             df["detection"] = 1
+            df["survey"] = "lsst"
+            df["fwhm"] = None
 
             df = df.rename(
                 {"r:midpointMjdTai": "mjd", "r:band": "filter", "r:snr": "snr"}, axis=1
@@ -767,11 +769,12 @@ class LSST(TarxivModule):
                     "mjd",
                     "mag",
                     "mag_err",
-                    "filter",
-                    "snr",
-                    "detection",
                     "limit",
+                    "fwhm",
+                    "filter",
+                    "detection",
                     "camera",
+                    "survey"
                 ]
             ]
             lc_df["survey"] = "lsst"
