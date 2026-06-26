@@ -90,9 +90,7 @@ class TarxivDashboard(TarxivModule):
         self.logger.info(status, extra=status)
         if self.debug:
             # Local development: Dash dev server with hot-reload.
-            self.app.run(
-                debug=True, host=host, port=port, dev_tools_hot_reload=True
-            )
+            self.app.run(debug=True, host=host, port=port, dev_tools_hot_reload=True)
         else:
             # Production: serve the underlying Flask WSGI app via CherryPy/cheroot.
             serve_wsgi(self.app.server, host, port, self.debug, self.logger)

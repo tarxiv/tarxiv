@@ -5,7 +5,7 @@ from couchbase.exceptions import (
     DocumentNotFoundException,
     SubdocPathMismatchException,
     PathNotFoundException,
-    AmbiguousTimeoutException
+    AmbiguousTimeoutException,
 )
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster
@@ -191,7 +191,7 @@ class TarxivDB(TarxivModule):
                   tarxiv_id
                 FROM tarxiv.objects.meta
                 WHERE source_id = '{source_id}'
-                ORDER BY update_date desc 
+                ORDER BY update_date desc
                 LIMIT 1
             """
             result = list(self.cluster.query(statement))[0]["tarxiv_id"]

@@ -30,7 +30,12 @@ def serve_wsgi(app, host, port, debug, logger):
     :param debug: enable dev-only features (autoreload, screen logging); bool.
     :param logger: module logger for status reporting.
     """
-    status = {"status": "starting WSGI server", "host": host, "port": port, "debug": debug}
+    status = {
+        "status": "starting WSGI server",
+        "host": host,
+        "port": port,
+        "debug": debug,
+    }
     logger.info(status, extra=status)
     # Mount the WSGI callable on the root directory, with Paste access logging.
     cherrypy.tree.graft(TransLogger(app), "/")
