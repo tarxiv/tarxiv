@@ -1,6 +1,6 @@
 
 from .utils import TarxivModule, TarxivPipelineError, deg2sex
-from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair, ANTARES, AlerceMod
+from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair, ANTARES, AlerceMod, ATLAS
 from .database import TarxivDB
 from confluent_kafka import Producer, Consumer, KafkaError
 from astropy.time import Time
@@ -38,6 +38,9 @@ class TNSPipeline(TarxivModule):
         self.lasair = Lasair(script_name, reporting_mode, debug)
         self.antares = ANTARES(script_name, reporting_mode, debug)
         self.alerce = AlerceMod(script_name, reporting_mode, debug)
+
+        # Atlas only for bulk
+        self.atlas = ATLAS(script_name, reporting_mode, debug)
 
         # Specify data source
         self.data_sources = {
@@ -172,6 +175,46 @@ class TNSPipeline(TarxivModule):
         obj_lc = json.loads(lc_df.to_json(orient="records"))
 
         return txv_id, meta, obj_lc
+
+
+    def append_atlas(self, txv_id):
+        # Get existing data
+        init_meta = self.db.get(txv_id, scope="object", collection="meta")
+        init_lc = self.db.get(txv_id, scope="object", collection="lc")
+
+        # Cut on time (1 month before DISCOVERY, 6 months after)
+        # IF we have a reporting date, WORK ON LATER
+        disc_mjd = Time(init_meta["discovery_date"]).mjd
+
+        # Check if we have a document giving the settings
+        active_settings = self.db.get(
+            txv_id, scope="misc", collection="active_settings"
+        )
+        if active_settings is None:
+            active_settings = {
+                "prior_days": self.config["tns_sources"]["obj_prior_days"],
+                "active_days": self.config["tns_sources"]["obj_active_days"],
+            }
+            self.db.upsert(
+                txv_id, active_settings, scope="misc", collection="active_settings"
+            )
+        # Check if we have special min/max mjds, if not use default
+        mjd_min = disc_mjd - active_settings["prior_days"]
+        mjd_max = disc_mjd + active_settings["active_days"]
+
+        # Now get atlas data
+        ra_deg = init_meta["ra_deg"]
+        dec_deg = init_meta["dec_deg"]
+        obj_meta, lc_df = self.atlas.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
+        obj_lc = lc_df.to_dict(orient="records")
+
+        # If we got something, upsert it
+        if obj_meta is not None:
+            init_meta["data_sources"]["atlas"] = obj_meta
+            init_lc += obj_lc
+            self.upsert_object(txv_id, init_meta, init_lc)
+
+
 
     def update_active_object(self, txv_id):
         meta = self.db.get(txv_id, scope="object", collection="meta")
