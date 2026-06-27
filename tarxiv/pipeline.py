@@ -39,9 +39,6 @@ class TNSPipeline(TarxivModule):
         self.antares = ANTARES(script_name, reporting_mode, debug)
         self.alerce = AlerceMod(script_name, reporting_mode, debug)
 
-        # Atlas only for bulk
-        self.atlas = ATLAS(script_name, reporting_mode, debug)
-
         # Specify data source
         self.data_sources = {
             "tns": self.tns,
@@ -55,6 +52,7 @@ class TNSPipeline(TarxivModule):
 
         # Get database
         self.db = TarxivDB("pipeline", script_name, reporting_mode, debug)
+
         # Hopskotch authorization
         self.hop_auth = Auth(
             user=os.environ["TARXIV_HOPSKOTCH_USERNAME"],
@@ -175,50 +173,6 @@ class TNSPipeline(TarxivModule):
         obj_lc = json.loads(lc_df.to_json(orient="records"))
 
         return txv_id, meta, obj_lc
-
-
-    def append_atlas(self, txv_id):
-        # Get existing data
-        init_meta = self.db.get(txv_id, scope="objects", collection="meta")
-        init_lc = self.db.get(txv_id, scope="objects", collection="lightcurves")
-
-        # Cut on time (1 month before DISCOVERY, 6 months after)
-        # IF we have a reporting date, WORK ON LATER
-        disc_mjd = Time(init_meta["discovery_date"]).mjd
-
-        # Check if we have a document giving the settings
-        active_settings = self.db.get(
-            txv_id, scope="misc", collection="active_settings"
-        )
-        if active_settings is None:
-            active_settings = {
-                "prior_days": self.config["tns_sources"]["obj_prior_days"],
-                "active_days": self.config["tns_sources"]["obj_active_days"],
-            }
-            self.db.upsert(
-                txv_id, active_settings, scope="misc", collection="active_settings"
-            )
-        # Check if we have special min/max mjds, if not use default
-        mjd_min = disc_mjd - active_settings["prior_days"]
-        mjd_max = disc_mjd + active_settings["active_days"]
-
-        # Now get atlas data
-        ra_deg = init_meta["ra_deg"]
-        dec_deg = init_meta["dec_deg"]
-        obj_meta, lc_df = self.atlas.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
-        obj_lc = lc_df.to_dict(orient="records")
-
-        # If we got something, upsert it
-        if obj_meta is not None:
-            init_meta["data_sources"]["atlas"] = obj_meta
-            init_lc += obj_lc
-            # Get timestamp
-            timestamp = datetime.datetime.now().replace(microsecond=0).isoformat()
-            # Add insertion date to internal meta as well
-            init_meta["update_date"] = timestamp
-            self.upsert_object(txv_id, init_meta, init_lc)
-
-
 
     def update_active_object(self, txv_id):
         meta = self.db.get(txv_id, scope="objects", collection="meta")
@@ -438,6 +392,174 @@ class TNSPipeline(TarxivModule):
 
         # Close out at end of loop
         self.consumer.close()
+        self.producer.flush()
+
+    def acked(self, err, msg):
+        if err is not None:
+            status = {"status": "failed kafka publish", "msg": msg}
+            self.logger.error(status, extra=status)
+
+
+class ForcedPhotWorker(TarxivModule):
+    """Forced phot pipeline to be agnostic of data collection. Also will be run as a multiprocess."""
+
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(
+            script_name=script_name,
+            module="forced_phot_worker",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
+        # Collection of all our forced photometry services
+        self.forced_phot_services = {
+            "atlas": ATLAS(script_name, reporting_mode, debug)
+        }
+
+        # Get database
+        self.db = TarxivDB("pipeline", script_name, reporting_mode, debug)
+        self.consumer = None
+
+    def run_pipeline(self, survey_name, worker_id, stop_event):
+        # Connect to kafka consumer
+        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_HOST'] + ":9092",
+                'group.id': "internal_kafka_pipeline",
+                'auto.offset.reset': 'earliest',
+                'enable.auto.commit': False,
+                'max.poll.interval.ms': 3600000,
+                'session.timeout.ms': 1200000,
+                'heartbeat.interval.ms': 3000}
+        self.consumer = Consumer(conf)
+        # Topic name will be given by our survey name
+        topic = f"internal_{survey_name}_forced_phot"
+        self.consumer.subscribe([topic], on_assign=self.print_assignment)
+        # Start up
+        status = {"status": "running pipeline", "worker_id": worker_id}
+        self.logger.info(status, extra=status)
+
+        while stop_event.is_set() is False:
+            # Get next message
+            msg = self.consumer.poll(timeout=1.0)
+            # No message, try again
+            if msg is None:
+                continue
+            if msg.error():
+                if msg.error().code() == KafkaError._PARTITION_EOF:
+                    status = {"status": "reached end of partition", "worker_id": worker_id}
+                else:
+                    status = {"status": "kafka error", "error": msg.error(), "worker_id": worker_id}
+                self.logger.error(status, extra=status)
+            else:
+                # This message will give us a tarxiv_id and a survey to run force phot
+                txv_id = msg.value().decode("utf-8")
+                try:
+                    status = {"status": "submitting phot", "object_id": txv_id, "worker_id": worker_id, "survey_name": survey_name}
+                    self.logger.info(status, extra=status)
+                    self.append_forced_phot(txv_id, survey_name)
+                    self.consumer.commit(asynchronous=False)
+                except Exception:
+                    stack_trace = traceback.format_exc()
+                    status = {
+                        "status": "failed pipeline operation",
+                        "object_id": txv_id,
+                        "survey_name": survey_name,
+                        "exception": stack_trace,
+                        "worker_id": worker_id,
+                    }
+                    self.logger.error(status, extra=status)
+
+        # Close out at end of loop
+        self.consumer.close()
+
+    def append_forced_phot(self, txv_id, survey_name):
+        # Get existing data
+        init_meta = self.db.get(txv_id, scope="objects", collection="meta")
+        init_lc = self.db.get(txv_id, scope="objects", collection="lightcurves")
+
+        # Cut on time (1 month before DISCOVERY, 6 months after)
+        # IF we have a reporting date, WORK ON LATER
+        disc_mjd = Time(init_meta["discovery_date"]).mjd
+
+        # Check if we have a document giving the settings
+        active_settings = self.db.get(
+            txv_id, scope="misc", collection="active_settings"
+        )
+        if active_settings is None:
+            active_settings = {
+                "prior_days": self.config["tns_sources"]["obj_prior_days"],
+                "active_days": self.config["tns_sources"]["obj_active_days"],
+            }
+            self.db.upsert(
+                txv_id, active_settings, scope="misc", collection="active_settings"
+            )
+        # Check if we have special min/max mjds, if not use default
+        mjd_min = disc_mjd - active_settings["prior_days"]
+        mjd_max = disc_mjd + active_settings["active_days"]
+
+        # Now get atlas data
+        ra_deg = init_meta["ra_deg"]
+        dec_deg = init_meta["dec_deg"]
+        # Get survey object
+        survey = self.forced_phot_services[survey_name]
+        obj_meta, lc_df = survey.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
+        obj_lc = lc_df.to_dict(orient="records")
+
+        # If we got something, upsert it
+        if obj_meta is not None:
+            init_meta["data_sources"]["atlas"] = obj_meta
+            init_lc += obj_lc
+            # Get timestamp
+            timestamp = datetime.datetime.now().replace(microsecond=0).isoformat()
+            # Add insertion date to internal meta as well
+            init_meta["update_date"] = timestamp
+            self.upsert_object(txv_id, init_meta, init_lc)
+
+
+    def print_assignment(self, consumer, partitions):
+        # Logging for kafka
+        status = {"status": "consumer subscribed", "partitions": partitions}
+        self.logger.info(status, extra=status)
+
+    def upsert_object(self, object_id, obj_meta, obj_lc):
+        """
+        Insert a TarXiv TNS object into the database.
+
+        :param object_id: tarxiv obj name; str
+        :param obj_meta: tarxiv obj meta data; dict
+        :param obj_lc: tarxiv obj light curve data; dict
+        :return: void
+        """
+        # Before we upsert, we will add a couple lookup fields
+        self.db.upsert(object_id, obj_meta, scope="objects", collection="meta")
+        self.db.upsert(object_id, obj_lc, scope="objects", collection="lightcurves")
+
+
+class ForcedPhotPipelineUtil(TarxivModule):
+
+    def __init__(self, script_name, reporting_mode, debug=False):
+        super().__init__(
+            script_name=script_name,
+            module="forced_phot_util",
+            reporting_mode=reporting_mode,
+            debug=debug,
+        )
+
+        # Get database
+        self.db = TarxivDB("pipeline", script_name, reporting_mode, debug)
+        # Get kafka configuration
+        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_HOST'] + ":9092",
+                'delivery.timeout.ms': 10000,
+                'queue.buffering.max.messages': 1000000,
+                'queue.buffering.max.ms': 5000,
+                'batch.num.messages': 100,
+                'client.id': socket.gethostname()}
+        self.producer = Producer(conf)
+
+
+    def queue_phot_job(self, txv_id, survey_name):
+        topic = f"internal_{survey_name}_forced_phot"
+        status = {"status": "submitting phot job", "topic": topic, "txv_id": txv_id}
+        self.logger.info(status, extra=status)
+        self.producer.produce(topic=topic, value=txv_id, callback=self.acked)
         self.producer.flush()
 
     def acked(self, err, msg):

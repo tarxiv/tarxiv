@@ -1,0 +1,73 @@
+#!/usr/bin/env python
+from tarxiv.pipeline import ForcedPhotWorker, ForcedPhotPipelineUtil
+from tarxiv.utils import PRINT, LOGFILE, DATABASE
+import multiprocessing as mp
+import argparse
+
+
+# Get config dir from arguments
+parser = argparse.ArgumentParser('forced-phot',
+                                 description="Script for controlling forced phot submissions and queues")
+parser.add_argument('--debug', action='store_true', default=False,
+                         help='set to enable printing/logging in debug mode')
+module_subparsers = parser.add_subparsers(title="command", dest="command")
+queue = module_subparsers.add_parser("queue", help="start a forced phot queue",
+                             description="Start a multithreaded forced photometry queue to handle jobs")
+queue.add_argument("-n", "--n_workers", type=int, default=1,
+                   help="number of worker threads to run forced phot jobs")
+queue.add_argument("survey_name", type=str,
+                   help="which forced phot survey to queue jobs")
+submit = module_subparsers.add_parser("submit-single", help="submit forced phot job to the queue",
+                                      description="Submit single object that needs to append forced phot")
+submit.add_argument("survey", type=str, choices=["atlas"],
+                    help="which forced phot survey to request")
+submit.add_argument("source_id", type=str,
+                    help="source id that needs forced photometry (e.g. tns id or x-match tarxiv_id")
+
+args = parser.parse_args()
+
+
+# ALl same reporting mode
+reporting_mode = (PRINT | LOGFILE | DATABASE)
+if args.command == "queue":
+    # Worker list to hold processes
+    worker_list = []
+    stop_event = mp.Event()
+
+    # Define a function to multiprocess our phot queue
+    def start_worker(survey_name, worker_id, stop_event, reporting_mode, debug):
+        worker = ForcedPhotWorker(script_name="forced_phot_queue",
+                                  reporting_mode=reporting_mode,
+                                  debug=debug)
+        worker.run_pipeline(survey_name, worker_id, stop_event)
+
+    # Signal to exit gracefully
+    def signal_handler(sig, frame):
+        print("RECEIVED EXIT SIGNAL, FINISHING CURRENT JOBS")
+        stop_event.set()
+
+    # Start workers
+    for idx in range(args.n_workers):
+        p = mp.Process(target=start_worker, args=(args.survey_name, idx, stop_event, reporting_mode, args.debug))
+        p.start()
+        worker_list.append(p)
+
+    # Wait for workers to exit
+    for w in worker_list:
+        w.join()
+
+    # All workers
+    print("ALL WORKERS EXITED SUCCESSFULLY")
+
+elif args.command == "submit-single":
+    # Create a utility and submit a single phot job
+    phot_util = ForcedPhotPipelineUtil(script_name="forced_phot_submit",
+                                       reporting_mode=reporting_mode,
+                                       debug=args.debug)
+    # Get tarxiv id for source
+    txv_id = phot_util.db.get_source_txv_id(args.source_id)
+    phot_util.queue_phot_job(txv_id, args.survey_name)
+
+else:
+    print("Invalid command")
+
