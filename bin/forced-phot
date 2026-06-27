@@ -19,7 +19,7 @@ queue.add_argument("survey_name", type=str,
                    help="which forced phot survey to queue jobs")
 submit = module_subparsers.add_parser("submit-single", help="submit forced phot job to the queue",
                                       description="Submit single object that needs to append forced phot")
-submit.add_argument("survey", type=str, choices=["atlas"],
+submit.add_argument("survey_name", type=str, choices=["atlas"],
                     help="which forced phot survey to request")
 submit.add_argument("source_id", type=str,
                     help="source id that needs forced photometry (e.g. tns id or x-match tarxiv_id")
