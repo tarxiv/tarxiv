@@ -422,7 +422,7 @@ class ForcedPhotWorker(TarxivModule):
     def run_pipeline(self, survey_name, worker_id, stop_event):
         # Connect to kafka consumer
         conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_HOST'] + ":9092",
-                'group.id': "internal_kafka_pipeline",
+                'group.id': "internal_kafka_pipeline_pool",
                 'auto.offset.reset': 'earliest',
                 'enable.auto.commit': False,
                 'max.poll.interval.ms': 3600000,
