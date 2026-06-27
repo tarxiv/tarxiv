@@ -2,7 +2,7 @@
 from tarxiv.utils import PRINT, LOGFILE, DATABASE
 from tarxiv.pipeline import TNSPipeline
 from tarxiv.alerts import IMAP
-import warnings
+import datetime
 import argparse
 
 #from pandas.errors import SettingWithCopyWarning # Location may vary by pandas version
@@ -33,7 +33,10 @@ bulk.add_argument("--active", action="store_true",
                   help="Pull data for all current active objects and update")
 bulk.add_argument("--data_source", type=str,
                   help="Add or update a new data source to all objects")
-
+single = module_subparsers.add_parser("run_single", help="pull, process, and upsert a single TNS object",
+                             description="Take in a single TNS object id, and ingest")
+single.add_argument("tns_id", type=str,
+                    help="TNS object id (e.g. 2026abcd)")
 args = parser.parse_args()
 
 
@@ -80,5 +83,19 @@ elif args.command == "bulk_submit":
         pass
     else:
         print("Invalid bulk submission option")
+
+elif args.command == "run_single":
+    txv_tns = TNSPipeline(script_name="tns_single_ingest",
+                          reporting_mode=(PRINT | LOGFILE | DATABASE),
+                          debug=args.debug)
+    # Get survey information
+    txv_id, obj_meta, obj_lc = txv_tns.get_object(args.tns_id)
+    # Get timestamp
+    timestamp = datetime.datetime.now().replace(microsecond=0).isoformat()
+    # Add insertion date to internal meta as well
+    obj_meta["update_date"] = timestamp
+    # Upsert to database
+    txv_tns.upsert_object(txv_id, obj_meta, obj_lc)
+
 else:
     print("Invalid command")

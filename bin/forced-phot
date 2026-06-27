@@ -69,6 +69,9 @@ elif args.command == "submit-single":
                                        debug=args.debug)
     # Get tarxiv id for source
     txv_id = phot_util.db.get_source_txv_id(args.source_id)
+    if txv_id is None:
+        print("NO SUCH OBJECT IN OUR DATABASE")
+
     phot_util.queue_phot_job(txv_id, args.survey_name)
 
 else:

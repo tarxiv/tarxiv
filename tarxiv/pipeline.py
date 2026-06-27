@@ -449,9 +449,10 @@ class ForcedPhotWorker(TarxivModule):
                     status = {"status": "kafka error", "error": msg.error(), "worker_id": worker_id}
                 self.logger.error(status, extra=status)
             else:
-                # This message will give us a tarxiv_id and a survey to run force phot
-                txv_id = msg.value().decode("utf-8")
+
                 try:
+                    # This message will give us a tarxiv_id and a survey to run force phot
+                    txv_id = msg.value().decode("utf-8")
                     status = {"status": "submitting phot", "object_id": txv_id, "worker_id": worker_id, "survey_name": survey_name}
                     self.logger.info(status, extra=status)
                     self.append_forced_phot(txv_id, survey_name)
