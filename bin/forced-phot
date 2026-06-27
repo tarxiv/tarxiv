@@ -2,6 +2,7 @@
 from tarxiv.pipeline import ForcedPhotWorker, ForcedPhotPipelineUtil
 from tarxiv.utils import PRINT, LOGFILE, DATABASE
 import multiprocessing as mp
+import signal
 import argparse
 
 
@@ -46,6 +47,8 @@ if args.command == "queue":
         print("RECEIVED EXIT SIGNAL, FINISHING CURRENT JOBS")
         stop_event.set()
 
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     # Start workers
     for idx in range(args.n_workers):
         p = mp.Process(target=start_worker, args=(args.survey_name, idx, stop_event, reporting_mode, args.debug))
