@@ -471,14 +471,15 @@ class ForcedPhotWorker(TarxivModule):
         # Close out at end of loop
         self.consumer.close()
 
-    def append_forced_phot(self, txv_id, survey_name):
+    def append_forced_phot(self, txv_id, survey_name, drop_init=True):
         # Get existing data
-        init_meta = self.db.get(txv_id, scope="objects", collection="meta")
+        meta = self.db.get(txv_id, scope="objects", collection="meta")
         init_lc = self.db.get(txv_id, scope="objects", collection="lightcurves")
+        init_df = pd.DataFrame(init_lc)
 
         # Cut on time (1 month before DISCOVERY, 6 months after)
         # IF we have a reporting date, WORK ON LATER
-        disc_mjd = Time(init_meta["discovery_date"]).mjd
+        disc_mjd = Time(meta["discovery_date"]).mjd
 
         # Check if we have a document giving the settings
         active_settings = self.db.get(
@@ -497,22 +498,28 @@ class ForcedPhotWorker(TarxivModule):
         mjd_max = disc_mjd + active_settings["active_days"]
 
         # Now get atlas data
-        ra_deg = init_meta["ra_deg"]
-        dec_deg = init_meta["dec_deg"]
+        ra_deg = meta["ra_deg"]
+        dec_deg = meta["dec_deg"]
         # Get survey object
         survey = self.forced_phot_services[survey_name]
         obj_meta, lc_df = survey.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
-        obj_lc = lc_df.to_dict(orient="records")
 
         # If we got something, upsert it
         if obj_meta is not None:
-            init_meta["data_sources"]["atlas"] = obj_meta
-            init_lc += obj_lc
+            meta["data_sources"]["atlas"] = obj_meta
+            # Drop phot from init lc to
+            if drop_init:
+                existing = init_df["survey"] == survey_name
+                init_df = init_df[~existing]
+            # Join new phot
+            lc_df = pd.concat([init_df, lc_df])
+            obj_lc = lc_df.to_dict(orient="records")
+
             # Get timestamp
             timestamp = datetime.datetime.now().replace(microsecond=0).isoformat()
             # Add insertion date to internal meta as well
-            init_meta["update_date"] = timestamp
-            self.upsert_object(txv_id, init_meta, init_lc)
+            meta["update_date"] = timestamp
+            self.upsert_object(txv_id, meta, obj_lc)
 
 
     def print_assignment(self, consumer, partitions):

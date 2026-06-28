@@ -27,7 +27,7 @@ import re
 import os
 
 
-def summarize_lc_mags(obj_meta, lc_df):
+def summarize_lc_mags(obj_meta, lc_df, nightly=False):
     # We are interested in peak mag, most recent detection, most recent non detection, and recent change
     peak_mags = []
     recent_dets = []
@@ -75,7 +75,7 @@ def summarize_lc_mags(obj_meta, lc_df):
             # Now sort and get the rate
             sorted_detections = detections_non_dup.sort_values("mjd")
 
-            if "atlas" in obj_meta.keys():
+            if nightly:
                 # Get nights then group
                 sorted_detections["night"] = sorted_detections["mjd"].astype(int)
                 night_sorted_detections = sorted_detections.groupby('night')[["night", "mag"]].mean()
@@ -215,7 +215,6 @@ class ATLAS(TarxivModule):
             lc_df["survey"] = "atlas"
             # Put in dummy meta
             meta = {
-                "atlas": "dummy value",
                 "ra_deg": precision(float(lc_df.iloc[0].RA), 6),
                 "dec_deg": precision(float(lc_df.iloc[0].Dec), 6),
             }
@@ -234,7 +233,7 @@ class ATLAS(TarxivModule):
 
             # Calculate detections (5 sigma)
             sigma = 5.0
-            lc_df["detection"] = np.where(sigma * lc_df["duJy"] > lc_df["uJy"], 0, 1)
+            lc_df["detection"] = np.where(lc_df["uJy"]/lc_df["duJy"] <  sigma, 0, 1)
             # If we have no detections, dont bother
             if not lc_df["detection"].any():
                 raise SurveyLightCurveMissingError
@@ -253,8 +252,8 @@ class ATLAS(TarxivModule):
                 ]
             ]
             # Append information on recent detections and peak mags, etc
-            meta = summarize_lc_mags(obj_meta=meta, lc_df=lc_df)
-            del meta["atlas"]
+            meta = summarize_lc_mags(obj_meta=meta, lc_df=lc_df, nightly=True)
+
             # Update
             status["lc_count"] = len(lc_df)
 
