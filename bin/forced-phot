@@ -25,7 +25,7 @@ submit.add_argument("survey_name", type=str, choices=["atlas"],
 submit.add_argument("source_id", type=str,
                     help="source id that needs forced photometry (e.g. tns id or x-match tarxiv_id")
 
-run = module_subparsers.add_parser("submit-single", help="run forced phot job immediately",
+run = module_subparsers.add_parser("run-single", help="run forced phot job immediately",
                                       description="Run forced phot on a single object and append to lightcurve")
 run.add_argument("survey_name", type=str, choices=["atlas"],
                     help="which forced phot survey to request")
