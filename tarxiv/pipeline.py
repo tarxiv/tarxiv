@@ -70,9 +70,10 @@ class TNSPipeline(TarxivModule):
         self.consumer = None
 
         # Signal handling
-        self.stop_event = mp.Event()
-        signal.signal(signal.SIGINT, self.signal_handler)
-        signal.signal(signal.SIGTERM, self.signal_handler)
+        if not debug:
+            self.stop_event = mp.Event()
+            signal.signal(signal.SIGINT, self.signal_handler)
+            signal.signal(signal.SIGTERM, self.signal_handler)
 
     def signal_handler(self, sig, frame):
         status = {
