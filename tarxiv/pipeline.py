@@ -74,7 +74,8 @@ class TNSPipeline(TarxivModule):
             self.stop_event = mp.Event()
             signal.signal(signal.SIGINT, self.signal_handler)
             signal.signal(signal.SIGTERM, self.signal_handler)
-
+        else:
+            self.stop_event = None
     def signal_handler(self, sig, frame):
         status = {
             "status": "received exit signal, wait to finish processing",
@@ -327,7 +328,7 @@ class TNSPipeline(TarxivModule):
         status = {"status": "running pipeline"}
         self.logger.info(status, extra=status)
 
-        while self.stop_event.is_set() is False:
+        while self.stop_event is None or self.stop_event.is_set() is False:
             # Get next message
             msg = self.consumer.poll(timeout=1.0)
             # No message, try again
