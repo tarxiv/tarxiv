@@ -25,6 +25,13 @@ submit.add_argument("survey_name", type=str, choices=["atlas"],
 submit.add_argument("source_id", type=str,
                     help="source id that needs forced photometry (e.g. tns id or x-match tarxiv_id")
 
+run = module_subparsers.add_parser("submit-single", help="run forced phot job immediately",
+                                      description="Run forced phot on a single object and append to lightcurve")
+run.add_argument("survey_name", type=str, choices=["atlas"],
+                    help="which forced phot survey to request")
+run.add_argument("source_id", type=str,
+                    help="source id that needs forced photometry (e.g. tns id or x-match tarxiv_id")
+
 args = parser.parse_args()
 
 
@@ -73,6 +80,18 @@ elif args.command == "submit-single":
         print("NO SUCH OBJECT IN OUR DATABASE")
 
     phot_util.queue_phot_job(txv_id, args.survey_name)
+
+elif args.command == "run-single":
+    # Create the forced phot worker
+    worker = ForcedPhotWorker(script_name="forced_phot_run",
+                              reporting_mode=reporting_mode,
+                              debug=args.debug)
+    txv_id = worker.db.get_source_txv_id(args.source_id)
+    if txv_id is None:
+        print("NO SUCH OBJECT IN OUR DATABASE")
+    else:
+        print("Starting phot job on ", txv_id)
+        worker.append_forced_phot(txv_id, args.survey_name)
 
 else:
     print("Invalid command")
