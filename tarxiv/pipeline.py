@@ -508,7 +508,7 @@ class ForcedPhotWorker(TarxivModule):
         if obj_meta is not None:
             meta["data_sources"]["atlas"] = obj_meta
             # Drop phot from init lc to
-            if drop_init:
+            if drop_init and init_df.empty is False:
                 existing = init_df["survey"] == survey_name
                 init_df = init_df[~existing]
             # Join new phot
