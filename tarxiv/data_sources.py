@@ -262,6 +262,7 @@ class ATLAS(TarxivModule):
 
         except SurveyLightCurveMissingError:
             status["status"] = "no light curve"
+            lc_df = pd.DataFrame()
 
         except Exception as e:
             status.update({
