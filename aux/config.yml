@@ -31,9 +31,8 @@ tns:
   rate_limit: 4
 
 atlas:
-  url: "none"
-  survey_name: "atlas"
-  data_type: ["meta", "lightcurve"]
+  url: "https://fallingstar-data.com/forcedphot"
+  meta_only: false
   update_frequency: 30
 
 fink_ztf:
@@ -77,7 +76,13 @@ asas_sn:
   survey_name: "asas-sn"
   update_frequency: 1
 
-data_source_order: ["tns", "sherlock", "fink_ztf", "fink_lsst", "asas_sn"]
+alerce:
+  meta_only: true
+  update_frequency: 10
+  lsst_classifier: "stamp_classifier_rubin_beta_20260421"
+  ztf_classifier: "lc_classifier_BHRF_forced_phot"
+
+data_source_order: ["tns", "sherlock", "fink_ztf", "fink_lsst", "antares", "asas_sn"]
 
 # ingesting TNS notices by IMAP
 imap:

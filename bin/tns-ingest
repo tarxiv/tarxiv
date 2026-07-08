@@ -2,7 +2,7 @@
 from tarxiv.utils import PRINT, LOGFILE, DATABASE
 from tarxiv.pipeline import TNSPipeline
 from tarxiv.alerts import IMAP
-import warnings
+import datetime
 import argparse
 
 #from pandas.errors import SettingWithCopyWarning # Location may vary by pandas version
@@ -17,9 +17,11 @@ parser.add_argument('--debug', action='store_true', default=False,
 module_subparsers = parser.add_subparsers(title="command", dest="command")
 module_subparsers.add_parser("email", help="Turn on email monitor",
                              description="Watch email for new TNS alerts and submit to internal queue")
-module_subparsers.add_parser("alert_queue", help="Process new alerts from internal queue",
+module_subparsers.add_parser("alert_queue", help="Process objects to internal alert queue",
                              description="Watch internal queue (from TNS emails) and submit new alerts.")
-module_subparsers.add_parser("bulk_queue", help="Process alerts submitted to bulk internal queue",
+module_subparsers.add_parser("bulk_queue", help="Process objects submitted to internal bulk queue",
+                             description="Watch internal queue (from bulk commands) and submit objects.")
+module_subparsers.add_parser("update_queue", help="Process objects submitted to internal update queue",
                              description="Watch internal queue (from bulk commands) and update objects.")
 bulk = module_subparsers.add_parser("bulk_submit", help="Submit bulk updates or re-compute for TNS objects",
                                     description="Submit bulk updates or re-compute for TNS objects.")
@@ -31,7 +33,10 @@ bulk.add_argument("--active", action="store_true",
                   help="Pull data for all current active objects and update")
 bulk.add_argument("--data_source", type=str,
                   help="Add or update a new data source to all objects")
-
+single = module_subparsers.add_parser("run_single", help="pull, process, and upsert a single TNS object",
+                             description="Take in a single TNS object id, and ingest")
+single.add_argument("tns_id", type=str,
+                    help="TNS object id (e.g. 2026abcd)")
 args = parser.parse_args()
 
 
@@ -57,6 +62,13 @@ elif args.command == "bulk_queue":
     # Run the pipeline
     txv_tns.run_pipeline(topic="internal_tns_bulk")
 
+elif args.command == "update_queue":
+    txv_tns = TNSPipeline(script_name="tns_missing_ingest",
+                          reporting_mode=(PRINT | LOGFILE | DATABASE),
+                          debug=args.debug)
+    # Run the pipeline
+    txv_tns.run_pipeline(topic="internal_tns_bulk")
+
 elif args.command == "bulk_submit":
     txv_tns = TNSPipeline(script_name="tns_daily_ingest",
                           reporting_mode=(PRINT | LOGFILE | DATABASE),
@@ -71,5 +83,19 @@ elif args.command == "bulk_submit":
         pass
     else:
         print("Invalid bulk submission option")
+
+elif args.command == "run_single":
+    txv_tns = TNSPipeline(script_name="tns_single_ingest",
+                          reporting_mode=(PRINT | LOGFILE | DATABASE),
+                          debug=args.debug)
+    # Get survey information
+    txv_id, obj_meta, obj_lc = txv_tns.get_object(args.tns_id)
+    # Get timestamp
+    timestamp = datetime.datetime.now().replace(microsecond=0).isoformat()
+    # Add insertion date to internal meta as well
+    obj_meta["update_date"] = timestamp
+    # Upsert to database
+    txv_tns.upsert_object(txv_id, obj_meta, obj_lc)
+
 else:
     print("Invalid command")
