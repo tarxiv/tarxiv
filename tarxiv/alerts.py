@@ -13,7 +13,6 @@ import re
 import os
 
 
-
 class IMAP(TarxivModule):
     """Module for interfacing with an IMAP email server and parsing TNS alerts."""
 
@@ -33,6 +32,7 @@ class IMAP(TarxivModule):
         self.conn = None
         self.imap_user = os.getenv("TARXIV_IMAP_USERNAME", "")
         self.imap_pass = os.getenv("TARXIV_IMAP_PASSWORD", "")
+        self.kafka_host = os.getenv("TARXIV_KAFKA_HOST", "localhost")
         try:
             self.conn = imaplib.IMAP4_SSL(self.config["imap"]["server"])
             self.conn.login(self.imap_user, self.imap_pass)
@@ -43,12 +43,14 @@ class IMAP(TarxivModule):
             raise
 
         # Get kafka configuration
-        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_HOST'] + ":9092",
-                'delivery.timeout.ms': 10000,
-                'queue.buffering.max.messages': 1000000,
-                'queue.buffering.max.ms': 5000,
-                'batch.num.messages': 100,
-                'client.id': socket.gethostname()}
+        conf = {
+            "bootstrap.servers": self.kafka_host + ":9092",
+            "delivery.timeout.ms": 10000,
+            "queue.buffering.max.messages": 1000000,
+            "queue.buffering.max.ms": 5000,
+            "batch.num.messages": 100,
+            "client.id": socket.gethostname(),
+        }
         self.producer = Producer(conf)
 
         # Create stop flag for monitoring
@@ -173,7 +175,11 @@ class IMAP(TarxivModule):
                     self.logger.info(status, extra=status)
                     # Now submit what we have
                     for tns_obj_id in alerts:
-                        self.producer.produce(topic="internal_tns_alerts", value=tns_obj_id, callback=self.acked)
+                        self.producer.produce(
+                            topic="internal_tns_alerts",
+                            value=tns_obj_id,
+                            callback=self.acked,
+                        )
                     # Mark read, when submitted all alerts
                     self.mark_read(uid)
 
@@ -187,11 +193,14 @@ class IMAP(TarxivModule):
                     self.conn = imaplib.IMAP4_SSL(self.config["imap"]["server"])
                     self.conn.login(self.imap_user, self.imap_pass)
                 except Exception as recon_e:
-                    status = {"status": "reconnection failed", "error": str(recon_e) }
+                    status = {"status": "reconnection failed", "error": str(recon_e)}
                     self.logger.error(status, extra=status)
                     self.stop_event.set()  # Stop if we can't reconnect
             except Exception as e:
-                status = {"status": "unexpected error in monitoring thread", "error": str(e)}
+                status = {
+                    "status": "unexpected error in monitoring thread",
+                    "error": str(e),
+                }
                 self.logger.error(status, extra=status)
                 time.sleep(self.config["imap"]["polling_interval"] * 2)
 

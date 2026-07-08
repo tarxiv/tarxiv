@@ -213,7 +213,7 @@ services:
     image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:${TARXIV_IMAGE_TAG:-latest}
     container_name: tarxiv-api
       #user: "1000:1000"
-    command: uv run /app/bin/start-api
+    command: uv run /app/bin/start-api ${TARXIV_API_ARGS:-}
     volumes:
       - ../bin:/app/bin:Z
       - ../docs:/app/docs:Z
@@ -258,7 +258,7 @@ services:
     profiles:
       - tarxiv
     image: ${TARXIV_IMAGE_SOURCE:-local}/tarxiv:${TARXIV_IMAGE_TAG:-latest}
-    command: uv run /app/bin/run_dashboard.py --host 0.0.0.0 --port ${TARXIV_DASHBOARD_PORT:-8050} --debug
+    command: uv run /app/bin/run_dashboard.py --host 0.0.0.0 --port ${TARXIV_DASHBOARD_PORT:-8050} ${TARXIV_DASHBOARD_ARGS:-}
     container_name: tarxiv-dashboard
     volumes:
       - ../bin:/app/bin:Z

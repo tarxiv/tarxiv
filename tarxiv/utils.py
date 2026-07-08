@@ -4,7 +4,9 @@ from logstash_async.handler import AsynchronousLogstashHandler
 from logstash_async.handler import LogstashFormatter
 from decimal import Decimal, ROUND_HALF_UP
 from astropy.coordinates import SkyCoord
+from paste.translogger import TransLogger
 import astropy.units as u
+import cherrypy
 import logging
 import string
 import yaml
@@ -17,6 +19,36 @@ import re
 PRINT = 1
 LOGFILE = 2
 DATABASE = 4
+
+
+def serve_wsgi(app, host, port, debug, logger):
+    """Serve a WSGI callable on the CherryPy/cheroot production server.
+
+    :param app: WSGI callable (e.g. a Flask app or Dash's underlying server).
+    :param host: host address to bind; str.
+    :param port: port to bind; int.
+    :param debug: enable dev-only features (autoreload, screen logging); bool.
+    :param logger: module logger for status reporting.
+    """
+    status = {
+        "status": "starting WSGI server",
+        "host": host,
+        "port": port,
+        "debug": debug,
+    }
+    logger.info(status, extra=status)
+    # Mount the WSGI callable on the root directory, with Paste access logging.
+    cherrypy.tree.graft(TransLogger(app), "/")
+    # Configure the web server; autoreload and screen logging are dev-only.
+    cherrypy.config.update({
+        "engine.autoreload.on": debug,
+        "log.screen": debug,
+        "server.socket_host": host,
+        "server.socket_port": port,
+    })
+    # Start the CherryPy WSGI web server and block.
+    cherrypy.engine.start()
+    cherrypy.engine.block()
 
 
 class TarxivModule:

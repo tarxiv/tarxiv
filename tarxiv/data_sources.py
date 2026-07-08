@@ -78,21 +78,28 @@ def summarize_lc_mags(obj_meta, lc_df, nightly=False):
             if nightly:
                 # Get nights then group
                 sorted_detections["night"] = sorted_detections["mjd"].astype(int)
-                night_sorted_detections = sorted_detections.groupby('night')[["night", "mag"]].mean()
+                night_sorted_detections = sorted_detections.groupby("night")[
+                    ["night", "mag"]
+                ].mean()
 
                 # Get mag rate for each point in the filter_wise group
                 night_sorted_detections["mag_rate"] = -(
-                    night_sorted_detections["mag"].diff() / night_sorted_detections["night"].diff()
+                    night_sorted_detections["mag"].diff()
+                    / night_sorted_detections["night"].diff()
                 )
                 # Replace nan
-                night_sorted_detections["mag_rate"] = night_sorted_detections["mag_rate"].replace(
-                    np.nan, None
-                )
+                night_sorted_detections["mag_rate"] = night_sorted_detections[
+                    "mag_rate"
+                ].replace(np.nan, None)
                 # Get the most recent row and append the information
-                recent_row = night_sorted_detections.loc[night_sorted_detections["night"].idxmax()]
+                recent_row = night_sorted_detections.loc[
+                    night_sorted_detections["night"].idxmax()
+                ]
 
                 # Put jd back in recent row
-                recent_row["mjd"] = sorted_detections.loc[sorted_detections["mjd"].idxmax()]["mjd"]
+                recent_row["mjd"] = sorted_detections.loc[
+                    sorted_detections["mjd"].idxmax()
+                ]["mjd"]
 
             else:
                 # Get mag rate for each point in the filter_wise group
@@ -137,6 +144,7 @@ def summarize_lc_mags(obj_meta, lc_df, nightly=False):
 
     return obj_meta
 
+
 class ATLAS(TarxivModule):
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
@@ -146,15 +154,24 @@ class ATLAS(TarxivModule):
             debug=debug,
         )
         # Validate TOKEN
-        response = requests.post(url=f"{self.config['atlas']['url']}/api-token-auth/",
-                                 data={
-                                     'username': os.environ['TARXIV_ATLAS_USER'],
-                                     'password': os.environ['TARXIV_ATLAS_PASS']})
+        response = requests.post(
+            url=f"{self.config['atlas']['url']}/api-token-auth/",
+            data={
+                "username": os.environ["TARXIV_ATLAS_USER"],
+                "password": os.environ["TARXIV_ATLAS_PASS"],
+            },
+        )
         if response.status_code == 200:
-            token = response.json()['token']
-            self.headers = {'Authorization': f'Token {token}', 'Accept': 'application/json'}
+            token = response.json()["token"]
+            self.headers = {
+                "Authorization": f"Token {token}",
+                "Accept": "application/json",
+            }
         else:
-            status = {"status": "atlas falling star validation error", "error": response.json()}
+            status = {
+                "status": "atlas falling star validation error",
+                "error": response.json(),
+            }
             self.logger.error(status, extra=status)
             sys.exit(1)
 
@@ -168,15 +185,23 @@ class ATLAS(TarxivModule):
             task_url = None
             while not task_url:
                 with requests.Session() as s:
-                    response = s.post(url=f"{self.config['atlas']['url']}/queue/", headers=self.headers,
-                                      data={'ra': ra_deg, 'dec': dec_deg, 'mjd_min': mjd_min, 'mjd_max': mjd_max})
+                    response = s.post(
+                        url=f"{self.config['atlas']['url']}/queue/",
+                        headers=self.headers,
+                        data={
+                            "ra": ra_deg,
+                            "dec": dec_deg,
+                            "mjd_min": mjd_min,
+                            "mjd_max": mjd_max,
+                        },
+                    )
                     if response.status_code == 201:  # successfully queued
-                        task_url = response.json()['url']
+                        task_url = response.json()["url"]
 
                     elif response.status_code == 429:  # throttled
                         message = response.json()["detail"]
-                        t_sec = re.findall(r'available in (\d+) seconds', message)
-                        t_min = re.findall(r'available in (\d+) minutes', message)
+                        t_sec = re.findall(r"available in (\d+) seconds", message)
+                        t_min = re.findall(r"available in (\d+) minutes", message)
                         if t_sec:
                             waittime = int(t_sec[0])
                         elif t_min:
@@ -185,7 +210,10 @@ class ATLAS(TarxivModule):
                             waittime = 10
                         time.sleep(waittime)
                     else:
-                        status = {"status": "atlas falling star validation error", "error": response.json()}
+                        status = {
+                            "status": "atlas falling star validation error",
+                            "error": response.json(),
+                        }
                         self.logger.error(status, extra=status)
                         raise SurveyMetaMissingError
 
@@ -194,13 +222,16 @@ class ATLAS(TarxivModule):
                 with requests.Session() as s:
                     resp = s.get(task_url, headers=self.headers)
                     if resp.status_code == 200:  # HTTP OK
-                        if resp.json()['finishtimestamp']:
-                            result_url = resp.json()['result_url']
+                        if resp.json()["finishtimestamp"]:
+                            result_url = resp.json()["result_url"]
                             break
 
                         time.sleep(10)
                     else:
-                        status = {"status": "atlas falling star job error", "error": response.json()}
+                        status = {
+                            "status": "atlas falling star job error",
+                            "error": response.json(),
+                        }
                         self.logger.error(status, extra=status)
                         raise SurveyMetaMissingError
 
@@ -220,20 +251,22 @@ class ATLAS(TarxivModule):
             }
 
             # Rename columns
-            lc_df = lc_df.rename(columns={
-                "MJD": "mjd",
-                "m": "mag",
-                "dm": "mag_err",
-                "mag5sig": "limit",
-                "maj": "fwhm",
-                "F": "filter",
-            })
+            lc_df = lc_df.rename(
+                columns={
+                    "MJD": "mjd",
+                    "m": "mag",
+                    "dm": "mag_err",
+                    "mag5sig": "limit",
+                    "maj": "fwhm",
+                    "F": "filter",
+                }
+            )
             # Make mags positive
-            lc_df["mag"] = np.sign(lc_df['limit']) * lc_df['mag'].abs()
+            lc_df["mag"] = np.sign(lc_df["limit"]) * lc_df["mag"].abs()
 
             # Calculate detections (5 sigma)
             sigma = 5.0
-            lc_df["detection"] = np.where(lc_df["uJy"]/lc_df["duJy"] <  sigma, 0, 1)
+            lc_df["detection"] = np.where(lc_df["uJy"] / lc_df["duJy"] < sigma, 0, 1)
             # If we have no detections, dont bother
             if not lc_df["detection"].any():
                 raise SurveyLightCurveMissingError
@@ -268,7 +301,7 @@ class ATLAS(TarxivModule):
                 "status": "encontered unexpected error",
                 "error_message": str(e),
                 "details": traceback.format_exc(),
-                })
+            })
 
         self.logger.info(status, extra=status)
         return meta, lc_df
@@ -461,32 +494,32 @@ class ZTF(TarxivModule):
             meta_line = {k[2:]: v for k, v in meta_line.items()}
             meta_columns = [
                 "classification",
-                'DR3Name',
-                'anomaly_score',
-                'blazar_stats_m0',
-                'blazar_stats_m1',
-                'blazar_stats_m2',
-                'cdsxmatch',
-                'gaiaClass',
-                'gaiaVarFlag',
-                'gcvs',
-                'is_transient',
-                'mangrove_2MASS_name',
-                'mangrove_HyperLEDA_name',
-                'mangrove_ang_dist',
-                'mangrove_lum_dist',
-                'mulens',
-                'rf_kn_vs_nonkn',
-                'rf_snia_vs_nonia',
-                'slsn_score',
-                'snn_sn_vs_all',
-                'snn_snia_vs_nonia',
-                'spicy_class',
-                'spicy_id',
-                'tns',
-                'vsx',
-                'x3hsp',
-                'x4lac',
+                "DR3Name",
+                "anomaly_score",
+                "blazar_stats_m0",
+                "blazar_stats_m1",
+                "blazar_stats_m2",
+                "cdsxmatch",
+                "gaiaClass",
+                "gaiaVarFlag",
+                "gcvs",
+                "is_transient",
+                "mangrove_2MASS_name",
+                "mangrove_HyperLEDA_name",
+                "mangrove_ang_dist",
+                "mangrove_lum_dist",
+                "mulens",
+                "rf_kn_vs_nonkn",
+                "rf_snia_vs_nonia",
+                "slsn_score",
+                "snn_sn_vs_all",
+                "snn_snia_vs_nonia",
+                "spicy_class",
+                "spicy_id",
+                "tns",
+                "vsx",
+                "x3hsp",
+                "x4lac",
             ]
             meta = {
                 k: v
@@ -775,7 +808,7 @@ class LSST(TarxivModule):
                     "filter",
                     "detection",
                     "camera",
-                    "survey"
+                    "survey",
                 ]
             ]
             lc_df["survey"] = "lsst"
@@ -811,6 +844,7 @@ class ANTARES(TarxivModule):
             reporting_mode=reporting_mode,
             debug=debug,
         )
+
     def get_object(self, object_id=None, ra_deg=None, dec_deg=None, radius=5):
         status = {"object_id": object_id}
         meta = None
@@ -827,7 +861,9 @@ class ANTARES(TarxivModule):
             meta["ra_deg"] = locus.ra
             meta["dec_deg"] = locus.dec
             hit = SkyCoord(locus.ra, locus.dec, unit="deg")
-            meta["cross_match_distance"] = precision(float(center.separation(hit).arcsec), 6)
+            meta["cross_match_distance"] = precision(
+                float(center.separation(hit).arcsec), 6
+            )
             meta["tags"] = locus.tags
 
         except SurveyMetaMissingError:
@@ -860,7 +896,9 @@ class AlerceMod(TarxivModule):
 
         try:
             # Now get lsst
-            lsst_df = self.client.query_objects(ra=ra_deg, dec=dec_deg, radius=radius, survey="lsst")
+            lsst_df = self.client.query_objects(
+                ra=ra_deg, dec=dec_deg, radius=radius, survey="lsst"
+            )
             if not lsst_df.empty:
                 # Get object
                 lsst_id = lsst_df.iloc[0].to_dict()["oid"]
@@ -870,21 +908,41 @@ class AlerceMod(TarxivModule):
                 result = self.client.query_probabilities(oid=lsst_id, survey="lsst")
                 prob_df = pd.DataFrame(result)
                 if not prob_df.empty:
-                    prob_df["probability"] = prob_df["probability"].replace(np.nan, None)
+                    prob_df["probability"] = prob_df["probability"].replace(
+                        np.nan, None
+                    )
                     prob_info = prob_df[
-                        (prob_df["classifier_name"] == self.config["alerce"]["lsst_classifier"])
-                        & (prob_df["ranking"] == 1)]
+                        (
+                            prob_df["classifier_name"]
+                            == self.config["alerce"]["lsst_classifier"]
+                        )
+                        & (prob_df["ranking"] == 1)
+                    ]
                     # Might not have info for this classifier
                     if not prob_info.empty:
                         prob_info = prob_info.iloc[0].to_dict()
                         # Add to meta
-                        meta["lsst_classifier"] = prob_info["classifier_name"] if type(prob_info["classifier_name"]) == str else prob_info["classifier_name"][0]
-                        meta["lsst_class_name"] = prob_info["class_name"] if type(prob_info["class_name"]) == str else prob_info["class_name"][0]
-                        meta["lsst_class_prob"] = prob_info["probability"] if type(prob_info["probability"]) == float else prob_info["probability"][0]
+                        meta["lsst_classifier"] = (
+                            prob_info["classifier_name"]
+                            if type(prob_info["classifier_name"]) is str
+                            else prob_info["classifier_name"][0]
+                        )
+                        meta["lsst_class_name"] = (
+                            prob_info["class_name"]
+                            if type(prob_info["class_name"]) is str
+                            else prob_info["class_name"][0]
+                        )
+                        meta["lsst_class_prob"] = (
+                            prob_info["probability"]
+                            if type(prob_info["probability"]) is float
+                            else prob_info["probability"][0]
+                        )
                         meta["lsst_class_version"] = prob_info["classifier_version"]
 
             # Now get ZTF
-            ztf_df = self.client.query_objects(ra=ra_deg, dec=dec_deg, radius=radius, survey="ztf")
+            ztf_df = self.client.query_objects(
+                ra=ra_deg, dec=dec_deg, radius=radius, survey="ztf"
+            )
             if not ztf_df.empty:
                 # Get object
                 ztf_id = ztf_df.iloc[0].to_dict()["oid"]
@@ -894,17 +952,35 @@ class AlerceMod(TarxivModule):
                 result = self.client.query_probabilities(oid=ztf_id, survey="ztf")
                 prob_df = pd.DataFrame(result)
                 if not prob_df.empty:
-                    prob_df["probability"] = prob_df["probability"].replace(np.nan, None)
+                    prob_df["probability"] = prob_df["probability"].replace(
+                        np.nan, None
+                    )
                     prob_info = prob_df[
-                        (prob_df["classifier_name"] == self.config["alerce"]["ztf_classifier"])
-                        & (prob_df["ranking"] == 1)]
+                        (
+                            prob_df["classifier_name"]
+                            == self.config["alerce"]["ztf_classifier"]
+                        )
+                        & (prob_df["ranking"] == 1)
+                    ]
                     # Might not have info for this classifier
                     if not prob_info.empty:
                         prob_info = prob_info.iloc[0].to_dict()
                         # Add to meta
-                        meta["ztf_classifier"] = prob_info["classifier_name"] if type(prob_info["classifier_name"]) == str else prob_info["classifier_name"][0]
-                        meta["ztf_class_name"] = prob_info["class_name"] if type(prob_info["class_name"]) == str else prob_info["class_name"][0]
-                        meta["ztf_class_prob"] = prob_info["probability"] if type(prob_info["probability"]) == float else prob_info["probability"][0]
+                        meta["ztf_classifier"] = (
+                            prob_info["classifier_name"]
+                            if type(prob_info["classifier_name"]) is str
+                            else prob_info["classifier_name"][0]
+                        )
+                        meta["ztf_class_name"] = (
+                            prob_info["class_name"]
+                            if type(prob_info["class_name"]) is str
+                            else prob_info["class_name"][0]
+                        )
+                        meta["ztf_class_prob"] = (
+                            prob_info["probability"]
+                            if type(prob_info["probability"]) is float
+                            else prob_info["probability"][0]
+                        )
                         meta["ztf_class_version"] = prob_info["classifier_version"]
 
                 # Get featurs
@@ -922,7 +998,12 @@ class AlerceMod(TarxivModule):
                     meta["features"] = []
 
                     for _, row in feat_df.iterrows():
-                        feat = {"name": row["name"], "value": row["value"], "survey": "ZTF", "filter": row["filter"]}
+                        feat = {
+                            "name": row["name"],
+                            "value": row["value"],
+                            "survey": "ZTF",
+                            "filter": row["filter"],
+                        }
                         meta["features"].append(feat)
                     meta["ztf_feature_version"] = feat_df.iloc[0]["version"]
 
@@ -930,6 +1011,26 @@ class AlerceMod(TarxivModule):
             if not meta:
                 meta = None
                 raise SurveyMetaMissingError
+
+            # Get object
+            lsst_obj = lsst_df.iloc[0]
+            # Get probabilities
+            result = self.client.query_probabilities(oid=lsst_obj.oid, survey="lsst")
+            prob_df = pd.DataFrame(result)
+            prob_info = prob_df[
+                (prob_df["classifier_name"] == self.config["alerce_lsst"]["classifier"])
+                & (prob_df["ranking"] == 1)
+            ]
+
+            meta = {
+                "object_id": lsst_obj.oid,
+                "classifier": {
+                    "name": prob_info.classifier_name,
+                    "version": prob_info.classifier_version,
+                    "probability": prob_info.probability,
+                    "result": prob_info.class_name,
+                },
+            }
 
         except SurveyMetaMissingError:
             status["status"] = "no match"
