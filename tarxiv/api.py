@@ -4,10 +4,8 @@ import secrets
 from typing import cast
 
 from flask import Flask, Blueprint, request, make_response, redirect, session
-import cherrypy
-from paste.translogger import TransLogger
 
-from .utils import TarxivModule
+from .utils import TarxivModule, serve_wsgi
 from .database import TarxivDB
 from .auth import sign_token, PROVIDERS, validate_token, TokenStatus, verify_token
 from .database_user import (
@@ -69,23 +67,13 @@ class API(TarxivModule):
         self.app.register_blueprint(Blueprint("main", __name__))
 
     def start_server(self):
-        # Log
-        status = {"status": "starting WSGI server"}
-        self.logger.info(status, extra=status)
-        # Enable WSGI access logging via Paste
-        app_logged = TransLogger(self.app)
-        # Mount the WSGI callable object (app) on the root directory
-        cherrypy.tree.graft(app_logged, "/")
-        # Set the configuration of the web server
-        cherrypy.config.update({
-            "engine.autoreload.on": True,
-            "log.screen": True,
-            "server.socket_port": self.config["api_port"],
-            "server.socket_host": "0.0.0.0",
-        })
-        # Start the CherryPy WSGI web server
-        cherrypy.engine.start()
-        cherrypy.engine.block()
+        host, port = "0.0.0.0", self.config["api_port"]
+        if self.debug:
+            # Local development: Flask's dev server with the interactive reloader.
+            self.app.run(host=host, port=port, debug=True)
+        else:
+            # Production: serve via the CherryPy/cheroot WSGI server.
+            serve_wsgi(self.app, host, port, self.debug, self.logger)
 
     def validate_token_request(self, token: str) -> dict:
         """Validate a JWT and return structured status for error handling."""
