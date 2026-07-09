@@ -317,7 +317,7 @@ class TNSPipeline(TarxivModule):
 
     def run_pipeline(self, topic):
         # Connect to kafka consumer
-        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_HOST'] + ":9092",
+        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_INTERNAL_HOST'] + ":9092",
                 'group.id': "tns_pipeline",
                 'auto.offset.reset': 'earliest',
                 'enable.auto.commit': False,
