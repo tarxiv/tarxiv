@@ -60,7 +60,7 @@ class TNSPipeline(TarxivModule):
         )
 
         # Get kafka configuration
-        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_HOST'] + ":9092",
+        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_INTERNAL_HOST'] + ":9092",
                 'delivery.timeout.ms': 10000,
                 'queue.buffering.max.messages': 1000000,
                 'queue.buffering.max.ms': 5000,
@@ -76,6 +76,8 @@ class TNSPipeline(TarxivModule):
             signal.signal(signal.SIGTERM, self.signal_handler)
         else:
             self.stop_event = None
+
+
     def signal_handler(self, sig, frame):
         status = {
             "status": "received exit signal, wait to finish processing",
@@ -288,7 +290,7 @@ class TNSPipeline(TarxivModule):
                 object_id = obj["name"]
 
             # Push to bulk update
-            self.producer.produce(topic="internal_tns_bulk", value=object_id, callback=self.acked)
+            self.producer.produce(topic="tns_bulk", value=object_id, callback=self.acked)
 
     def daily_update(self):
         # Get all targets still in "active" window for update
@@ -304,11 +306,11 @@ class TNSPipeline(TarxivModule):
         # Submit missing IDs for bulk pulls
         missing_ids = list(set(all_tns_ids) - set(cur_tns_ids))
         for object_id in missing_ids:
-            self.producer.produce(topic="internal_tns_bulk", value=object_id, callback=self.acked)
+            self.producer.produce(topic="tns_bulk", value=object_id, callback=self.acked)
 
         # Submit updates to update pipeline
         for object_id in missing_ids:
-            self.producer.produce(topic="internal_tns_updates", value=object_id, callback=self.acked)
+            self.producer.produce(topic="tns_updates", value=object_id, callback=self.acked)
 
         # Finish by flushing
         self.producer.flush(timeout=10.0)
@@ -316,7 +318,7 @@ class TNSPipeline(TarxivModule):
     def run_pipeline(self, topic):
         # Connect to kafka consumer
         conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_HOST'] + ":9092",
-                'group.id': "internal_kafka_pipeline",
+                'group.id': "tns_pipeline",
                 'auto.offset.reset': 'earliest',
                 'enable.auto.commit': False,
                 'max.poll.interval.ms': 3600000,
@@ -343,7 +345,7 @@ class TNSPipeline(TarxivModule):
             else:
                 tns_object_id = msg.value().decode("utf-8")
                 try:
-                    if topic in ["internal_tns_alerts", "internal_tns_bulk"]:
+                    if topic in ["tns_alerts", "tns_bulk"]:
                         # Get survey information
                         txv_id, obj_meta, obj_lc = self.get_object(tns_object_id)
                         # Get timestamp
@@ -353,22 +355,26 @@ class TNSPipeline(TarxivModule):
                         # Upsert to database
                         self.upsert_object(txv_id, obj_meta, obj_lc)
 
-                        # Submit to hopskotch
-                        stream = Stream(self.hop_auth)
-                        with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
-                            # Additional information for hopskotch
-                            s.write(obj_meta)
-                            status = {
-                                "status": "submitted hopskotch alert",
-                                "object_id": tns_object_id,
-                            }
-                            self.logger.info(status, extra=status)
-                        # Submit kafka alert
-                        msg = json.dumps(obj_meta).encode('utf-8')
-                        self.producer.produce(topic='tns', value=msg, callback=self.acked)
-                        self.consumer.commit(asynchronous=False)
+                        # New alerts send hopskotch and kafka, also queue up forced phot
+                        if topic == "tns_alerts":
 
-                    elif topic in ["internal_tns_updates"]:
+                            # Submit to hopskotch
+                            stream = Stream(self.hop_auth)
+                            with stream.open("kafka://kafka.scimma.org/tarxiv.tns", "w") as s:
+                                # Additional information for hopskotch
+                                s.write(obj_meta)
+                                status = {
+                                    "status": "submitted hopskotch alert",
+                                    "object_id": tns_object_id,
+                                }
+                                self.logger.info(status, extra=status)
+                            # Submit kafka alert
+                            msg = json.dumps(obj_meta).encode('utf-8')
+                            self.producer.produce(topic='tns', value=msg, callback=self.acked)
+                            self.consumer.commit(asynchronous=False)
+
+
+                    elif topic in ["tns_updates"]:
                         txv_id, obj_meta, obj_lc = self.update_active_object(tns_object_id)
                         # Get timestamp
                         timestamp = datetime.datetime.now().replace(microsecond=0).isoformat()
@@ -421,10 +427,10 @@ class ForcedPhotWorker(TarxivModule):
         self.db = TarxivDB("pipeline", script_name, reporting_mode, debug)
         self.consumer = None
 
-    def run_pipeline(self, survey_name, worker_id, stop_event):
+    def run_pipeline(self, survey_name, queue_type, worker_id, stop_event):
         # Connect to kafka consumer
-        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_HOST'] + ":9092",
-                'group.id': "internal_kafka_pipeline_pool",
+        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_INTERNAL_HOST'] + ":9092",
+                'group.id': "forced_phot_worker_pool",
                 'auto.offset.reset': 'earliest',
                 'enable.auto.commit': False,
                 'max.poll.interval.ms': 3600000,
@@ -432,7 +438,7 @@ class ForcedPhotWorker(TarxivModule):
                 'heartbeat.interval.ms': 3000}
         self.consumer = Consumer(conf)
         # Topic name will be given by our survey name
-        topic = f"internal_{survey_name}_forced_phot"
+        topic = f"{survey_name}_{queue_type}_forced_phot"
         self.consumer.subscribe([topic], on_assign=self.print_assignment)
         # Start up
         status = {"status": "running pipeline", "worker_id": worker_id}
@@ -556,7 +562,7 @@ class ForcedPhotPipelineUtil(TarxivModule):
         # Get database
         self.db = TarxivDB("pipeline", script_name, reporting_mode, debug)
         # Get kafka configuration
-        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_HOST'] + ":9092",
+        conf = {'bootstrap.servers': os.environ['TARXIV_KAFKA_INTERNAL_HOST'] + ":9092",
                 'delivery.timeout.ms': 10000,
                 'queue.buffering.max.messages': 1000000,
                 'queue.buffering.max.ms': 5000,
@@ -565,8 +571,8 @@ class ForcedPhotPipelineUtil(TarxivModule):
         self.producer = Producer(conf)
 
 
-    def queue_phot_job(self, txv_id, survey_name):
-        topic = f"internal_{survey_name}_forced_phot"
+    def queue_phot_job(self, txv_id, survey_name, queue_type):
+        topic = f"{survey_name}_{queue_type}_forced_phot"
         status = {"status": "submitting phot job", "topic": topic, "txv_id": txv_id}
         self.logger.info(status, extra=status)
         self.producer.produce(topic=topic, value=txv_id, callback=self.acked)
