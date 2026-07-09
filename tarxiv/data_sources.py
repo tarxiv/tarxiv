@@ -862,9 +862,8 @@ class AlerceMod(TarxivModule):
         try:
             # Now get lsst
             lsst_df = self.client.query_objects(ra=ra_deg, dec=dec_deg, radius=radius, survey="lsst")
-            if not lsst_df.empty:
-                # Get object
-                lsst_id = lsst_df.iloc[0].to_dict()["oid"]
+            if "oid" in lsst_df.columns and not lsst_df["oid"].empty:
+                lsst_id = lsst_df["oid"].iat[0]
                 meta["lsst_object_id"] = str(lsst_id)
 
                 # Get probabilities
