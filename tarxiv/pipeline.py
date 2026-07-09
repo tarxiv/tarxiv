@@ -1,4 +1,3 @@
-
 from .utils import TarxivModule, TarxivPipelineError, deg2sex
 from .data_sources import TNS, LSST, ASAS_SN, ZTF, Lasair, ANTARES, AlerceMod, ATLAS
 from .database import TarxivDB
@@ -148,9 +147,15 @@ class TNSPipeline(TarxivModule):
         mjd_max = disc_mjd + active_settings["active_days"]
 
         # Now get meta and lightcurves from the surveys
-        fink_ztf_meta, ztf_lc = self.ztf.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
-        asas_sn_meta, asas_sn_lc = self.asas_sn.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
-        fink_lsst_meta, lsst_lc = self.lsst.get_object(txv_id, ra_deg, dec_deg, mjd_min, mjd_max)
+        fink_ztf_meta, ztf_lc = self.ztf.get_object(
+            txv_id, ra_deg, dec_deg, mjd_min, mjd_max
+        )
+        asas_sn_meta, asas_sn_lc = self.asas_sn.get_object(
+            txv_id, ra_deg, dec_deg, mjd_min, mjd_max
+        )
+        fink_lsst_meta, lsst_lc = self.lsst.get_object(
+            txv_id, ra_deg, dec_deg, mjd_min, mjd_max
+        )
         # Get additional meta from the survey
         lasair_meta = self.lasair.get_object(txv_id, ra_deg, dec_deg)
         antares_meta = self.antares.get_object(txv_id, ra_deg, dec_deg)
@@ -185,7 +190,9 @@ class TNSPipeline(TarxivModule):
         lc_df = pd.DataFrame(lc)
 
         # Get active days
-        active_settings = self.db.get(txv_id, scope="misc", collection="active_settings")
+        active_settings = self.db.get(
+            txv_id, scope="misc", collection="active_settings"
+        )
 
         # See which data sources we need to update now
         update_date = datetime.datetime.fromisoformat(meta["update_date"])
@@ -201,23 +208,32 @@ class TNSPipeline(TarxivModule):
             # How often does this need to be updated
             update_freq = self.config[source_name]["update_frequency"]
             # Update if past frequency threshold
-            if update_date + datetime.timedelta(days=update_freq) >= datetime.datetime.now():
+            if (
+                update_date + datetime.timedelta(days=update_freq)
+                >= datetime.datetime.now()
+            ):
                 # Meta only or lightcurve
                 if self.config[source_name]["meta_only"]:
-                    source_meta = source_class.get_object(object_id=txv_id, ra_deg=meta["ra_deg"], dec_deg=meta["dec_deg"])
+                    source_meta = source_class.get_object(
+                        object_id=txv_id, ra_deg=meta["ra_deg"], dec_deg=meta["dec_deg"]
+                    )
                     if source_meta is not None:
                         meta["data_sources"][source_name] = source_meta
                 else:
-                    # We are going to pull the whole new C
-                    source_meta, source_lc = source_class.get_object(object_id=txv_id,
-                                                                     ra_deg=meta["ra_deg"],
-                                                                     dec_deg=meta["dec_deg"],
-                                                                     mjd_min=mjd_min,
-                                                                     mjd_max=mjd_max)
+                    # We arre going to pull the whole new C
+                    source_meta, source_lc = source_class.get_object(
+                        object_id=txv_id,
+                        ra_deg=meta["ra_deg"],
+                        dec_deg=meta["dec_deg"],
+                        mjd_min=mjd_min,
+                        mjd_max=mjd_max,
+                    )
                     if source_meta is not None:
                         meta["data_sources"][source_name] = source_meta
                         # Drop all previous source points and replace
-                        source_mask = lc_df["survey"] == self.config[source_name]["survey_name"]
+                        source_mask = (
+                            lc_df["survey"] == self.config[source_name]["survey_name"]
+                        )
                         lc_df = lc_df[~source_mask]
                         # Replace
                         lc_df = pd.concat([lc_df, source_lc])
@@ -225,7 +241,6 @@ class TNSPipeline(TarxivModule):
         # Convert to json for submission
         obj_lc = json.loads(lc_df.to_json(orient="records"))
         return txv_id, meta, obj_lc
-
 
     def upsert_object(self, object_id, obj_meta, obj_lc):
         """
@@ -295,7 +310,7 @@ class TNSPipeline(TarxivModule):
     def daily_update(self):
         # Get all targets still in "active" window for update
         daily_obj_df = self.db.get_all_active_objects("tns")
-        daily_tns_ids = daily_obj_df["source_id"].tolist()
+        daily_obj_df["source_id"].tolist()
 
         # Also see if there are missing objects
         all_tns_df = self.get_tns_bulk_df()
@@ -349,7 +364,9 @@ class TNSPipeline(TarxivModule):
                         # Get survey information
                         txv_id, obj_meta, obj_lc = self.get_object(tns_object_id)
                         # Get timestamp
-                        timestamp = datetime.datetime.now().replace(microsecond=0).isoformat()
+                        timestamp = (
+                            datetime.datetime.now().replace(microsecond=0).isoformat()
+                        )
                         # Add insertion date to internal meta as well
                         obj_meta["update_date"] = timestamp
                         # Upsert to database
@@ -377,7 +394,9 @@ class TNSPipeline(TarxivModule):
                     elif topic in ["tns_updates"]:
                         txv_id, obj_meta, obj_lc = self.update_active_object(tns_object_id)
                         # Get timestamp
-                        timestamp = datetime.datetime.now().replace(microsecond=0).isoformat()
+                        timestamp = (
+                            datetime.datetime.now().replace(microsecond=0).isoformat()
+                        )
                         # Add insertion date to internal meta as well
                         obj_meta["update_date"] = timestamp
                         # Upsert to database
@@ -387,7 +406,6 @@ class TNSPipeline(TarxivModule):
                     else:
                         status = {"status": "bad topic somehow", "topic": topic}
                         self.logger.error(status, extra=status)
-
 
                 except Exception:
                     stack_trace = traceback.format_exc()
@@ -419,9 +437,7 @@ class ForcedPhotWorker(TarxivModule):
             debug=debug,
         )
         # Collection of all our forced photometry services
-        self.forced_phot_services = {
-            "atlas": ATLAS(script_name, reporting_mode, debug)
-        }
+        self.forced_phot_services = {"atlas": ATLAS(script_name, reporting_mode, debug)}
 
         # Get database
         self.db = TarxivDB("pipeline", script_name, reporting_mode, debug)
@@ -452,16 +468,27 @@ class ForcedPhotWorker(TarxivModule):
                 continue
             if msg.error():
                 if msg.error().code() == KafkaError._PARTITION_EOF:
-                    status = {"status": "reached end of partition", "worker_id": worker_id}
+                    status = {
+                        "status": "reached end of partition",
+                        "worker_id": worker_id,
+                    }
                 else:
-                    status = {"status": "kafka error", "error": msg.error(), "worker_id": worker_id}
+                    status = {
+                        "status": "kafka error",
+                        "error": msg.error(),
+                        "worker_id": worker_id,
+                    }
                 self.logger.error(status, extra=status)
             else:
-
                 try:
                     # This message will give us a tarxiv_id and a survey to run force phot
                     txv_id = msg.value().decode("utf-8")
-                    status = {"status": "submitting phot", "object_id": txv_id, "worker_id": worker_id, "survey_name": survey_name}
+                    status = {
+                        "status": "submitting phot",
+                        "object_id": txv_id,
+                        "worker_id": worker_id,
+                        "survey_name": survey_name,
+                    }
                     self.logger.info(status, extra=status)
                     self.append_forced_phot(txv_id, survey_name)
                     self.consumer.commit(asynchronous=False)
@@ -529,7 +556,6 @@ class ForcedPhotWorker(TarxivModule):
             meta["update_date"] = timestamp
             self.upsert_object(txv_id, meta, obj_lc)
 
-
     def print_assignment(self, consumer, partitions):
         # Logging for kafka
         status = {"status": "consumer subscribed", "partitions": partitions}
@@ -550,7 +576,6 @@ class ForcedPhotWorker(TarxivModule):
 
 
 class ForcedPhotPipelineUtil(TarxivModule):
-
     def __init__(self, script_name, reporting_mode, debug=False):
         super().__init__(
             script_name=script_name,
