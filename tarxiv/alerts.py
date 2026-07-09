@@ -175,11 +175,7 @@ class IMAP(TarxivModule):
                     self.logger.info(status, extra=status)
                     # Now submit what we have
                     for tns_obj_id in alerts:
-                        self.producer.produce(
-                            topic="internal_tns_alerts",
-                            value=tns_obj_id,
-                            callback=self.acked,
-                        )
+                        self.producer.produce(topic="tns_alerts", value=tns_obj_id, callback=self.acked)
                     # Mark read, when submitted all alerts
                     self.mark_read(uid)
 
