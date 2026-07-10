@@ -67,6 +67,11 @@ class TNSPipeline(TarxivModule):
                 'client.id': socket.gethostname()}
         self.producer = Producer(conf)
         self.consumer = None
+        # Forced phot utils
+        self.phot_util = ForcedPhotPipelineUtil(script_name="forced_phot_submit",
+                                                reporting_mode=reporting_mode,
+                                                debug=debug)
+        self.forced_phot_services = ["atlas"]
 
         # Signal handling
         if not debug:
@@ -374,6 +379,9 @@ class TNSPipeline(TarxivModule):
 
                         # New alerts send hopskotch and kafka, also queue up forced phot
                         if topic == "tns_alerts":
+                            # Queue up phot job
+                            for survey in self.forced_phot_services:
+                                self.phot_util.queue_phot_job(txv_id, survey, "alerts")
 
                             # Submit to hopskotch
                             stream = Stream(self.hop_auth)
