@@ -414,11 +414,12 @@ class TNSPipeline(TarxivModule):
                         obj_meta["update_date"] = timestamp
                         # Upsert to database
                         self.upsert_object(txv_id, obj_meta, obj_lc)
-                        self.consumer.commit(asynchronous=False)
 
                     else:
                         status = {"status": "bad topic somehow", "topic": topic}
                         self.logger.error(status, extra=status)
+                    # Commit
+                    self.consumer.commit(asynchronous=False)
 
                 except Exception:
                     stack_trace = traceback.format_exc()
@@ -469,7 +470,7 @@ class ForcedPhotWorker(TarxivModule):
         }
         self.consumer = Consumer(conf)
         # Topic name will be given by our survey name
-        topic = f"{survey_name}_{queue_type}_forced_phot"
+        topic = f"forced_phot_{survey_name}_{queue_type}"
         self.consumer.subscribe([topic], on_assign=self.print_assignment)
         # Start up
         status = {"status": "running pipeline", "worker_id": worker_id}
@@ -613,7 +614,7 @@ class ForcedPhotPipelineUtil(TarxivModule):
         self.producer = Producer(conf)
 
     def queue_phot_job(self, txv_id, survey_name, queue_type):
-        topic = f"{survey_name}_{queue_type}_forced_phot"
+        topic = f"forced_phot_{survey_name}_{queue_type}"
         status = {"status": "submitting phot job", "topic": topic, "txv_id": txv_id}
         self.logger.info(status, extra=status)
         self.producer.produce(topic=topic, value=txv_id, callback=self.acked)
