@@ -1010,25 +1010,6 @@ class AlerceMod(TarxivModule):
                 meta = None
                 raise SurveyMetaMissingError
 
-            # Get object
-            lsst_obj = lsst_df.iloc[0]
-            # Get probabilities
-            result = self.client.query_probabilities(oid=lsst_obj.oid, survey="lsst")
-            prob_df = pd.DataFrame(result)
-            prob_info = prob_df[
-                (prob_df["classifier_name"] == self.config["alerce_lsst"]["classifier"])
-                & (prob_df["ranking"] == 1)
-            ]
-
-            meta = {
-                "object_id": lsst_obj.oid,
-                "classifier": {
-                    "name": prob_info.classifier_name,
-                    "version": prob_info.classifier_version,
-                    "probability": prob_info.probability,
-                    "result": prob_info.class_name,
-                },
-            }
 
         except SurveyMetaMissingError:
             status["status"] = "no match"
