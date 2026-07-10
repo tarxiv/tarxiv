@@ -53,21 +53,21 @@ elif args.command == "alert_queue":
                           reporting_mode=(PRINT | LOGFILE | DATABASE),
                           debug=args.debug)
     # Run the pipeline
-    txv_tns.run_pipeline(topic="internal_tns_alerts")
+    txv_tns.run_pipeline(topic="tns_alerts")
 
 elif args.command == "bulk_queue":
     txv_tns = TNSPipeline(script_name="tns_missing_ingest",
                           reporting_mode=(PRINT | LOGFILE | DATABASE),
                           debug=args.debug)
     # Run the pipeline
-    txv_tns.run_pipeline(topic="internal_tns_bulk")
+    txv_tns.run_pipeline(topic="tns_bulk")
 
 elif args.command == "update_queue":
     txv_tns = TNSPipeline(script_name="tns_missing_ingest",
                           reporting_mode=(PRINT | LOGFILE | DATABASE),
                           debug=args.debug)
     # Run the pipeline
-    txv_tns.run_pipeline(topic="internal_tns_bulk")
+    txv_tns.run_pipeline(topic="tns_updates")
 
 elif args.command == "bulk_submit":
     txv_tns = TNSPipeline(script_name="tns_daily_ingest",
