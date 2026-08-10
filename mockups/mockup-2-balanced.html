@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TarXiv mockup 2 — Balanced</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<script>
+  try { document.documentElement.dataset.theme = localStorage.getItem("tarxiv-mock-theme") || "light"; } catch (e) {}
+</script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+<style>
+  .container { max-width: 1380px; margin: 0 auto; padding: 18px 22px 40px; }
+
+  .page-head {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .page-head h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+
+  /* summary strip: the "key metadata without scrolling" answer */
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 18px;
+    padding: 14px 18px;
+    margin-bottom: 14px;
+  }
+  .summary .stat { border-left: 1px solid var(--border); padding-left: 16px; }
+  .summary .stat:first-child { border-left: none; padding-left: 0; }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    gap: 14px; margin-bottom: 14px;
+  }
+  .hero-grid .card { display: flex; flex-direction: column; }
+  .hero-grid .card-body { flex: 1; min-height: 0; padding: 8px; }
+  #lc-body { height: 430px; }
+  #sky-body { height: 430px; padding: 0; }
+
+  #lc-table-wrap { display: none; overflow: auto; height: 430px; padding: 0 8px; }
+  #lc-card.show-table #lc-table-wrap { display: block; }
+  #lc-card.show-table #lc-body { display: none; }
+
+  .lower-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    gap: 14px; margin-bottom: 14px;
+    align-items: start;
+  }
+  .stack { display: flex; flex-direction: column; gap: 14px; }
+
+  @media (max-width: 1100px) {
+    .summary { grid-template-columns: repeat(3, 1fr); row-gap: 14px; }
+    .summary .stat:nth-child(4) { border-left: none; padding-left: 0; }
+    .hero-grid, .lower-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar" id="topbar"></header>
+
+<div class="container">
+
+  <div class="page-head">
+    <h1>SN 2023ixf</h1>
+    <span class="chip brand">SN II</span>
+    <span id="coords-slot"></span>
+    <div style="flex:1"></div>
+    <button class="btn btn-outline btn-sm" onclick="location.hash='#tags'">+ Tag</button>
+    <button class="btn btn-outline btn-sm" onclick="copyText(CITATIONS_BIB, this)">Cite</button>
+  </div>
+
+  <section class="card summary">
+    <div class="stat"><span class="k">Redshift</span><span class="v">0.000804</span></div>
+    <div class="stat"><span class="k">Host</span><span class="v">M101 <span class="unit">(NGC 5457)</span></span></div>
+    <div class="stat"><span class="k">Discovered</span><span class="v">2023-05-19 <span class="unit">Itagaki</span></span></div>
+    <div class="stat"><span class="k">Peak mag</span><span class="v">10.9 <span class="unit">o</span></span></div>
+    <div class="stat"><span class="k">Distance</span><span class="v">6.85 <span class="unit">Mpc</span></span></div>
+    <div class="stat"><span class="k">Detections</span><span class="v">237 <span class="unit">ZTF + ATLAS</span></span></div>
+  </section>
+
+  <div class="hero-grid">
+    <section class="card" id="lc-card">
+      <div class="card-head">
+        <h2 id="lc-title-icon">Lightcurve</h2>
+        <div class="spacer"></div>
+        <div class="seg" id="lc-seg">
+          <button class="active" data-view="plot">Plot</button>
+          <button data-view="table">Table</button>
+        </div>
+      </div>
+      <div class="card-body" id="lc-body"><div id="lc-plot" class="plot-host"></div></div>
+      <div id="lc-table-wrap"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2 id="sky-title-icon">Sky view</h2>
+        <div class="spacer"></div>
+        <span class="faint small mono">PanSTARRS DR1</span>
+      </div>
+      <div class="card-body" id="sky-body"><div id="aladin-div" class="aladin-host"></div></div>
+    </section>
+  </div>
+
+  <div class="lower-grid">
+    <section class="card">
+      <div class="card-head">
+        <h2 id="meta-title-icon">Source metadata</h2>
+        <div class="spacer"></div>
+        <span class="faint small">TNS · ZTF · ATLAS · Sherlock</span>
+      </div>
+      <div class="card-body" style="padding:6px 16px 16px">
+        <div id="meta-tabs" style="display:flex;flex-direction:column;max-height:420px"></div>
+      </div>
+    </section>
+
+    <div class="stack">
+      <section class="card" id="tags">
+        <div class="card-head"><h2 id="tags-title-icon">Tags</h2></div>
+        <div class="card-body">
+          <div style="display:flex;flex-wrap:wrap;gap:8px" id="tags-list"></div>
+          <div id="tags-assign"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2 id="cite-title-icon">Citations</h2>
+          <div class="spacer"></div>
+          <button class="btn btn-outline btn-sm" onclick="copyText(CITATIONS_BIB, this)">Copy BibTeX</button>
+        </div>
+        <div class="card-body">
+          <pre class="codeblock" style="max-height:230px" id="cite-block"></pre>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <details class="accordion">
+    <summary id="json-summary"></summary>
+    <div class="accordion-body">
+      <pre class="codeblock" style="max-height:380px" id="json-block"></pre>
+    </div>
+  </details>
+
+</div>
+
+<script src="shared.js"></script>
+<script>
+  document.getElementById("topbar").innerHTML = topbarHTML("lightcurve");
+  document.getElementById("coords-slot").innerHTML = coordsCopyHTML();
+  document.getElementById("lc-title-icon").innerHTML = ICONS.curve + " Lightcurve";
+  document.getElementById("sky-title-icon").innerHTML = ICONS.globe + " Sky view";
+  document.getElementById("meta-title-icon").innerHTML = ICONS.table + " Source metadata";
+  document.getElementById("tags-title-icon").innerHTML = ICONS.tag + " Tags";
+  document.getElementById("cite-title-icon").innerHTML = ICONS.quote + " Citations";
+  document.getElementById("json-summary").innerHTML = ICONS.chev + " Full metadata (JSON)";
+  document.getElementById("cite-block").textContent = CITATIONS_BIB;
+  document.getElementById("json-block").textContent = fullJsonDump();
+  document.getElementById("tags-list").innerHTML = tagsHTML();
+  document.getElementById("tags-assign").innerHTML = tagAssignHTML();
+
+  mountLightcurve(document.getElementById("lc-plot"));
+  mountAladin(document.getElementById("aladin-div"));
+  mountMetaTabs(document.getElementById("meta-tabs"), "underline");
+
+  const lcCard = document.getElementById("lc-card");
+  document.querySelectorAll("#lc-seg button").forEach((b) => {
+    b.onclick = () => {
+      document.querySelectorAll("#lc-seg button").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+      const table = b.dataset.view === "table";
+      lcCard.classList.toggle("show-table", table);
+      if (table) document.getElementById("lc-table-wrap").innerHTML = photometryTableHTML();
+      else Plotly.Plots.resize(document.getElementById("lc-plot"));
+    };
+  });
+  onThemeChange(() => {
+    if (lcCard.classList.contains("show-table"))
+      document.getElementById("lc-table-wrap").innerHTML = photometryTableHTML();
+  });
+</script>
+</body>
+</html>

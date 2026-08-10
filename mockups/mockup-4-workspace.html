@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TarXiv mockup 4 — Workspace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<script>
+  try { document.documentElement.dataset.theme = localStorage.getItem("tarxiv-mock-theme") || "light"; } catch (e) {}
+</script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+<style>
+  html, body { overflow: hidden; }
+
+  .shell { height: 100vh; display: flex; flex-direction: column; }
+  .work { flex: 1; min-height: 0; display: flex; }
+
+  /* ------------------------------------------------ persistent sidebar */
+  .sidebar {
+    width: 292px; flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    background: var(--card);
+    display: flex; flex-direction: column;
+    overflow-y: auto;
+  }
+  .side-sec { padding: 16px 18px; border-bottom: 1px solid var(--border); }
+  .side-sec h3 {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 10px;
+  }
+  .obj-title { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+  .obj-id { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+
+  /* ------------------------------------------------------- main panels */
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .panel-tabs {
+    display: flex; gap: 2px; padding: 8px 12px 0;
+    border-bottom: 1px solid var(--border); background: var(--card);
+    flex-shrink: 0;
+  }
+  .panel-tabs button {
+    font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+    display: inline-flex; align-items: center; gap: 7px;
+    background: transparent; border: none; cursor: pointer;
+    padding: 8px 14px 10px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    border-radius: 8px 8px 0 0;
+  }
+  .panel-tabs button:hover { color: var(--ink); background: var(--card-2); }
+  .panel-tabs button.active { color: var(--primary-ink); border-bottom-color: var(--primary-ink); background: transparent; }
+  .panel-tabs button svg { opacity: 0.75; }
+
+  .panels { flex: 1; min-height: 0; position: relative; }
+  .panel { position: absolute; inset: 0; padding: 12px; display: none; }
+  .panel.active { display: block; }
+
+  .split { display: grid; grid-template-columns: minmax(0, 58fr) minmax(0, 42fr); gap: 12px; height: 100%; }
+  .split .card { display: flex; flex-direction: column; min-height: 0; }
+  .split .card-body { flex: 1; min-height: 0; padding: 8px; }
+
+  .panel .full-card { height: 100%; display: flex; flex-direction: column; }
+  .panel .full-card .card-body { flex: 1; min-height: 0; overflow: auto; }
+
+  .statusbar {
+    display: flex; align-items: center; gap: 14px;
+    height: 32px; flex-shrink: 0; padding: 0 14px;
+    border-top: 1px solid var(--border); background: var(--card);
+    font-size: 11.5px; color: var(--ink-3);
+  }
+  .statusbar .dot-ok { width: 7px; height: 7px; border-radius: 50%; background: #199e70; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="topbar" id="topbar"></header>
+
+  <div class="work">
+    <!-- persistent object sidebar -->
+    <aside class="sidebar">
+      <div class="side-sec">
+        <div class="obj-title">SN 2023ixf</div>
+        <div class="obj-id mono">TXV-2023-051901</div>
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+          <span class="chip brand">SN II</span>
+          <span class="chip"><span class="k">z</span> 0.000804</span>
+        </div>
+        <div style="margin-top:12px;font-size:12.5px" id="coords-slot"></div>
+      </div>
+
+      <div class="side-sec">
+        <h3>Key facts</h3>
+        <div class="facts" id="key-facts"></div>
+      </div>
+
+      <div class="side-sec">
+        <h3>Tags</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:6px" id="tags-list"></div>
+        <div id="tags-assign"></div>
+      </div>
+
+      <div class="side-sec" style="border-bottom:none">
+        <h3>Data sources</h3>
+        <div class="facts">
+          <div class="fact"><span class="k">TNS</span><span class="v"><a href="#">2023ixf ↗</a></span></div>
+          <div class="fact"><span class="k">ZTF</span><span class="v"><a href="#">ZTF23aaklqou ↗</a></span></div>
+          <div class="fact"><span class="k">ATLAS</span><span class="v"><a href="#">ATLAS23mtp ↗</a></span></div>
+          <div class="fact"><span class="k">Sherlock</span><span class="v">NGC 5457</span></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- tabbed main area -->
+    <div class="main">
+      <nav class="panel-tabs" id="panel-tabs"></nav>
+
+      <div class="panels">
+        <div class="panel active" data-panel="overview">
+          <div class="split">
+            <section class="card">
+              <div class="card-head"><h2 id="lc-title-icon">Lightcurve</h2></div>
+              <div class="card-body"><div id="lc-plot" class="plot-host"></div></div>
+            </section>
+            <section class="card">
+              <div class="card-head">
+                <h2 id="sky-title-icon">Sky view</h2>
+                <div class="spacer"></div>
+                <span class="faint small mono">PanSTARRS DR1</span>
+              </div>
+              <div class="card-body" style="padding:0">
+                <div id="aladin-div" class="aladin-host"></div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="panel" data-panel="photometry">
+          <div class="card full-card">
+            <div class="card-head"><h2>Photometry — 237 rows</h2>
+              <div class="spacer"></div>
+              <button class="btn btn-outline btn-sm">Export CSV</button>
+            </div>
+            <div class="card-body" id="phot-table"></div>
+          </div>
+        </div>
+
+        <div class="panel" data-panel="metadata">
+          <div class="card full-card">
+            <div class="card-head"><h2>Source metadata</h2></div>
+            <div class="card-body" style="padding:10px 18px 18px">
+              <div id="meta-tabs" style="display:flex;flex-direction:column;height:100%"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" data-panel="citations">
+          <div class="card full-card">
+            <div class="card-head"><h2>Citations</h2>
+              <div class="spacer"></div>
+              <button class="btn btn-outline btn-sm" onclick="copyText(CITATIONS_BIB, this)">Copy BibTeX</button>
+            </div>
+            <div class="card-body"><pre class="codeblock" style="border:none;background:transparent" id="cite-block"></pre></div>
+          </div>
+        </div>
+
+        <div class="panel" data-panel="json">
+          <div class="card full-card">
+            <div class="card-head"><h2>Full metadata (JSON)</h2>
+              <div class="spacer"></div>
+              <button class="btn btn-outline btn-sm" onclick="copyText(fullJsonDump(), this)">Copy</button>
+            </div>
+            <div class="card-body"><pre class="codeblock" style="border:none;background:transparent" id="json-block"></pre></div>
+          </div>
+        </div>
+      </div>
+
+      <footer class="statusbar">
+        <span class="dot-ok"></span><span>API connected</span>
+        <span>·</span><span>4 sources merged</span>
+        <span style="flex:1"></span>
+        <span>updated 2023-09-14 03:12 UTC</span>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+  document.getElementById("topbar").innerHTML = topbarHTML("lightcurve");
+  document.getElementById("coords-slot").innerHTML = coordsCopyHTML();
+  document.getElementById("lc-title-icon").innerHTML = ICONS.curve + " Lightcurve";
+  document.getElementById("sky-title-icon").innerHTML = ICONS.globe + " Sky view";
+  document.getElementById("cite-block").textContent = CITATIONS_BIB;
+  document.getElementById("json-block").textContent = fullJsonDump();
+  document.getElementById("tags-list").innerHTML = tagsHTML();
+  document.getElementById("tags-assign").innerHTML = tagAssignHTML();
+
+  document.getElementById("key-facts").innerHTML = [
+    ["Host", "M101 (NGC 5457)"], ["Discovered", "2023-05-19"],
+    ["Reporting group", "Itagaki"], ["Peak mag", "10.9 (o)"],
+    ["Distance", "6.85 Mpc"], ["Separation", "263.7″ / 8.76 kpc"],
+    ["Detections", "237"],
+  ].map(([k, v]) => `<div class="fact"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
+
+  /* panel tabs */
+  const PANELS = [
+    ["overview", "Overview", ICONS.curve],
+    ["photometry", "Photometry", ICONS.table],
+    ["metadata", "Metadata", ICONS.table],
+    ["citations", "Citations", ICONS.quote],
+    ["json", "JSON", ICONS.json],
+  ];
+  const tabsEl = document.getElementById("panel-tabs");
+  for (const [key, label, icon] of PANELS) {
+    const b = document.createElement("button");
+    b.innerHTML = icon + " " + label;
+    b.dataset.key = key;
+    if (key === "overview") b.classList.add("active");
+    b.onclick = () => {
+      tabsEl.querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      document.querySelectorAll(".panel").forEach((p) =>
+        p.classList.toggle("active", p.dataset.panel === key));
+      if (key === "overview") Plotly.Plots.resize(document.getElementById("lc-plot"));
+      if (key === "photometry" && !tabsEl.dataset.photBuilt) {
+        document.getElementById("phot-table").innerHTML = photometryTableHTML();
+        tabsEl.dataset.photBuilt = "1";
+      }
+    };
+    tabsEl.appendChild(b);
+  }
+  onThemeChange(() => {
+    if (tabsEl.dataset.photBuilt)
+      document.getElementById("phot-table").innerHTML = photometryTableHTML();
+  });
+
+  mountLightcurve(document.getElementById("lc-plot"), { compact: true });
+  mountAladin(document.getElementById("aladin-div"));
+  mountMetaTabs(document.getElementById("meta-tabs"), "underline");
+</script>
+</body>
+</html>
