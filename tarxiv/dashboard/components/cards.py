@@ -9,49 +9,46 @@ from dash import dcc, html
 from dash_iconify import DashIconify
 
 from ..styles import CARD_STYLE
+from .object_view import (
+    build_hero_grid,
+    build_key_facts,
+    build_lightcurve_body,
+    build_page_head,
+    build_summary_strip,
+    build_view_toggle,
+)
+from .plots import PLOT_HEIGHT_PX
 
 
 def title_card(title_text: str, subtitle_text: str | None = None, **kwargs):
-    """Create a styled title card.
+    """Create a compact page heading.
+
+    A plain left-aligned heading rather than the previous full-width red
+    banner, so pages lead with their content instead of their title.
 
     Args:
         title_text: Main title text
         subtitle_text: Optional subtitle text
-        **kwargs: Additional keyword arguments for dmc.Paper
+        **kwargs: Additional keyword arguments for dmc.Box
 
     Returns
     -------
-        dmc.Paper component styled as a title card
+        dmc.Box containing the page heading
     """
-    children = []
-    children.append(
+    children = [
         dmc.Title(
             title_text,
             order=1,
-            style={"marginBottom": "0px", "fontSize": "90px"},
+            fz=26,
+            fw=700,
+            style={"letterSpacing": "-0.02em"},
         )
-    )
+    ]
     if subtitle_text:
-        children.append(
-            dmc.Text(
-                subtitle_text,
-            )
-        )
+        children.append(dmc.Text(subtitle_text, size="sm", c="dimmed"))
 
-    return dmc.Paper(
-        children=dmc.Stack(
-            children=children,
-            align="center",
-        ),
-        p="xl",
-        radius=28,
-        style={
-            "backgroundColor": "var(--tarxiv-color-primary)",
-            "color": "white",
-            "textAlign": "center",
-        },
-        **kwargs,
-    )
+    kwargs.setdefault("mb", "xs")
+    return dmc.Box(children=dmc.Stack(children=children, gap=2), **kwargs)
 
 
 def footer_card():
@@ -74,10 +71,10 @@ def footer_card():
             align="center",
             direction="row",
         ),
-        p="xl",
+        p="md",
+        radius=14,
         style={
             "backgroundColor": "var(--tarxiv-footer-bg)",
-            "color": "var(--tarxiv-color-primary)",
             "textAlign": "center",
         },
         mt="md",
@@ -85,14 +82,25 @@ def footer_card():
 
 
 def expressive_card(
-    children, title=None, title_order: Literal[1, 2, 3, 4, 5, 6] = 2, **kwargs
+    children,
+    title=None,
+    title_order: Literal[1, 2, 3, 4, 5, 6] = 2,
+    header_extra=None,
+    body_padding: str | int = "md",
+    **kwargs,
 ):
-    """Create a styled card with expressive design.
+    """Create the standard surface card.
+
+    A bordered, softly shadowed 14px-radius card. When a title is given it sits
+    in a divider-separated header row, optionally alongside ``header_extra``
+    (a control such as a toggle or copy button) pinned to the right.
 
     Args:
         children: List of child components
-        title: Optional title for the card
+        title: Optional title for the card header
         title_order: Heading order (1-6)
+        header_extra: Optional component placed at the right of the header
+        body_padding: Padding for the card body (0 lets a child bleed to the edge)
         **kwargs: Additional keyword arguments for dmc.Paper
 
     Returns
@@ -102,102 +110,35 @@ def expressive_card(
     if not isinstance(children, list):
         children = [children]
 
+    card_children = []
+    if title:
+        header = [
+            dmc.Title(title, order=title_order, fz=13, fw=600),
+            dmc.Box(style={"flex": 1}),
+        ]
+        if header_extra is not None:
+            header.append(header_extra)
+        card_children.append(html.Div(header, className="tarxiv-card-head"))
+
+    card_children.append(
+        dmc.Box(dmc.Stack(children=children, gap="md"), p=body_padding)
+    )
+
+    # Merge rather than clobber any caller-supplied style.
+    style = {
+        "backgroundColor": "var(--tarxiv-card)",
+        "border": "1px solid var(--tarxiv-border)",
+        "boxShadow": "var(--tarxiv-shadow)",
+        "overflow": "hidden",
+        **(kwargs.pop("style", None) or {}),
+    }
+
     return dmc.Paper(
-        children=[
-            dmc.Title(
-                title,
-                order=title_order,
-                # fw=700,
-                # fz="lg",
-                mb="md",
-            )
-            if title
-            else None,
-            dmc.Stack(
-                children=children,
-                gap="md",
-            ),
-        ],
-        p="xl",
-        radius=28,  # Specific M3 Expressive radius
-        style={
-            "backgroundColor": "var(--tarxiv-card-1)",
-        },
+        children=card_children,
+        p=0,
+        radius=14,
+        style=style,
         **kwargs,
-    )
-
-
-def create_nav_item(
-    icon,
-    label: str,
-    is_active: bool,
-    id: str = "",
-):
-    icon_container = (
-        DashIconify(icon=icon, width=35, id=id)
-        if isinstance(icon, str)
-        else html.Div(
-            icon,
-            style={
-                "width": "35px",
-                "height": "35px",
-                "display": "flex",
-                "alignItems": "center",
-                "justifyContent": "center",
-            },
-        )
-    )
-
-    return dmc.UnstyledButton(
-        className="nav-item-hover",
-        px=2,
-        py="md",
-        my="xs",
-        style={
-            "width": "100%",
-            "borderRadius": "16px",
-            "display": "flex",
-            "flexDirection": "column",
-            "alignItems": "center",
-            "gap": "4px",
-            "color": "var(--tarxiv-color-primary)" if is_active else "inherit",
-            "transition": "background-color 200ms ease",
-        },
-        children=[
-            icon_container,
-            dmc.Text(
-                label,
-                size="xs",
-                ta="center",
-                className="nav-text-wrap",
-            ),
-        ],
-    )
-
-
-def create_nav_link(
-    icon: str,
-    label: str,
-    href: str,
-    is_active: bool,
-    id: str = "",
-):
-    """Creates a vertically stacked navigation button.
-
-    Args:
-        icon: Icon name for DashIconify
-        label: Text label for the nav item
-        href: Link URL
-        is_active: Whether this nav item is active
-
-    Returns
-    -------
-        dcc.Link containing a styled dmc.UnstyledButton
-    """
-    return dcc.Link(
-        href=href,
-        style={"textDecoration": "none", "color": "inherit"},
-        children=create_nav_item(icon, label, is_active, id=id),
     )
 
 
@@ -221,36 +162,32 @@ def create_message_banner(
     -------
         html.Div with styled message
     """
+    # Let Mantine theme the alert so it adapts to the colour scheme, instead of
+    # the hardcoded light-only palette this used to carry.
     color_map = {
-        "success": {"bg": "#d4edda", "border": "#c3e6cb", "text": "#155724"},
-        "error": {"bg": "#f8d7da", "border": "#f5c6cb", "text": "#721c24"},
-        "warning": {"bg": "#fff3cd", "border": "#ffeaa7", "text": "#856404"},
-        "info": {"bg": "#d1ecf1", "border": "#bee5eb", "text": "#0c5460"},
+        "success": "green",
+        "error": "red",
+        "warning": "yellow",
+        "info": "blue",
+    }
+    icon_map = {
+        "success": "mdi:check-circle-outline",
+        "error": "mdi:alert-circle-outline",
+        "warning": "mdi:alert-outline",
+        "info": "mdi:information-outline",
     }
 
-    colors = color_map.get(message_type, color_map["info"])
-
     return dmc.Alert(
-        # message,
         title=message.capitalize(),
-        style={
-            "padding": "12px 20px",
-            "border": f"1px solid {colors['border']}",
-            "borderRadius": "4px",
-            "backgroundColor": colors["bg"],
-            "color": colors["text"],
-            "fontSize": "14px",
-            "fontWeight": "500",
-        },
+        color=color_map.get(message_type, color_map["info"]),
+        variant="light",
+        radius="md",
+        icon=DashIconify(icon=icon_map.get(message_type, icon_map["info"]), width=20),
         id=id,
         hide=hide,
         duration=duration,
     )
 
-
-# Shared height (px) for the Aladin sky-plot pane and the scrollable metadata
-# pane beside it, so the two columns line up.
-ALADIN_HEIGHT_PX = 500
 
 # Source key -> display label for the per-source metadata tabs.
 SOURCE_LABELS = {
@@ -292,6 +229,9 @@ FIELD_LABELS = {
     "discovery_data_source": "Discovery Data Source",
     "redshift": "Redshift",
     "host_name": "Host Name",
+    # The TNS ingest writes the host under "hostname"; label it properly rather
+    # than letting it fall through to the title-cased "Hostname".
+    "hostname": "Host Name",
     "mag": "Magnitude",
     "mag_err": "Magnitude Error",
     "mag_filter": "Magnitude Filter",
@@ -307,10 +247,15 @@ FIELD_LABELS = {
     "north_separation_arcsec": "North Separation (arcsec)",
     "east_separation_arcsec": "East Separation (arcsec)",
     "physical_separation_kpc": "Physical Separation (kpc)",
-    # List-valued photometry fields and their per-entry columns.
+    # List-valued photometry fields and their per-entry columns. summarize_lc_mags
+    # emits the plural keys, so label both spellings.
     "peak_mag": "Peak Magnitude",
+    "peak_mags": "Peak Magnitudes",
     "latest_detection": "Latest Detection",
+    "latest_detections": "Latest Detections",
     "latest_nondetection": "Latest Non-detection",
+    "latest_non_detections": "Latest Non-detections",
+    "limit": "Magnitude",
     "filter": "Filter",
     "date": "Date",
     "value": "Magnitude",
@@ -358,7 +303,8 @@ def _build_scalar_table(source_payload: dict):
             [
                 dmc.TableThead(
                     dmc.TableTr([
-                        dmc.TableTh("Field"),
+                        # Keep the label column narrow so values get the room.
+                        dmc.TableTh("Field", w="38%"),
                         dmc.TableTh("Value"),
                     ])
                 ),
@@ -370,13 +316,11 @@ def _build_scalar_table(source_payload: dict):
                     for field_name, value in rows
                 ]),
             ],
-            withTableBorder=True,
-            withColumnBorders=True,
-            striped=True,
             highlightOnHover=True,
-            horizontalSpacing="xs",
-            verticalSpacing="xs",
-            style={"width": "fit-content"},
+            horizontalSpacing="sm",
+            verticalSpacing=6,
+            fz="xs",
+            style={"width": "100%"},
         ),
     )
 
@@ -420,21 +364,26 @@ def _build_list_table(field_name: str, entries: list):
 
     return dmc.Stack(
         [
-            dmc.Text(_field_label(field_name), fw=600),
+            dmc.Text(
+                _field_label(field_name),
+                fw=600,
+                fz="10.5px",
+                c="dimmed",
+                tt="uppercase",
+                style={"letterSpacing": "0.06em"},
+            ),
             dmc.Box(
                 dmc.Table(
                     [header, dmc.TableTbody(body_rows)],
-                    withTableBorder=True,
-                    withColumnBorders=True,
-                    striped=True,
                     highlightOnHover=True,
-                    horizontalSpacing="xs",
-                    verticalSpacing="xs",
-                    style={"width": "fit-content"},
+                    horizontalSpacing="sm",
+                    verticalSpacing=6,
+                    fz="xs",
+                    style={"width": "100%"},
                 )
             ),
         ],
-        gap="xs",
+        gap=4,
     )
 
 
@@ -526,81 +475,89 @@ def _build_citation_component(citation_str: str | None):
     return body
 
 
-def format_object_metadata(object_id, meta, citation_str=None, logger=None):
+def format_object_metadata(
+    object_id, meta, citation_str=None, lc_data=None, logger=None
+):
     """Format object metadata for display.
+
+    Builds the "balanced" object page: a compact identity row and key-facts
+    strip, then the lightcurve and sky view side by side above the fold, with
+    the per-source metadata, citations and raw JSON below.
 
     Args:
         object_id: Object identifier
         meta: Metadata dictionary (source-keyed schema, see MetadataResponseModel)
         citation_str: Optional concatenated BibTeX citation string
+        lc_data: Optional photometry list, used for the detection-count fact
         logger: Optional logger instance
 
     Returns
     -------
-        A ``(results_top, citations_card, full_metadata)`` tuple. The caller
-        composes these into the page: ``results_top`` (lightcurve + sky-plot /
-        metadata) goes in the results container, ``citations_card`` sits in a
-        grid beside the (always-present) ``object-tagging-container``, and
-        ``full_metadata`` is the collapsible JSON dump pinned to the page bottom.
-        Splitting the output this way lets the tagging container live in the base
-        layout so its callbacks never target a missing component.
+        A ``(results_top, metadata_card, citations_card, full_metadata)`` tuple.
+        The caller composes these into the page: ``results_top`` (head, key
+        facts, lightcurve + sky view) goes in the results container, while
+        ``metadata_card`` and ``citations_card`` sit in the lower grid beside
+        the (always-present) ``object-tagging-container`` and ``full_metadata``
+        is the collapsible JSON dump pinned to the page bottom. Splitting the
+        output this way lets the tagging container live in the base layout so
+        its callbacks never target a missing component.
     """
     data_sources = meta.get("data_sources") or {}
 
     metadata_component = _build_metadata_tabs(data_sources)
     citations_component = _build_citation_component(citation_str)
 
-    # Prominent, copyable RA/Dec (sexagesimal HMS + DMS) sits above the lightcurve.
     lightcurve_card = expressive_card(
-        children=[
-            _build_coordinates_header(meta),
-            dcc.Loading(
-                dcc.Graph(id={"type": "themeable-plot", "index": "lightcurve-plot"}),
-            ),
-        ],
-        title=f"Lightcurve: {object_id}",
+        children=build_lightcurve_body(),
+        title="Lightcurve",
+        header_extra=build_view_toggle(),
+        body_padding="xs",
     )
-    aladin_card = expressive_card(
+    sky_card = expressive_card(
         children=[
             # A hidden div to receive the "success" message from our JS
             html.Div(id="aladin-status-dummy", style={"display": "none"}),
             html.Div(
                 id="aladin-lite-div",
-                style={"width": "100%", "height": f"{ALADIN_HEIGHT_PX}px"},
+                style={"width": "100%", "height": f"{PLOT_HEIGHT_PX}px"},
             ),
         ],
-        title="Sky Plot (Aladin Lite)",
+        title="Sky view",
+        header_extra=dmc.Text("PanSTARRS DR1", size="xs", c="dimmed", ff="monospace"),
+        body_padding=0,
     )
 
-    # Constrain the metadata pane to the Aladin height and scroll any overflow,
-    # so a source with many fields doesn't stretch the page.
+    results_top = dmc.Stack(
+        [
+            build_page_head(object_id, meta, _build_coordinates_header(meta)),
+            build_summary_strip(build_key_facts(meta, lc_data)),
+            build_hero_grid(object_id, lightcurve_card, sky_card),
+        ],
+        gap="md",
+    )
+
+    # Constrain the metadata pane and scroll any overflow, so a source with
+    # many fields doesn't stretch the page.
     metadata_card = expressive_card(
         children=dmc.ScrollArea(
             metadata_component,
-            h=ALADIN_HEIGHT_PX,
+            h=420,
             type="auto",
             offsetScrollbars=True,
         ),
-        title=f"Object Metadata: {object_id}",
-    )
-
-    results_top = dmc.Stack([
-        # Lightcurve spans the full width; the metadata pairs with the sky plot.
-        lightcurve_card,
-        # Per-source metadata on the left, Aladin sky-plot on the right.
-        dmc.Grid(
-            [
-                dmc.GridCol(metadata_card, span=6),
-                dmc.GridCol(aladin_card, span=6),
-            ],
-            gutter="md",
+        title="Source metadata",
+        header_extra=dmc.Text(
+            " · ".join(_source_label(key) for key in _ordered_sources(data_sources))
+            or "no sources",
+            size="xs",
+            c="dimmed",
         ),
-    ])
+    )
 
     # Citations card (copyable BibTeX); the caller pairs it with the tagging panel.
     citations_card = expressive_card(
         children=citations_component,
-        title=f"Citations: {object_id}",
+        title="Citations",
     )
 
     # Full metadata JSON — collapsible, collapsed by default, at the very bottom.
@@ -616,10 +573,9 @@ def format_object_metadata(object_id, meta, citation_str=None, logger=None):
                         dmc.Code(
                             json.dumps(meta, indent=2),
                             style={
-                                "padding": "10px",
+                                "padding": "12px",
                                 "maxHeight": "400px",
                                 "overflow": "auto",
-                                "borderRadius": "4px",
                             },
                             block=True,
                         ),
@@ -629,7 +585,7 @@ def format_object_metadata(object_id, meta, citation_str=None, logger=None):
         ],
     )
 
-    return results_top, citations_card, full_metadata
+    return results_top, metadata_card, citations_card, full_metadata
 
 
 def _build_coordinates_header(meta):

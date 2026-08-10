@@ -101,7 +101,7 @@ def _count_id(component, target_id) -> int:
 
 
 def test_format_object_metadata_pieces():
-    """Returns three render pieces and does not embed the tagging container.
+    """Returns four render pieces and does not embed the tagging container.
 
     The tagging container belongs to the base layout, so it must not appear in
     any of the pieces returned here.
@@ -116,12 +116,12 @@ def test_format_object_metadata_pieces():
         "data_sources": {"tns": {"ra_deg": 46.73, "dec_deg": -11.98}},
     }
 
-    results_top, citations_card, full_metadata = format_object_metadata(
+    results_top, metadata_card, citations_card, full_metadata = format_object_metadata(
         "2021njo", meta, citation_str="@article{...}"
     )
 
     combined_ids: set = set()
-    for piece in (results_top, citations_card, full_metadata):
+    for piece in (results_top, metadata_card, citations_card, full_metadata):
         combined_ids |= collect_component_ids(piece)
 
     # The copyable coordinates header is part of the rendered output...
@@ -135,7 +135,7 @@ def test_coordinates_header_omitted_without_coordinates():
     from tarxiv.dashboard.components.cards import format_object_metadata
 
     meta = {"tarxiv_id": "x", "data_sources": {}}
-    results_top, _citations, _full = format_object_metadata("x", meta)
+    results_top, _metadata, _citations, _full = format_object_metadata("x", meta)
 
     assert "object-coordinates" not in collect_component_ids(results_top)
 

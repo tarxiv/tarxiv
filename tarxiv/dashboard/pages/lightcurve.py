@@ -1,15 +1,23 @@
 import dash
-from dash import html, callback, no_update, dcc, clientside_callback
+from dash import (
+    ClientsideFunction,
+    html,
+    callback,
+    no_update,
+    dcc,
+    clientside_callback,
+)
 from dash.dependencies import Input, Output, State
-from dash_extensions import Keyboard
 from flask import current_app, request
 from werkzeug.exceptions import Unauthorized
 import dash_mantine_components as dmc
 from ..components import (
-    title_card,
     expressive_card,
     format_object_metadata,
     create_message_banner,
+    build_empty_search_state,
+    build_photometry_table,
+    scheme_from_template,
 )
 from ...dto import (
     LightcurveResponseModel,
@@ -47,6 +55,7 @@ def layout(id=None, **kwargs):
         # User came via deep link and has a saved session
         (
             results_top,
+            metadata_card,
             citations_card,
             full_metadata,
             status,
@@ -57,9 +66,10 @@ def layout(id=None, **kwargs):
     elif id and not user:
         validation = validate_token(token)
 
-        # Deep link but no token: Show the search bar pre-filled with ID
+        # Deep link but no token: show the search card pre-filled with the ID
         # but warn the user that a token is missing.
-        results_top, citations_card, full_metadata = (
+        results_top = build_empty_search_state(prefill=id)
+        metadata_card, citations_card, full_metadata = (
             html.Div(),
             html.Div(),
             html.Div(),
@@ -81,7 +91,8 @@ def layout(id=None, **kwargs):
         aladin_store = None
     else:
         # Default empty search page
-        results_top, citations_card, full_metadata, status, banner = (
+        results_top = build_empty_search_state()
+        metadata_card, citations_card, full_metadata, status, banner = (
             html.Div(),
             html.Div(),
             html.Div(),
@@ -104,83 +115,44 @@ def layout(id=None, **kwargs):
                 storage_type="memory",
                 data=aladin_store,
             ),
-            title_card(
-                title_text="TarXiv Database Explorer",
-                subtitle_text="Explore astronomical transients and their lightcurves",
+            dmc.Box(id="message-banner", children=[banner]),
+            dmc.Text(
+                id="search-status",
+                children=status,
+                size="xs",
+                c="dimmed",
+                fs="italic",
             ),
-            expressive_card(
-                title="Lightcurve Search",
-                children=[
-                    dmc.Stack([
-                        dmc.Text(
-                            "Enter a TNS object name to view its metadata and lightcurve",
-                        ),
-                        dmc.Group(
-                            [
-                                Keyboard(
-                                    children=[
-                                        dmc.TextInput(
-                                            id="object-id-input",
-                                            placeholder="Enter object ID (e.g., 2024abc)",
-                                            value=id,  # Pre-populate with URL parameter
-                                            style={
-                                                "width": "400px",
-                                                "marginRight": "10px",
-                                            },
-                                        ),
-                                    ],
-                                    captureKeys=["Enter"],
-                                    id="search-id-keyboard",
-                                    n_keydowns=0,
-                                ),
-                                dmc.Button(
-                                    "Search",
-                                    id="search-id-button",
-                                    n_clicks=0,
-                                ),
-                            ],
-                        ),
-                    ]),
-                ],
-            ),
-            dmc.Box(
-                id="message-banner",
-                children=[banner],
-                style={"marginBottom": "20px"},
-            ),
+            # Page head, key facts, lightcurve + sky view.
             dmc.Stack(
-                [
-                    dmc.Text(
-                        id="search-status",
-                        style={
-                            "padding": "10px",
-                            "fontStyle": "italic",
-                            "fontSize": "14px",
-                        },
-                        children=status,
-                    ),
-                    dmc.Stack(
-                        id="results-container",
-                        children=[results_top],
-                    ),
-                    # Citations sits half-half with the object tagging panel. The
-                    # tagging container lives here in the base layout (not inside
-                    # the search results) so its callbacks always have a target,
-                    # even on the empty page.
-                    dmc.Grid(
-                        [
-                            dmc.GridCol(citations_card, span=6),
-                            dmc.GridCol(
-                                html.Div(id="object-tagging-container"), span=6
-                            ),
-                        ],
-                        gutter="md",
-                    ),
-                    # Full metadata JSON dump pinned to the very bottom.
-                    full_metadata,
-                ],
+                id="results-container",
+                children=[results_top],
+                gap="md",
             ),
+            # Per-source metadata pairs with the tagging panel and citations.
+            # The tagging container lives here in the base layout (not inside
+            # the search results) so its callbacks always have a target, even
+            # on the empty page.
+            dmc.Grid(
+                [
+                    dmc.GridCol(metadata_card, span={"base": 12, "lg": 7}),
+                    dmc.GridCol(
+                        dmc.Stack(
+                            [
+                                html.Div(id="object-tagging-container"),
+                                citations_card,
+                            ],
+                            gap="md",
+                        ),
+                        span={"base": 12, "lg": 5},
+                    ),
+                ],
+                gutter="md",
+            ),
+            # Full metadata JSON dump pinned to the very bottom.
+            full_metadata,
         ],
+        gap="md",
     )
 
 
@@ -202,55 +174,44 @@ def search_navigation(n_clicks, n_keydowns, object_id):
     return f"/lightcurve/{object_id}"
 
 
+# The Aladin bootstrap lives in assets/lightcurve_aladin.js under an explicit
+# clientside namespace, matching assets/cone_aladin.js. Inline callback strings
+# are unreliable under Dash 4.
 clientside_callback(
-    """
-    function(storeData) {
-    if (!storeData || storeData.ra_deg === null || storeData.dec_deg === null) {
-        return "No TNS coordinates available for Aladin";
-    }
-
-    const ra = storeData.ra_deg;
-    const dec = storeData.dec_deg;
-
-    // log the coordinates for debugging
-    console.log("Initializing Aladin with coordinates:", ra, dec);
-
-    // The ID Plotly generates for pattern-matching is complex,
-    // so we target the container expressive_card or a stable parent.
-    const graphContainer = document.body;
-
-    const observer = new MutationObserver((mutations, obs) => {
-        // Look for the Plotly internal class that signifies rendering is done
-        const graphExists = document.querySelector('.js-plotly-plot');
-
-        if (graphExists) {
-            obs.disconnect(); // Stop watching
-
-            window.A.init.then(() => {
-                const container = document.getElementById('aladin-lite-div');
-                if (container) {
-                    container.innerHTML = '';
-                    window.A.aladin('#aladin-lite-div', {
-                        survey: 'P/PanSTARRS/DR1/color-z-zg-g',
-                        target: ra + ' ' + dec,
-                        fov: 0.025,
-                    });
-                }
-            });
-        }
-    });
-
-    observer.observe(graphContainer, {
-        childList: true,
-        subtree: true
-    });
-
-    return "Observer active";
-}
-    """,
+    ClientsideFunction(namespace="lightcurve_aladin", function_name="initialize"),
     Output("aladin-status-dummy", "children"),
     Input("lightcurve-aladin-store", "data"),
 )
+
+
+@callback(
+    [
+        Output("lc-plot-wrap", "style"),
+        Output("lc-table-wrap", "style"),
+        Output("lc-table-wrap", "children"),
+    ],
+    [
+        Input("lc-view-toggle", "value"),
+        Input("active-settings-store", "data"),
+    ],
+    State("lightcurve-store", "data"),
+    prevent_initial_call=True,
+)
+def toggle_lightcurve_view(view, settings, store):
+    """Swap the lightcurve card between the plot and the photometry table.
+
+    Also re-renders the table on a theme change so the band swatches follow the
+    colour scheme.
+    """
+    hidden = {"display": "none"}
+    shown = {"display": "block"}
+
+    if view != "Table":
+        return shown, hidden, no_update
+
+    scheme = scheme_from_template((settings or {}).get("theme"))
+    table = build_photometry_table((store or {}).get("data"), scheme)
+    return hidden, shown, table
 
 
 # Map source-keyed metadata source names to citation .bib file stems.
@@ -594,13 +555,20 @@ def perform_search(object_id, token, logger):
     """The core logic shared by both Button and URL triggers.
 
     Returns a tuple of
-    ``(results_top, citations_card, full_metadata, status, banner, lc_store,
-    aladin_store)``. The three render slots correspond to the pieces produced by
-    ``format_object_metadata``; ``layout`` drops them into the page so the
-    object-tagging container can stay in the always-present base layout.
+    ``(results_top, metadata_card, citations_card, full_metadata, status,
+    banner, lc_store, aladin_store)``. The four render slots correspond to the
+    pieces produced by ``format_object_metadata``; ``layout`` drops them into
+    the page so the object-tagging container can stay in the always-present
+    base layout.
     """
-    # Render slots used by every non-success early return (no object to show).
-    empty_render = (html.Div(), html.Div(), html.Div())
+    # Render slots used by every non-success early return: keep the search card
+    # on screen (pre-filled) so the user can correct the ID and retry.
+    empty_render = (
+        build_empty_search_state(prefill=object_id),
+        html.Div(),
+        html.Div(),
+        html.Div(),
+    )
 
     status_msg = f"Searching for object: {object_id}"
     logger.info({"search_type": "id", "object_id": object_id})
@@ -655,8 +623,8 @@ def perform_search(object_id, token, logger):
     )
 
     # Display metadata
-    results_top, citations_card, full_metadata = format_object_metadata(
-        object_id, meta, citation_str, logger
+    results_top, metadata_card, citations_card, full_metadata = format_object_metadata(
+        object_id, meta, citation_str, lc_data=lc_data, logger=logger
     )
     success_banner = create_message_banner(
         f"Successfully loaded object: {object_id}", "success"
@@ -675,6 +643,7 @@ def perform_search(object_id, token, logger):
 
     return (
         results_top,
+        metadata_card,
         citations_card,
         full_metadata,
         status_msg,

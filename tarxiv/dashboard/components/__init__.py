@@ -15,15 +15,18 @@ from .cards import (
     expressive_card,
     title_card,
     footer_card,
-    create_nav_item,
-    create_nav_link,
     create_message_banner,
 )
+from .object_view import (
+    build_empty_search_state,
+    build_key_facts,
+    build_photometry_table,
+)
 from .theme_manager import (
-    get_theme_components,
     apply_theme,
-    get_filter_style,
+    get_theme,
     register_tarxiv_templates,
+    scheme_from_template,
 )
 from .cookies import (
     get_cookie_popup,
@@ -41,13 +44,14 @@ __all__ = [
     "expressive_card",
     "title_card",
     "footer_card",
-    "create_nav_item",
-    "create_nav_link",
     "create_message_banner",
-    "get_theme_components",
+    "build_empty_search_state",
+    "build_key_facts",
+    "build_photometry_table",
     "apply_theme",
-    "get_filter_style",
+    "get_theme",
     "register_tarxiv_templates",
+    "scheme_from_template",
     "get_cookie_popup",
     "COOKIE_DEFAULTS",
 ]
