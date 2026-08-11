@@ -173,3 +173,56 @@ def test_extract_object_coordinates_prefers_top_level_decimal(lightcurve_module)
     ra, dec = lightcurve_module._extract_object_coordinates(meta)
 
     assert (ra, dec) == (189.6217156, 39.00305725)
+
+
+def _assignment(name="followup", assignment_id="assign-1"):
+    return {
+        "id": assignment_id,
+        "owner_type": "user",
+        "tag": {"id": "tag-1", "name": name, "color": "#4287f5"},
+    }
+
+
+def test_tagging_panel_carries_callback_ids(lightcurve_module):
+    """The panel must keep the ids its callbacks and the scroll target use."""
+    panel = lightcurve_module.render_tagging_panel(
+        "2023ixf",
+        [{"id": "tag-2", "name": "other", "owner_type": "user"}],
+        [_assignment()],
+    )
+
+    ids = collect_component_ids(panel)
+    assert "object-tag-card" in ids  # scroll target for the head's Tag button
+    assert "assign-object-tag-select" in ids
+    assert "assign-object-tag-button" in ids
+    assert "object-tagging-list" in ids
+
+
+def test_tagging_panel_remove_buttons_keep_pattern_matching_ids(lightcurve_module):
+    """Remove controls are matched by ``assignment_id``; the shape must hold."""
+    panel = lightcurve_module.render_tagging_panel(
+        "2023ixf", [], [_assignment(assignment_id="abc123")]
+    )
+
+    def _dict_ids(component):
+        found = []
+        if not isinstance(component, Component):
+            return found
+        comp_id = getattr(component, "id", None)
+        if isinstance(comp_id, dict):
+            found.append(comp_id)
+        children = getattr(component, "children", None)
+        if isinstance(children, Component):
+            children = [children]
+        if isinstance(children, (list, tuple)):
+            for child in children:
+                found += _dict_ids(child)
+        return found
+
+    assert {"type": "remove-object-tag", "assignment_id": "abc123"} in _dict_ids(panel)
+
+
+def test_tagging_panel_handles_no_assigned_tags(lightcurve_module):
+    panel = lightcurve_module.render_tagging_panel("2023ixf", [], [])
+
+    assert "assign-object-tag-select" in collect_component_ids(panel)

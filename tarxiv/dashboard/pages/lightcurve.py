@@ -11,13 +11,16 @@ from dash.dependencies import Input, Output, State
 from flask import current_app, request
 from werkzeug.exceptions import Unauthorized
 import dash_mantine_components as dmc
+from dash_iconify import DashIconify
 from ..components import (
     expressive_card,
     format_object_metadata,
     create_message_banner,
     build_empty_search_state,
     build_photometry_table,
+    build_tag_chips,
     scheme_from_template,
+    tag_badge,
 )
 from ...dto import (
     LightcurveResponseModel,
@@ -181,6 +184,16 @@ clientside_callback(
     ClientsideFunction(namespace="lightcurve_aladin", function_name="initialize"),
     Output("aladin-status-dummy", "children"),
     Input("lightcurve-aladin-store", "data"),
+)
+
+
+# "Tag" in the page head jumps to the tag card and focuses its select, so the
+# card stays the single place tags are managed. See assets/object_page.js.
+clientside_callback(
+    ClientsideFunction(namespace="object_page", function_name="scrollToTags"),
+    Output("tag-scroll-dummy", "children"),
+    Input("jump-to-tags", "n_clicks"),
+    prevent_initial_call=True,
 )
 
 
@@ -368,70 +381,72 @@ def render_tagging_panel(object_id, visible_tags, assigned_tags):
         if tag["id"] not in assigned_tag_ids
     ]
 
-    assigned_blocks = (
-        [
-            dmc.Paper(
-                withBorder=True,
-                p="sm",
-                radius="md",
-                children=dmc.Group(
-                    [
-                        dmc.Group(
-                            [
-                                dmc.Badge(
-                                    item["tag"]["name"],
-                                    color=(item["tag"].get("color") or "gray").lstrip(
-                                        "#"
-                                    ),
-                                    variant="light",
-                                ),
-                                dmc.Text(
-                                    item["owner_type"].capitalize(),
-                                    size="sm",
-                                    c="dimmed",
-                                ),
-                            ],
-                            gap="xs",
-                        ),
-                        dmc.Button(
-                            "Remove",
-                            id={
-                                "type": "remove-object-tag",
-                                "assignment_id": item["id"],
-                            },
-                            n_clicks=0,
-                            variant="subtle",
-                            color="red",
-                        ),
-                    ],
-                    justify="space-between",
-                ),
+    # Assigned tags read as a compact wrapping row of chips above the assign
+    # controls, rather than a stack of full-width rows.
+    if assigned_tags:
+        assigned_chips = [
+            dmc.Group(
+                [
+                    tag_badge(item["tag"], size="sm"),
+                    dmc.ActionIcon(
+                        DashIconify(icon="mdi:close", width=12),
+                        id={
+                            "type": "remove-object-tag",
+                            "assignment_id": item["id"],
+                        },
+                        n_clicks=0,
+                        variant="subtle",
+                        color="gray",
+                        size="xs",
+                        # dmc.ActionIcon 2.6.0 has no `title` prop.
+                        **{
+                            "aria-label": (
+                                f"Remove {item['tag'].get('name', 'tag')} "
+                                f"({item['owner_type']})"
+                            )
+                        },
+                    ),
+                ],
+                gap=2,
+                wrap="nowrap",
+                align="center",
             )
             for item in assigned_tags
         ]
-        if assigned_tags
-        else [dmc.Text("No tags assigned to this object.", c="dimmed")]
-    )
+    else:
+        assigned_chips = [
+            dmc.Text("No tags assigned to this object.", size="xs", c="dimmed")
+        ]
 
     return expressive_card(
-        title=f"Object Tags: {object_id}",
+        id="object-tag-card",
+        title="Tags",
+        icon="mdi:tag-outline",
         children=[
-            dmc.Text(
-                "Assign any tag available to you, including personal tags and team tags from your memberships.",
-                c="dimmed",
-            ),
-            dmc.Group([
-                dmc.Select(
-                    id="assign-object-tag-select",
-                    placeholder="Choose a tag",
-                    data=available_options,
-                    value=None,
-                    style={"minWidth": "320px"},
-                ),
-                dmc.Button("Assign tag", id="assign-object-tag-button", n_clicks=0),
-            ]),
+            dmc.Group(id="object-tagging-list", children=assigned_chips, gap="xs"),
             html.Div(id="object-tagging-banner"),
-            dmc.Stack(id="object-tagging-list", children=assigned_blocks),
+            dmc.Group(
+                [
+                    dmc.Select(
+                        id="assign-object-tag-select",
+                        placeholder="Choose a tag",
+                        data=available_options,
+                        value=None,
+                        size="xs",
+                        searchable=True,
+                        style={"flex": 1, "minWidth": 0},
+                    ),
+                    dmc.Button(
+                        "Assign",
+                        id="assign-object-tag-button",
+                        n_clicks=0,
+                        size="xs",
+                        variant="default",
+                    ),
+                ],
+                gap="xs",
+                wrap="nowrap",
+            ),
         ],
     )
 
@@ -622,12 +637,21 @@ def perform_search(object_id, token, logger):
         list((meta.get("data_sources") or {}).keys()), token, logger
     )
 
+    # Assigned tags, so the head chips are correct on first paint rather than
+    # popping in once the tagging callback lands.
+    assigned_tags = []
+    tags_response = fetch_object_tags(object_id, token, logger)
+    if tags_response is not None and tags_response.status_code == 200:
+        assigned_tags = tags_response.json()
+
     # Display metadata
     results_top, metadata_card, citations_card, full_metadata = format_object_metadata(
-        object_id, meta, citation_str, lc_data=lc_data, logger=logger
-    )
-    success_banner = create_message_banner(
-        f"Successfully loaded object: {object_id}", "success"
+        object_id,
+        meta,
+        citation_str,
+        lc_data=lc_data,
+        assigned_tags=assigned_tags,
+        logger=logger,
     )
     logger.info({"info": f"Object {object_id} loaded successfully."})
 
@@ -646,8 +670,10 @@ def perform_search(object_id, token, logger):
         metadata_card,
         citations_card,
         full_metadata,
-        status_msg,
-        success_banner,
+        # A successful load needs no announcement -- the page itself is the
+        # feedback. Both the status line and the banner slot stay empty.
+        "",
+        html.Div(),
         lc_store,
         aladin_store,
     )
@@ -702,6 +728,9 @@ def load_object_tagging_panel(lightcurve_store):
         Output("object-tagging-container", "children", allow_duplicate=True),
         Output("lightcurve-object-tags-store", "data", allow_duplicate=True),
         Output("assign-object-tag-select", "value"),
+        # Safe to target here (unlike in load_object_tagging_panel): assigning
+        # requires a loaded object, so the page head always exists.
+        Output("object-tag-chips", "children", allow_duplicate=True),
     ],
     Input("assign-object-tag-button", "n_clicks"),
     [
@@ -713,32 +742,39 @@ def load_object_tagging_panel(lightcurve_store):
 )
 def handle_assign_object_tag(n_clicks, tag_id, lightcurve_store, visible_tags):
     if not n_clicks or not lightcurve_store or not tag_id:
-        return no_update, no_update, no_update
+        return no_update, no_update, no_update, no_update
 
     object_id = lightcurve_store.get("id")
     logger = current_app.config["TXV_LOGGER"]
     token = get_jwt_from_request(request)
     response = assign_object_tag(object_id, tag_id, token, logger)
-    if response.status_code != 201:
-        assigned_tags = fetch_object_tags(object_id, token, logger)
-        current_assignments = (
-            assigned_tags.json() if assigned_tags.status_code == 200 else []
-        )
-        panel = render_tagging_panel(object_id, visible_tags or [], current_assignments)
-        return panel, current_assignments, no_update
 
     updated_response = fetch_object_tags(object_id, token, logger)
     updated_assignments = (
         updated_response.json() if updated_response.status_code == 200 else []
     )
     panel = render_tagging_panel(object_id, visible_tags or [], updated_assignments)
-    return panel, updated_assignments, None
+    chips = build_tag_chips(updated_assignments)
+
+    if response.status_code != 201:
+        # Surface the failure rather than silently re-rendering an unchanged
+        # panel, which used to look like the click did nothing.
+        logger.warning({
+            "warning": (
+                f"Failed to assign tag {tag_id} to {object_id}: "
+                f"status {response.status_code}"
+            )
+        })
+        return panel, updated_assignments, no_update, chips
+
+    return panel, updated_assignments, None, chips
 
 
 @callback(
     [
         Output("object-tagging-container", "children", allow_duplicate=True),
         Output("lightcurve-object-tags-store", "data", allow_duplicate=True),
+        Output("object-tag-chips", "children", allow_duplicate=True),
     ],
     Input({"type": "remove-object-tag", "assignment_id": dash.ALL}, "n_clicks"),
     [
@@ -750,11 +786,11 @@ def handle_assign_object_tag(n_clicks, tag_id, lightcurve_store, visible_tags):
 )
 def handle_remove_object_tag(n_clicks, button_ids, lightcurve_store, visible_tags):
     if not lightcurve_store or not any(n_clicks or []):
-        return no_update, no_update
+        return no_update, no_update, no_update
 
     triggered = dash.ctx.triggered_id
     if not triggered:
-        return no_update, no_update
+        return no_update, no_update, no_update
 
     object_id = lightcurve_store.get("id")
     assignment_id = triggered.get("assignment_id")
@@ -767,4 +803,4 @@ def handle_remove_object_tag(n_clicks, button_ids, lightcurve_store, visible_tag
         updated_response.json() if updated_response.status_code == 200 else []
     )
     panel = render_tagging_panel(object_id, visible_tags or [], updated_assignments)
-    return panel, updated_assignments
+    return panel, updated_assignments, build_tag_chips(updated_assignments)

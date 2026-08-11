@@ -16,11 +16,13 @@ from .cards import (
     title_card,
     footer_card,
     create_message_banner,
+    tag_badge,
 )
 from .object_view import (
     build_empty_search_state,
     build_key_facts,
     build_photometry_table,
+    build_tag_chips,
 )
 from .theme_manager import (
     apply_theme,
@@ -45,9 +47,11 @@ __all__ = [
     "title_card",
     "footer_card",
     "create_message_banner",
+    "tag_badge",
     "build_empty_search_state",
     "build_key_facts",
     "build_photometry_table",
+    "build_tag_chips",
     "apply_theme",
     "get_theme",
     "register_tarxiv_templates",

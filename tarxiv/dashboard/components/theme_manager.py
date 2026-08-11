@@ -61,6 +61,17 @@ _LEGACY_ALIASES = {
 }
 
 _STATIC_CSS = """
+/* ------------------------------------------------------------- page plane */
+/* Mantine paints the body from its own `body` rule, which would otherwise win
+   on load order and leave the page pure white against white cards. The
+   :root[...] prefix raises specificity above a bare `body` selector so the
+   off-white plane holds whichever stylesheet lands last. */
+:root[data-mantine-color-scheme] body,
+:root[data-mantine-color-scheme] .mantine-AppShell-root,
+:root[data-mantine-color-scheme] .mantine-AppShell-main {
+    background-color: var(--tarxiv-bg);
+}
+
 /* ---------------------------------------------------------------- topbar */
 .tarxiv-wordmark {
     font-weight: 700;

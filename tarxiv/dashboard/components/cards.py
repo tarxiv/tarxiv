@@ -85,6 +85,7 @@ def expressive_card(
     children,
     title=None,
     title_order: Literal[1, 2, 3, 4, 5, 6] = 2,
+    icon: str | None = None,
     header_extra=None,
     body_padding: str | int = "md",
     **kwargs,
@@ -92,13 +93,15 @@ def expressive_card(
     """Create the standard surface card.
 
     A bordered, softly shadowed 14px-radius card. When a title is given it sits
-    in a divider-separated header row, optionally alongside ``header_extra``
-    (a control such as a toggle or copy button) pinned to the right.
+    in a divider-separated header row, preceded by an optional ``icon`` and
+    optionally alongside ``header_extra`` (a control such as a toggle or copy
+    button) pinned to the right.
 
     Args:
         children: List of child components
         title: Optional title for the card header
         title_order: Heading order (1-6)
+        icon: Optional Iconify name shown before the title
         header_extra: Optional component placed at the right of the header
         body_padding: Padding for the card body (0 lets a child bleed to the edge)
         **kwargs: Additional keyword arguments for dmc.Paper
@@ -112,7 +115,12 @@ def expressive_card(
 
     card_children = []
     if title:
-        header = [
+        header = []
+        if icon:
+            header.append(
+                DashIconify(icon=icon, width=15, style={"color": "var(--tarxiv-ink-3)"})
+            )
+        header += [
             dmc.Title(title, order=title_order, fz=13, fw=600),
             dmc.Box(style={"flex": 1}),
         ]
@@ -138,6 +146,36 @@ def expressive_card(
         p=0,
         radius=14,
         style=style,
+        **kwargs,
+    )
+
+
+def tag_badge(tag: dict, size: str = "sm", **kwargs):
+    """Render a tag as a coloured badge.
+
+    Tag colours are stored as CSS hex strings (``#4287f5``). They are passed to
+    Mantine verbatim: stripping the ``#`` -- as this code used to -- turns the
+    value into ``4287f5``, which Mantine reads as a *named* palette key, fails
+    to resolve, and so renders every custom tag in the fallback colour.
+
+    Args:
+        tag: A tag dict with at least ``name``; ``color`` is optional
+        size: Mantine badge size
+        **kwargs: Additional keyword arguments for dmc.Badge
+
+    Returns
+    -------
+        dmc.Badge coloured by the tag
+    """
+    return dmc.Badge(
+        tag.get("name", "unnamed"),
+        color=tag.get("color") or "gray",
+        variant="light",
+        size=size,
+        radius="sm",
+        # Mantine upper-cases badges by default; tag names are user-authored
+        # and read better as written.
+        tt="none",
         **kwargs,
     )
 
@@ -476,7 +514,7 @@ def _build_citation_component(citation_str: str | None):
 
 
 def format_object_metadata(
-    object_id, meta, citation_str=None, lc_data=None, logger=None
+    object_id, meta, citation_str=None, lc_data=None, assigned_tags=None, logger=None
 ):
     """Format object metadata for display.
 
@@ -489,6 +527,7 @@ def format_object_metadata(
         meta: Metadata dictionary (source-keyed schema, see MetadataResponseModel)
         citation_str: Optional concatenated BibTeX citation string
         lc_data: Optional photometry list, used for the detection-count fact
+        assigned_tags: Optional tag assignments, shown as chips in the page head
         logger: Optional logger instance
 
     Returns
@@ -510,6 +549,7 @@ def format_object_metadata(
     lightcurve_card = expressive_card(
         children=build_lightcurve_body(),
         title="Lightcurve",
+        icon="clarity:curve-chart-line",
         header_extra=build_view_toggle(),
         body_padding="xs",
     )
@@ -523,13 +563,19 @@ def format_object_metadata(
             ),
         ],
         title="Sky view",
+        icon="mdi:earth",
         header_extra=dmc.Text("PanSTARRS DR1", size="xs", c="dimmed", ff="monospace"),
         body_padding=0,
     )
 
     results_top = dmc.Stack(
         [
-            build_page_head(object_id, meta, _build_coordinates_header(meta)),
+            build_page_head(
+                object_id,
+                meta,
+                _build_coordinates_header(meta),
+                assigned_tags=assigned_tags,
+            ),
             build_summary_strip(build_key_facts(meta, lc_data)),
             build_hero_grid(object_id, lightcurve_card, sky_card),
         ],
@@ -546,6 +592,7 @@ def format_object_metadata(
             offsetScrollbars=True,
         ),
         title="Source metadata",
+        icon="mdi:table",
         header_extra=dmc.Text(
             " · ".join(_source_label(key) for key in _ordered_sources(data_sources))
             or "no sources",
@@ -558,6 +605,7 @@ def format_object_metadata(
     citations_card = expressive_card(
         children=citations_component,
         title="Citations",
+        icon="mdi:format-quote-close",
     )
 
     # Full metadata JSON — collapsible, collapsed by default, at the very bottom.
@@ -568,7 +616,22 @@ def format_object_metadata(
             dmc.AccordionItem(
                 value="full-metadata",
                 children=[
-                    dmc.AccordionControl("Full Metadata (JSON)"),
+                    dmc.AccordionControl(
+                        # Icon inline with the label; the control's own `icon`
+                        # prop renders it at the far end of the row.
+                        dmc.Group(
+                            [
+                                DashIconify(
+                                    icon="mdi:code-json",
+                                    width=15,
+                                    style={"color": "var(--tarxiv-ink-3)"},
+                                ),
+                                dmc.Text("Full Metadata (JSON)", size="sm", fw=500),
+                            ],
+                            gap=10,
+                            wrap="nowrap",
+                        )
+                    ),
                     dmc.AccordionPanel(
                         dmc.Code(
                             json.dumps(meta, indent=2),

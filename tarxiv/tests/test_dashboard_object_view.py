@@ -8,12 +8,16 @@ existing only in the photometry -- so those are covered explicitly here.
 
 from dash.development.base_component import Component
 
+from tarxiv.dashboard.components.cards import tag_badge
 from tarxiv.dashboard.components.object_view import (
     EM_DASH,
     build_key_facts,
+    build_page_head,
     build_photometry_table,
+    build_tag_chips,
 )
 from tarxiv.dashboard.styles import BAND_COLORS, resolve_filter_style
+from tarxiv.tests.test_dashboard_lightcurve import collect_component_ids
 
 
 def _facts_by_label(meta, lc_data=None) -> dict:
@@ -250,3 +254,86 @@ def test_filter_style_handles_missing_values():
 
     assert style["light"] == BAND_COLORS["Unknown"][0]
     assert style["dark"] == BAND_COLORS["Unknown"][1]
+
+
+# --------------------------------------------------------------------------
+# tag_badge / page head
+# --------------------------------------------------------------------------
+
+
+def test_tag_badge_passes_hex_colour_through_unchanged():
+    """Regression: the '#' used to be stripped.
+
+    Mantine reads a bare ``4287f5`` as a *named* palette key, fails to resolve
+    it, and renders every custom tag in the fallback colour.
+    """
+    badge = tag_badge({"name": "followup", "color": "#4287f5"})
+
+    assert badge.color == "#4287f5"
+
+
+def test_tag_badge_falls_back_when_colour_missing():
+    assert tag_badge({"name": "x"}).color == "gray"
+    assert tag_badge({"name": "x", "color": None}).color == "gray"
+
+
+def _assignment(name, color="#4287f5", assignment_id="a1"):
+    return {
+        "id": assignment_id,
+        "owner_type": "user",
+        "tag": {"id": "t1", "name": name, "color": color},
+    }
+
+
+def test_build_tag_chips_renders_one_badge_per_assignment():
+    chips = build_tag_chips([_assignment("followup"), _assignment("bright", "#eda100")])
+
+    assert [chip.children for chip in chips] == ["followup", "bright"]
+
+
+def test_build_tag_chips_handles_no_tags():
+    assert build_tag_chips(None) == []
+    assert build_tag_chips([]) == []
+
+
+def test_page_head_has_actions_and_no_duplicate_search():
+    """The head carries the object actions; search lives in the app header.
+
+    A second search box here duplicated the one in the topbar, so it was
+    removed -- but ``_search_controls`` is still used by the empty state, so
+    assert on the head specifically.
+    """
+    head = build_page_head("2023ixf", {"data_sources": {"tns": {}}})
+    ids = collect_component_ids(head)
+
+    assert "jump-to-tags" in ids
+    assert "cite-copy" in ids
+    assert "object-tag-chips" in ids
+    assert "object-id-input" not in ids
+    assert "search-id-button" not in ids
+
+
+def test_page_head_renders_assigned_tags():
+    head = build_page_head(
+        "2023ixf",
+        {"data_sources": {"tns": {"object_type": "SN II"}}},
+        assigned_tags=[_assignment("followup")],
+    )
+
+    def _texts(component):
+        if isinstance(component, str):
+            return [component]
+        found = []
+        children = getattr(component, "children", None)
+        if isinstance(children, Component):
+            children = [children]
+        if isinstance(children, (list, tuple)):
+            for child in children:
+                found += _texts(child)
+        elif isinstance(children, str):
+            found.append(children)
+        return found
+
+    texts = _texts(head)
+    assert "followup" in texts
+    assert "SN II" in texts

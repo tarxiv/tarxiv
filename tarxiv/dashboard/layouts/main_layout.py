@@ -19,6 +19,8 @@ from ..components import (
 from ...auth import get_authenticated_user, get_jwt_from_request
 
 TOPBAR_HEIGHT_PX = 52
+# Page content sits in a centred column; matches the mockup's .container.
+CONTENT_MAX_WIDTH_PX = 1380
 
 
 def _fetch_live_profile(token):
@@ -247,6 +249,7 @@ def create_layout() -> dmc.MantineProvider:
             },
             header={"height": TOPBAR_HEIGHT_PX},
             padding="md",
+            bg="var(--tarxiv-bg)",
             children=[
                 # 1. PERMISSIONS (local): Remembers what the user said 'Yes' to.
                 dcc.Store(id="cookie-consent-store", storage_type="local"),
@@ -332,6 +335,11 @@ def create_layout() -> dmc.MantineProvider:
                                 "display": "flex",
                                 "flexDirection": "column",
                                 "minHeight": "calc(100vh - 32px)",  # Adjust 32px based on your padding
+                                # Centred content column; the topbar stays
+                                # full-bleed. Below this width it goes fluid.
+                                "maxWidth": f"{CONTENT_MAX_WIDTH_PX}px",
+                                "width": "100%",
+                                "margin": "0 auto",
                             },
                             children=[
                                 dcc.Location(

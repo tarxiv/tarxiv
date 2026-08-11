@@ -17,7 +17,12 @@ from ...auth import (
     validate_token,
 )
 from ..components.auth import avatar_fallback, avatar_image
-from ..components.cards import create_message_banner, expressive_card, title_card
+from ..components.cards import (
+    create_message_banner,
+    expressive_card,
+    tag_badge,
+    title_card,
+)
 from ..styles import ORCID_BUTTON_STYLE, TAG_SWATCHES
 
 
@@ -951,13 +956,7 @@ def tag_section(title, tags):
                             [
                                 dmc.Group(
                                     [
-                                        dmc.Badge(
-                                            tag.get("name", "Unnamed"),
-                                            color=(tag.get("color") or "gray").lstrip(
-                                                "#"
-                                            ),
-                                            variant="light",
-                                        ),
+                                        tag_badge(tag),
                                         (
                                             dmc.Text(
                                                 tag.get("description"),

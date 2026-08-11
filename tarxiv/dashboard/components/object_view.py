@@ -189,8 +189,26 @@ def _search_controls(prefill: str | None = None, width: int = 220, size: str = "
     ]
 
 
-def build_page_head(object_id: str, meta: dict, coordinates_header=None):
-    """Compact identity row: name, type chip, coordinates and search."""
+def build_tag_chips(assigned_tags):
+    """Read-only tag chips for the page head.
+
+    Deliberately without remove buttons: the tag card owns management, and its
+    remove controls use pattern-matching ids that would collide if a second set
+    were rendered here.
+    """
+    from .cards import tag_badge
+
+    return [tag_badge(item["tag"], size="sm") for item in (assigned_tags or [])]
+
+
+def build_page_head(
+    object_id: str, meta: dict, coordinates_header=None, assigned_tags=None
+):
+    """Compact identity row: name, type badge, tags, coordinates and actions.
+
+    Object search lives in the app header, so it is deliberately not repeated
+    here; the right-hand side carries the object actions instead.
+    """
     object_type = _first_present(meta or {}, ["tns"], "object_type")
 
     left = [
@@ -200,18 +218,64 @@ def build_page_head(object_id: str, meta: dict, coordinates_header=None):
         left.append(
             dmc.Badge(object_type, variant="light", color="arxiv_red", size="lg")
         )
+    left.append(
+        dmc.Group(
+            build_tag_chips(assigned_tags),
+            id="object-tag-chips",
+            gap=6,
+            wrap="wrap",
+        )
+    )
     if coordinates_header is not None:
         left.append(coordinates_header)
+
+    actions = dmc.Group(
+        [
+            # Dummy sink for the scroll-to-tags clientside callback.
+            html.Div(id="tag-scroll-dummy", style={"display": "none"}),
+            dmc.Button(
+                "Tag",
+                id="jump-to-tags",
+                n_clicks=0,
+                size="xs",
+                variant="light",
+                color="arxiv_red",
+                leftSection=DashIconify(icon="mdi:tag-plus-outline", width=15),
+            ),
+            # Copies the citations card's BibTeX block directly. dcc.Clipboard
+            # reads the target element's text, so no callback is needed; it is
+            # stretched invisibly over the button to act as its click target.
+            dmc.Button(
+                [
+                    "Cite",
+                    dcc.Clipboard(
+                        id="cite-copy",
+                        target_id="citation-bibtex",
+                        title="Copy BibTeX",
+                        style={
+                            "position": "absolute",
+                            "inset": 0,
+                            "width": "100%",
+                            "height": "100%",
+                            "opacity": 0,
+                            "cursor": "pointer",
+                        },
+                    ),
+                ],
+                size="xs",
+                variant="default",
+                leftSection=DashIconify(icon="mdi:format-quote-close", width=15),
+                style={"position": "relative"},
+            ),
+        ],
+        gap="xs",
+        wrap="nowrap",
+    )
 
     return dmc.Group(
         [
             dmc.Group(left, gap="sm", align="center", wrap="wrap"),
-            dmc.Group(
-                _search_controls(prefill=object_id),
-                gap="xs",
-                wrap="nowrap",
-                visibleFrom="sm",
-            ),
+            actions,
         ],
         justify="space-between",
         align="center",
