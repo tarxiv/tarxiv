@@ -236,7 +236,9 @@ SOURCE_LABELS = {
     "asas_sn": "ASAS-SN",
     "asas-sn": "ASAS-SN",
     "asas-sn_skypatrol": "ASAS-SN Skypatrol",
-    "sherlock": "Sherlock",
+    # Sherlock results reach us through Lasair (see pipeline.py), so the label
+    # credits both. The stored key stays "sherlock".
+    "sherlock": "Lasair-Sherlock",
     "fink": "Fink",
     "mangrove": "Mangrove",
     "lasair": "Lasair",
