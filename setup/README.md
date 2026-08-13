@@ -3,14 +3,33 @@
 This directory contains the Docker configurations for the services required by the TarXiv pipeline and API. To start-up the services, run the following commands:
 
 ```commandline
-docker compose run setup_elasticsearch
-docker compose up elasticsearch logstash kibana couchbase postgres
-docker compose run --rm tarxiv-migrate
+docker compose run setup_elasticsearch     # one-shot Elasticsearch bootstrap
+docker compose up -d                       # couchbase, postgres, redis
+docker compose run --rm tarxiv-migrate     # apply Alembic migrations
+docker compose --profile tarxiv up -d      # the API and dashboard
 ```
 
 The second command will take about one minute to correctly start-up the Couchbase daemon.
 
 ###### You can access the Couchbase web interface at http://localhost:8091/.
+
+## Service profiles
+
+A bare `docker compose up` starts only the four backing stores needed by the dev loop. Everything else is opt-in via a profile:
+
+| Profile | Services | Start with |
+|---|---|---|
+| *(default)* | couchbase, postgres, redis | `docker compose up -d` |
+| `tarxiv` | tarxiv-migrate, tarxiv-api, tarxiv-dashboard | `docker compose --profile tarxiv up -d` |
+| `tools` | adminer (DB browser on :8079) | `docker compose --profile tools up -d` |
+| `logging` | elasticsearch, logstash, kibana | `docker compose --profile logging up -d` |
+| `kafka` | kafka-broker, schema registry, connect, rest proxy, kafbat-ui, prometheus | `docker compose --profile kafka up -d` |
+| `monitoring` | prometheus | `docker compose --profile monitoring up -d` |
+| `proxy` | nginx-proxy, nginx-letsencrypt (deployment only) | `docker compose --profile proxy up -d` |
+| `setup_elasticsearch` | one-shot Elasticsearch bootstrap | `docker compose run setup_elasticsearch` |
+
+Naming a service on the command line auto-enables its profile, so `docker compose up -d tarxiv-api` works without `--profile tarxiv`. Profiles can be combined (`--profile kafka --profile logging`), and if you always want the same set you can pin it once in `.env` with `COMPOSE_PROFILES=tarxiv,tools`.
+
 
 # Local development setup
 

@@ -1,3 +1,18 @@
+# Service profiles. A bare `docker compose up` starts only the backing stores
+# needed by the local dev loop (couchbase, postgres, redis);
+# everything else is opt-in via a profile:
+#
+#   logging              logstash, kibana, elasticsearch
+#   kafka                kafka-broker, kafka-schema-registry, kafka-connect,
+#                        kafka-rest-proxy, kafbat-ui, prometheus
+#   monitoring           prometheus
+#   tools                adminer
+#   tarxiv               tarxiv-migrate, tarxiv-api, tarxiv-dashboard
+#   proxy                nginx-proxy, nginx-letsencrypt
+#   setup_elasticsearch  setup_elasticsearch (one-shot bootstrap)
+#
+# Naming a service on the command line auto-enables its profile, so
+# `docker compose up -d tarxiv-api` works without `--profile tarxiv`.
 services:
   nginx-proxy:
     image: nginxproxy/nginx-proxy:1.6
@@ -61,6 +76,8 @@ services:
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.0.2
+    profiles:
+      - logging
     volumes:
       - ./elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro,Z
       - ${TARXIV_ELASTIC_DATA_DIR}:/usr/share/elasticsearch/data:Z
@@ -78,6 +95,8 @@ services:
 
   logstash:
     image: docker.elastic.co/logstash/logstash:9.0.2
+    profiles:
+      - logging
     volumes:
       - ./logstash.yml:/usr/share/logstash/config/logstash.yml:ro,Z
       - ./tarxiv_logstash.conf:/usr/share/logstash/pipeline/tarxiv_logstash.conf:ro,Z
@@ -100,6 +119,8 @@ services:
 
   kibana:
     image: docker.elastic.co/kibana/kibana:9.0.2
+    profiles:
+      - logging
     volumes:
       - ./kibana.yml:/usr/share/kibana/config/kibana.yml:ro,Z
     ports:
@@ -141,7 +162,9 @@ services:
     ports:
       - 6379:6379
     environment:
-      - REDIS_PASSWORD:${TARXIV_REDIS_PASSWORD}
+      # Inert either way: the official redis image ignores REDIS_PASSWORD and
+      # needs `--requirepass`. Kept in mapping form to match the other services.
+      REDIS_PASSWORD: ${TARXIV_REDIS_PASSWORD}
     networks:
       - tarxiv_net
 
@@ -167,6 +190,8 @@ services:
 
   adminer:
     image: adminer:latest
+    profiles:
+      - tools
     ports:
       - 8079:8080
     networks:
@@ -295,6 +320,8 @@ services:
   
   kafka-broker:
     image: confluentinc/cp-kafka:8.0.0
+    profiles:
+      - kafka
     hostname: kafka-broker
     container_name: kafka-broker
     ports:
@@ -323,6 +350,8 @@ services:
 
   kafka-schema-registry:
     image: confluentinc/cp-schema-registry:8.0.0
+    profiles:
+      - kafka
     hostname: schema-registry
     container_name: schema-registry
     depends_on:
@@ -338,6 +367,8 @@ services:
 
   kafka-connect:
     image: cnfldemos/kafka-connect-datagen:0.6.4-7.6.0
+    profiles:
+      - kafka
     hostname: connect
     container_name: connect
     depends_on:
@@ -365,6 +396,8 @@ services:
 
   kafka-rest-proxy:
     image: confluentinc/cp-kafka-rest:8.0.0
+    profiles:
+      - kafka
     depends_on:
       - kafka-broker
       - kafka-schema-registry
@@ -384,6 +417,8 @@ services:
   kafbat-ui:
     container_name: kafbat-ui
     image: ghcr.io/kafbat/kafka-ui:latest
+    profiles:
+      - kafka
     ports:
       - 8080:8080
     networks:
@@ -406,6 +441,9 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
+    # In the kafka profile, kafbat uses it. 
+    profiles:
+      - kafka
     hostname: prometheus
     container_name: prometheus
     ports:
@@ -421,7 +459,6 @@ networks:
     driver: bridge
 
 volumes:
-  elasticsearch:
   nginx_certs:
   nginx_vhost:
   nginx_html:
