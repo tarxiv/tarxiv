@@ -2,6 +2,7 @@
 from tarxiv.utils import PRINT, LOGFILE, DATABASE
 from tarxiv.api import API
 import argparse
+import os
 
 
 # Get config dir from arguments
@@ -9,10 +10,15 @@ parser = argparse.ArgumentParser('start-api',
                                  description="Run TarXiv Flask API")
 parser.add_argument('--debug', action='store_true', default=False,
                          help='set to enable printing/logging in debug mode')
+parser.add_argument('--reporting-mode',
+              type=int,
+              default=int(os.getenv("TARXIV_REPORTING_MODE", (PRINT | LOGFILE | DATABASE))),
+              choices=[0, 1, 2, 3, 4, 5, 6, 7],
+              help='bitmask: 1=PRINT, 2=LOGFILE, 4=DATABASE (default: TARXIV_REPORTING_MODE or 7)')
 args = parser.parse_args()
 
 # Get API object and start server
 txv_api = API(script_name="tarxiv_api",
-              reporting_mode=(PRINT | LOGFILE | DATABASE),
+          reporting_mode=args.reporting_mode,
               debug=args.debug)
 txv_api.start_server()

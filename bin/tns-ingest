@@ -4,6 +4,7 @@ from tarxiv.pipeline import TNSPipeline
 from tarxiv.alerts import IMAP
 import datetime
 import argparse
+import os
 
 #from pandas.errors import SettingWithCopyWarning # Location may vary by pandas version
 #warnings.simplefilter(action='ignore', category=SettingWithCopyWarning)
@@ -14,6 +15,11 @@ parser = argparse.ArgumentParser('tns-ingest',
                                         "Monitor new TNS alerts, and query relevant data into database.'")
 parser.add_argument('--debug', action='store_true', default=False,
                          help='set to enable printing/logging in debug mode')
+parser.add_argument('--reporting-mode',
+              type=int,
+              default=int(os.getenv("TARXIV_REPORTING_MODE", (PRINT | LOGFILE | DATABASE))),
+              choices=[0, 1, 2, 3, 4, 5, 6, 7],
+              help='bitmask: 1=PRINT, 2=LOGFILE, 4=DATABASE (default: TARXIV_REPORTING_MODE or 7)')
 module_subparsers = parser.add_subparsers(title="command", dest="command")
 module_subparsers.add_parser("email", help="Turn on email monitor",
                              description="Watch email for new TNS alerts and submit to internal queue")
@@ -43,35 +49,35 @@ args = parser.parse_args()
 # Create survey objects
 if args.command == "email":
     tns_mail = IMAP(script_name="tns_email_watch",
-                   reporting_mode=(PRINT | LOGFILE | DATABASE),
+                   reporting_mode=args.reporting_mode,
                    debug=args.debug)
     # Run the pipeline
     tns_mail.monitor_notices()
 
 elif args.command == "alert_queue":
     txv_tns = TNSPipeline(script_name="tns_missing_ingest",
-                          reporting_mode=(PRINT | LOGFILE | DATABASE),
+                          reporting_mode=args.reporting_mode,
                           debug=args.debug)
     # Run the pipeline
     txv_tns.run_pipeline(topic="internal_tns_alerts")
 
 elif args.command == "bulk_queue":
     txv_tns = TNSPipeline(script_name="tns_missing_ingest",
-                          reporting_mode=(PRINT | LOGFILE | DATABASE),
+                          reporting_mode=args.reporting_mode,
                           debug=args.debug)
     # Run the pipeline
     txv_tns.run_pipeline(topic="internal_tns_bulk")
 
 elif args.command == "update_queue":
     txv_tns = TNSPipeline(script_name="tns_missing_ingest",
-                          reporting_mode=(PRINT | LOGFILE | DATABASE),
+                          reporting_mode=args.reporting_mode,
                           debug=args.debug)
     # Run the pipeline
     txv_tns.run_pipeline(topic="internal_tns_bulk")
 
 elif args.command == "bulk_submit":
     txv_tns = TNSPipeline(script_name="tns_daily_ingest",
-                          reporting_mode=(PRINT | LOGFILE | DATABASE),
+                          reporting_mode=args.reporting_mode,
                           debug=args.debug)
     if args.all:
         txv_tns.update_bulk(include_existing=True)
@@ -86,7 +92,7 @@ elif args.command == "bulk_submit":
 
 elif args.command == "run_single":
     txv_tns = TNSPipeline(script_name="tns_single_ingest",
-                          reporting_mode=(PRINT | LOGFILE | DATABASE),
+                          reporting_mode=args.reporting_mode,
                           debug=args.debug)
     # Get survey information
     txv_id, obj_meta, obj_lc = txv_tns.get_object(args.tns_id)
