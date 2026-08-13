@@ -216,7 +216,10 @@ def create_message_banner(
     }
 
     return dmc.Alert(
-        title=message.capitalize(),
+        # Uppercase the first letter only — str.capitalize() lowercases the
+        # rest, which mangles the acronyms these messages are full of
+        # ("RA" -> "ra", "TarXiv" -> "tarxiv").
+        title=message[:1].upper() + message[1:],
         color=color_map.get(message_type, color_map["info"]),
         variant="light",
         radius="md",
