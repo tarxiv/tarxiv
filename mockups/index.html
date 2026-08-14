@@ -33,6 +33,13 @@
   .option .trade { margin-top: 10px; font-size: 12px; color: var(--ink-3); }
   .option .trade b { color: var(--ink-2); }
 
+  .option.chosen { border-color: var(--primary-ink); }
+  .pick {
+    display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+    background: var(--primary-soft-2); color: var(--primary-ink);
+    font-size: 10px; letter-spacing: 0.06em;
+  }
+
   .swatches { display: flex; gap: 10px; flex-wrap: wrap; }
   .swatch-tile { width: 108px; }
   .swatch-tile .sq {
@@ -53,19 +60,18 @@
 
 <header class="topbar">
   <a class="wordmark" href="index.html">tar<span class="x">X</span>iv</a>
-  <span class="faint small">redesign mockups · July 2026</span>
+  <span class="faint small">redesign mockups · August 2026</span>
   <div class="spacer"></div>
   <button class="icon-btn" onclick="toggleTheme()" title="Toggle theme" id="theme-btn"></button>
 </header>
 
 <div class="container">
-  <h1>Lightcurve page redesign</h1>
-  <p class="lede">Four layout options for the TarXiv lightcurve page, sharing one visual
-  language: refined arXiv-red palette, neutral surfaces, Inter + JetBrains Mono, live
-  Plotly + Aladin widgets on SN 2023ixf. Toggle light/dark in any page — the choice
-  persists across all of them.</p>
+  <h1>TarXiv redesign mockups</h1>
+  <p class="lede">Layout options for the pages being reworked, sharing one visual language:
+  refined arXiv-red palette, neutral surfaces, Inter + JetBrains Mono, live Plotly + Aladin
+  widgets. Toggle light/dark in any page — the choice persists across all of them.</p>
 
-  <h2>Options</h2>
+  <h2>Lightcurve page</h2>
   <div class="options">
     <a class="card option" href="mockup-1-dense.html">
       <div class="num">Option 1 · Dense</div>
@@ -76,8 +82,8 @@
          small laptops; low-frequency content is a click away rather than visible.</div>
     </a>
 
-    <a class="card option" href="mockup-2-balanced.html">
-      <div class="num">Option 2 · Middle ground</div>
+    <a class="card option chosen" href="mockup-2-balanced.html">
+      <div class="num">Option 2 · Middle ground <span class="pick">chosen</span></div>
       <h3>Balanced</h3>
       <p>A summary strip of key facts + lightcurve + sky view all above the fold at 1440×900;
          full metadata, tags and citations one short scroll below.</p>
@@ -104,6 +110,52 @@
     </a>
   </div>
 
+  <h2>Cone search page</h2>
+  <p class="lede" style="margin:-4px 0 14px;font-size:13px">All four share the same
+  <b>compressed search bar</b> — one row of fields with a <span class="mono">deg ↔ hms:dms</span>
+  toggle that converts in place, replacing today's three stacked OR'd input blocks (~380px of
+  form before a single result). They differ only in how the objects under the sky map are
+  presented.</p>
+  <div class="options">
+    <a class="card option" href="cone-1-rows.html">
+      <div class="num">Option 1 · Compact rows</div>
+      <h3>Dense list</h3>
+      <p>Sky map full width, then one row per object: lightcurve thumbnail, name and type,
+         redshift/peak/host inline, tags, separation right-aligned. Hovering a row highlights
+         its marker.</p>
+      <div class="trade"><b>Trade-off:</b> the closest step from what exists today, so it is the
+         least exciting; facts wrap awkwardly below ~900px.</div>
+    </a>
+
+    <a class="card option" href="cone-2-grid.html">
+      <div class="num">Option 2 · Card grid</div>
+      <h3>Browsable tiles</h3>
+      <p>A responsive grid of cards, each led by a full-width lightcurve thumbnail on an inset
+         surface, then a 2×2 stat block, host, tags and source pills.</p>
+      <div class="trade"><b>Trade-off:</b> roughly 3× the vertical space per object — you see six
+         at a time rather than twenty, so it suits small result sets.</div>
+    </a>
+
+    <a class="card option" href="cone-3-split.html">
+      <div class="num">Option 3 · Split workspace</div>
+      <h3>Sky beside results</h3>
+      <p>Sticky sky map on the left while results scroll on the right. Clicking a row expands a
+         real Plotly lightcurve and full coordinates inline — triage without ever leaving the
+         search.</p>
+      <div class="trade"><b>Trade-off:</b> halves the width available to each result row; collapses
+         to stacked panels below 1080px, losing the side-by-side benefit.</div>
+    </a>
+
+    <a class="card option" href="cone-4-table.html">
+      <div class="num">Option 4 · Data table</div>
+      <h3>Triage grid</h3>
+      <p>Sky map folds away; results become a sortable table with a sparkline column. Click any
+         row to expand its full facts. Built for scanning a large cone quickly.</p>
+      <div class="trade"><b>Trade-off:</b> the least visual of the four, and wide enough to need
+         horizontal scroll on a laptop; tags and host hide until a row is expanded.</div>
+    </a>
+  </div>
+
   <h2>Shared palette</h2>
   <div class="swatches" id="brand-swatches"></div>
 
@@ -115,8 +167,18 @@
   <div class="swatches" id="filter-swatches"></div>
 
   <div class="note"><b>Viewing notes:</b> widgets load Plotly and Aladin Lite from CDN, so these
-  pages need network access. Option 1 targets ≥1280×800 for its no-scroll guarantee. Nothing in
-  the app codebase is modified — these are standalone HTML files in <span class="mono">mockups/</span>.</div>
+  pages need network access. Lightcurve option 1 targets ≥1280×800 for its no-scroll guarantee.
+  Nothing in the app codebase is modified — these are standalone HTML files in
+  <span class="mono">mockups/</span>.</div>
+
+  <div class="note"><b>Cone search needs backend work, not just CSS:</b> the
+  <span class="mono">/cone_search</span> endpoint returns exactly four fields per object today —
+  <span class="mono">obj_name</span>, <span class="mono">ra</span>, <span class="mono">dec</span>,
+  <span class="mono">distance_deg</span>. Every richer thing shown here — type, redshift, host,
+  peak magnitude, detection counts, tags and the lightcurve thumbnails — needs the results to be
+  enriched from object metadata first. <span class="mono">format_cone_search_results()</span>
+  already takes an unused <span class="mono">txv_db</span> argument, which is the intended hook.
+  Object names, coordinates and photometry on these pages are generated placeholders.</div>
 </div>
 
 <script src="shared.js"></script>

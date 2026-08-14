@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TarXiv cone mockup 2 — Card grid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<script>
+  try { document.documentElement.dataset.theme = localStorage.getItem("tarxiv-mock-theme") || "light"; } catch (e) {}
+</script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+<style>
+  .container { max-width: 1380px; margin: 0 auto; padding: 18px 22px 40px; }
+
+  .page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .page-head h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+  .page-head .spacer { flex: 1; }
+
+  .bar-wrap { margin-bottom: 10px; }
+  .sum-line { margin: 0 0 14px 2px; }
+
+  .sky-card { margin-bottom: 16px; }
+  .sky-body { height: 300px; padding: 0; border-radius: 0 0 14px 14px; overflow: hidden; }
+
+  .sec-label {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--ink-3);
+    margin: 0 2px 12px;
+  }
+  .sec-label .spacer { flex: 1; }
+
+  /* the grid: browse-oriented, one card per object */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(288px, 1fr)); gap: 14px; }
+
+  .obj-card {
+    display: flex; flex-direction: column;
+    padding: 0; overflow: hidden;
+    transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+    cursor: pointer;
+  }
+  .obj-card:hover {
+    border-color: var(--primary-ink); transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* sparkline sits on the inset surface so it reads as a preview, not chrome */
+  .card-spark {
+    background: var(--card-2); border-bottom: 1px solid var(--border);
+    padding: 10px 12px 8px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .card-spark svg { width: 100%; height: 64px; }
+  .card-spark .row { display: flex; align-items: center; }
+  .card-spark .row .spacer { flex: 1; }
+
+  .card-main { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .card-ident { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  .mini-stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px;
+    padding-top: 2px;
+  }
+
+  .card-foot {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding-top: 10px; border-top: 1px solid var(--border);
+  }
+  .card-foot .spacer { flex: 1; }
+</style>
+</head>
+<body>
+
+<header class="topbar" id="topbar"></header>
+
+<div class="container">
+
+  <div class="page-head">
+    <h1>Cone search</h1>
+    <div class="spacer"></div>
+    <button class="btn btn-outline btn-sm">Export CSV</button>
+  </div>
+
+  <div class="bar-wrap" id="cone-bar"></div>
+  <p class="cone-summary sum-line" id="cone-summary"></p>
+
+  <section class="card sky-card">
+    <div class="card-head"><h2 id="sky-title"></h2></div>
+    <div class="sky-body" id="sky"></div>
+  </section>
+
+  <div class="sec-label">
+    <span>Objects found</span>
+    <div class="spacer"></div>
+    <div class="seg" id="sort-seg">
+      <button class="active" data-k="sep">Separation</button>
+      <button data-k="peak">Brightness</button>
+      <button data-k="date">Recency</button>
+    </div>
+  </div>
+
+  <div class="grid" id="res-grid"></div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+  document.getElementById("topbar").innerHTML = topbarHTML("cone");
+  document.getElementById("sky-title").innerHTML = ICONS.globe + " Sky view";
+
+  mountConeSearchBar(document.getElementById("cone-bar"));
+  document.getElementById("cone-summary").innerHTML = coneSummaryHTML(CONE_RESULTS);
+  mountConeAladin(document.getElementById("sky"));
+
+  const cardHTML = (o) => `
+    <article class="card obj-card">
+      <div class="card-spark">
+        ${sparklineSVG(o.phot, currentTheme(), { w: 262, h: 64 })}
+        <div class="row">
+          <div class="band-chips">${bandChipsHTML(o.phot)}</div>
+          <div class="spacer"></div>
+          <span class="kv"><span class="k">peak</span><span class="v">${fmtMag(o.peak_mag)} ${o.peak_filter}</span></span>
+        </div>
+      </div>
+      <div class="card-main">
+        <div class="card-ident">${coneNameHTML(o)} ${fmtType(o.object_type)}</div>
+        <div class="mini-stats">
+          <div class="stat"><div class="k">Separation</div><div class="v">${fmtSep(o.sep_arcsec)}</div></div>
+          <div class="stat"><div class="k">Redshift</div><div class="v">${fmtZ(o.redshift)}</div></div>
+          <div class="stat"><div class="k">Detections</div><div class="v">${o.n_detections}</div></div>
+          <div class="stat"><div class="k">Discovered</div><div class="v">${o.discovery_date}</div></div>
+        </div>
+        <div class="kv"><span class="k">host</span><span class="v">${o.host || EM_DASH}</span></div>
+        ${o.tags.length ? `<div style="display:flex;gap:5px;flex-wrap:wrap">${coneTagsHTML(o.tags)}</div>` : ""}
+        <div class="card-foot">
+          <span class="src-pills">${coneSourcesHTML(o.sources)}</span>
+        </div>
+      </div>
+    </article>`;
+
+  const grid = document.getElementById("res-grid");
+  const draw = () => { grid.innerHTML = CONE_RESULTS.map(cardHTML).join(""); };
+  draw();
+  onThemeChange(draw);   /* sparklines are theme-coloured, so redraw them */
+
+  document.querySelectorAll("#sort-seg button").forEach((b) => {
+    b.onclick = () => document.querySelectorAll("#sort-seg button")
+      .forEach((x) => x.classList.toggle("active", x === b));
+  });
+</script>
+</body>
+</html>

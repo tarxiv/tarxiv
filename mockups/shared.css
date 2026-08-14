@@ -357,3 +357,88 @@ details.accordion .accordion-body { padding: 0 16px 16px; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ==========================================================================
+   Cone search — shared by cone-1..4
+   ========================================================================== */
+
+/* ------------------------------------------------------- compressed bar */
+
+.cone-bar { padding: 12px 16px 13px; }
+
+.cone-bar-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.cone-bar-top .spacer { flex: 1; }
+.cone-bar-title {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--ink);
+}
+.cone-bar-title svg { color: var(--ink-3); }
+
+.cone-bar-fields { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.cone-bar-fields .spacer { flex: 1; }
+
+.cone-field { display: flex; flex-direction: column; gap: 3px; position: relative; }
+.cone-field .lab {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.cone-field input {
+  font: inherit; font-size: 13px; font-weight: 500;
+  height: 34px; padding: 0 10px;
+  color: var(--ink); background: var(--card);
+  border: 1px solid var(--border-strong); border-radius: 9px;
+  outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cone-field input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.cone-field.ra input { width: 168px; }
+.cone-field.dec input { width: 168px; }
+.cone-field.rad input { width: 92px; padding-right: 22px; }
+.cone-field .unit {
+  position: absolute; right: 9px; bottom: 8px;
+  font-style: normal; font-size: 12px; color: var(--ink-3); pointer-events: none;
+}
+.cone-hint { align-self: center; }
+
+.cone-summary { font-size: 13px; color: var(--ink-2); padding: 2px 2px 0; }
+.cone-summary b { color: var(--ink); font-weight: 700; }
+
+/* --------------------------------------------------------- result pieces */
+
+.spark { display: block; }
+
+.band-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px; font-weight: 600; color: var(--ink-2);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+.band-chip i { width: 7px; height: 7px; border-radius: 2px; display: block; }
+.band-chips { display: flex; gap: 7px; }
+
+.obj-name {
+  font-size: 14.5px; font-weight: 700; letter-spacing: -0.01em; color: var(--ink);
+}
+.obj-name:hover { color: var(--primary-ink); }
+.alias { font-size: 11px; color: var(--ink-3); margin-left: 7px; }
+
+.type-chip { font-size: 11px; padding: 2px 8px; }
+.tag-chip { font-size: 11px; padding: 2px 8px; border-style: solid; border-width: 1px; }
+
+.src-pill {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.03em;
+  color: var(--ink-3); background: var(--card-2);
+  border-radius: 4px; padding: 1px 5px;
+}
+.src-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+
+.sep-val {
+  font-size: 13px; font-weight: 700; color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.sep-lab { font-size: 10px; font-weight: 600; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--ink-3); }
+
+/* inline k/v pairs used across the row and card layouts */
+.kv { display: flex; align-items: baseline; gap: 5px; font-size: 12px; white-space: nowrap; }
+.kv .k { color: var(--ink-3); }
+.kv .v { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.kv-row { display: flex; gap: 14px; flex-wrap: wrap; }

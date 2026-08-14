@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TarXiv cone mockup 1 — Compact rows</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<script>
+  try { document.documentElement.dataset.theme = localStorage.getItem("tarxiv-mock-theme") || "light"; } catch (e) {}
+</script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+<style>
+  .container { max-width: 1380px; margin: 0 auto; padding: 18px 22px 40px; }
+
+  .page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .page-head h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+  .page-head .spacer { flex: 1; }
+
+  .bar-wrap { margin-bottom: 10px; }
+  .sum-line { margin: 0 0 14px 2px; }
+
+  .sky-card { margin-bottom: 14px; }
+  .sky-body { height: 320px; padding: 0; border-radius: 0 0 14px 14px; overflow: hidden; }
+
+  /* the row itself: thumbnail | identity + facts | separation */
+  .rows { padding: 0; }
+  .res-row {
+    display: grid;
+    grid-template-columns: 148px minmax(0, 1fr) auto;
+    gap: 16px; align-items: center;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .res-row:last-child { border-bottom: none; }
+  .res-row:hover { background: var(--card-2); }
+  .res-row.hi { background: var(--primary-soft); }
+
+  .thumb { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+
+  .ident { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 5px; }
+  .facts-line { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; }
+  .tag-line { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+
+  .sep-cell { text-align: right; display: flex; flex-direction: column; gap: 1px; }
+
+  .rows-foot {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 16px; border-top: 1px solid var(--border);
+    font-size: 12.5px; color: var(--ink-3);
+  }
+  .rows-foot .spacer { flex: 1; }
+
+  @media (max-width: 900px) {
+    .res-row { grid-template-columns: 110px minmax(0, 1fr); }
+    .sep-cell { grid-column: 2; flex-direction: row; gap: 6px; align-items: baseline; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar" id="topbar"></header>
+
+<div class="container">
+
+  <div class="page-head">
+    <h1>Cone search</h1>
+    <div class="spacer"></div>
+    <button class="btn btn-outline btn-sm">Export CSV</button>
+  </div>
+
+  <div class="bar-wrap" id="cone-bar"></div>
+  <p class="cone-summary sum-line" id="cone-summary"></p>
+
+  <section class="card sky-card">
+    <div class="card-head"><h2 id="sky-title"></h2><div class="spacer"></div>
+      <span class="faint small">hover a result to highlight it</span></div>
+    <div class="sky-body" id="sky"></div>
+  </section>
+
+  <section class="card rows">
+    <div class="card-head"><h2 id="res-title"></h2><div class="spacer"></div>
+      <div class="seg" id="sort-seg">
+        <button class="active" data-k="sep">Separation</button>
+        <button data-k="peak">Brightness</button>
+        <button data-k="date">Recency</button>
+      </div>
+    </div>
+    <div id="res-list"></div>
+    <div class="rows-foot">
+      <span>Showing <b>1&ndash;20</b> of 24</span>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost btn-sm">Previous</button>
+      <button class="btn btn-outline btn-sm">Next</button>
+    </div>
+  </section>
+</div>
+
+<script src="shared.js"></script>
+<script>
+  document.getElementById("topbar").innerHTML = topbarHTML("cone");
+  document.getElementById("sky-title").innerHTML = ICONS.globe + " Sky view";
+  document.getElementById("res-title").innerHTML = ICONS.curve + " Results";
+
+  mountConeSearchBar(document.getElementById("cone-bar"));
+  document.getElementById("cone-summary").innerHTML = coneSummaryHTML(CONE_RESULTS);
+  mountConeAladin(document.getElementById("sky"));
+
+  const rowHTML = (o, i) => `
+    <div class="res-row" data-i="${i}">
+      <div class="thumb">
+        ${sparklineSVG(o.phot)}
+        <div class="band-chips">${bandChipsHTML(o.phot)}</div>
+      </div>
+      <div>
+        <div class="ident">${coneNameHTML(o)} ${fmtType(o.object_type)}</div>
+        <div class="facts-line">
+          <span class="kv"><span class="k">z</span><span class="v">${fmtZ(o.redshift)}</span></span>
+          <span class="kv"><span class="k">peak</span><span class="v">${fmtMag(o.peak_mag)} ${o.peak_filter}</span></span>
+          <span class="kv"><span class="k">dets</span><span class="v">${o.n_detections}</span></span>
+          <span class="kv"><span class="k">host</span><span class="v">${o.host || EM_DASH}</span></span>
+          <span class="kv"><span class="k">found</span><span class="v">${o.discovery_date}</span></span>
+          <span class="src-pills">${coneSourcesHTML(o.sources)}</span>
+        </div>
+        ${o.tags.length ? `<div class="tag-line">${coneTagsHTML(o.tags)}</div>` : ""}
+      </div>
+      <div class="sep-cell">
+        <span class="sep-val">${fmtSep(o.sep_arcsec)}</span>
+        <span class="sep-lab">separation</span>
+      </div>
+    </div>`;
+
+  const list = document.getElementById("res-list");
+  const draw = () => { list.innerHTML = CONE_RESULTS.slice(0, 20).map(rowHTML).join(""); };
+  draw();
+  onThemeChange(draw);   /* sparklines are theme-coloured, so redraw them */
+
+  /* row hover <-> sky marker, mirroring the behaviour the real page already has */
+  list.addEventListener("mouseover", (e) => {
+    const row = e.target.closest(".res-row");
+    if (row) row.classList.add("hi");
+  });
+  list.addEventListener("mouseout", (e) => {
+    const row = e.target.closest(".res-row");
+    if (row) row.classList.remove("hi");
+  });
+
+  document.querySelectorAll("#sort-seg button").forEach((b) => {
+    b.onclick = () => document.querySelectorAll("#sort-seg button")
+      .forEach((x) => x.classList.toggle("active", x === b));
+  });
+</script>
+</body>
+</html>
