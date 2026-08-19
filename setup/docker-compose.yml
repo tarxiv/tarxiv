@@ -219,6 +219,7 @@ services:
       - ../docs:/app/docs:Z
       - ../tarxiv:/app/tarxiv:Z
       - ../aux/config.yml:/app/aux/config.yml:Z
+      - ../aux/citations:/app/aux/citations:Z
       - ../examples:/app/examples:Z
       - ../scripts:/app/scripts:Z
       - ${TARXIV_HOST_LOG_DIR:-.data/logs}:/data/tarxiv/logs:rw,z
@@ -264,6 +265,7 @@ services:
       - ../bin:/app/bin:Z
       - ../tarxiv:/app/tarxiv:Z
       - ../aux/config.yml:/app/aux/config.yml:Z
+      - ../aux/citations:/app/aux/citations:Z
       - ../examples:/app/examples:Z
       - ../scripts:/app/scripts:Z
       - ${TARXIV_HOST_LOG_DIR:-.data/logs}:/data/tarxiv/logs:rw,z
