@@ -69,14 +69,15 @@ def test_get_object_meta_success(mock_api):
     assert response.json == {"foo": "bar"}
 
 
-def test_get_object_meta_bad_token(mock_api):
-    # No valid token -> the auth check rejects the request before any DB call.
+def test_get_object_meta_allows_anonymous(mock_api):
+    # Metadata is public: no Authorization header at all must still return data.
     client = mock_api.app.test_client()
-    response = client.post(
-        "/get_object_meta/test_obj", json={}, headers={"Authorization": "WRONG"}
-    )
-    assert response.status_code == 401
-    assert response.json["error"] == "Invalid or missing token."
+    mock_api.txv_db.get.return_value = {"foo": "bar"}
+
+    response = client.post("/get_object_meta/test_obj", json={})
+
+    assert response.status_code == 200
+    assert response.json == {"foo": "bar"}
 
 
 def test_get_object_meta_missing_obj(mock_api):
@@ -552,7 +553,7 @@ def test_delete_object_tag_success(mock_api, auth_token):
     assert response.json["status"] == "deleted"
 
 
-def test_tns_alerts_success(mock_api, auth_token):
+def test_tns_alerts_success(mock_api):
     # The alerts page reads obj_name/discovery_date/object_type/ra_hms/dec_dms/...
     # so the endpoint must emit exactly those keys. We stub the data layer to
     # return one such row and assert it is serialized back.
@@ -570,18 +571,14 @@ def test_tns_alerts_success(mock_api, auth_token):
         }
     ]
 
-    response = client.post(
-        "/tns_alerts",
-        json={"n_rows": 25, "offset": 0},
-        headers={"Authorization": auth_token},
-    )
+    response = client.post("/tns_alerts", json={"n_rows": 25, "offset": 0})
 
     assert response.status_code == 200
     assert response.json[0]["obj_name"] == "2018mqw"
     assert response.json[0]["ra_hms"] == "12:38:29.211744"
 
 
-def test_tns_alerts_query_reads_source_keyed_schema(mock_api, auth_token):
+def test_tns_alerts_query_reads_source_keyed_schema(mock_api):
     """Alerts query must read TNS fields from the source-keyed schema.
 
     Regression: under the source-keyed schema the TNS fields live under
@@ -592,11 +589,7 @@ def test_tns_alerts_query_reads_source_keyed_schema(mock_api, auth_token):
     client = mock_api.app.test_client()
     mock_api.txv_db.query.return_value = []
 
-    response = client.post(
-        "/tns_alerts",
-        json={"n_rows": 25, "offset": 0},
-        headers={"Authorization": auth_token},
-    )
+    response = client.post("/tns_alerts", json={"n_rows": 25, "offset": 0})
 
     assert response.status_code == 200
     statement = mock_api.txv_db.query.call_args.args[0]
@@ -606,25 +599,37 @@ def test_tns_alerts_query_reads_source_keyed_schema(mock_api, auth_token):
     assert "meta.tns." not in statement
 
 
-def test_tns_alerts_requires_token(mock_api):
+def test_tns_alerts_allows_anonymous(mock_api):
+    # Alerts are public: no Authorization header at all must still list them.
     client = mock_api.app.test_client()
-    response = client.post(
-        "/tns_alerts",
-        json={"n_rows": 25, "offset": 0},
-        headers={"Authorization": "WRONG"},
-    )
-    assert response.status_code == 401
+    mock_api.txv_db.query.return_value = []
+
+    response = client.post("/tns_alerts", json={"n_rows": 25, "offset": 0})
+
+    assert response.status_code == 200
 
 
-def test_tns_alerts_rejects_non_integer_paging(mock_api, auth_token):
+def test_tns_alerts_rejects_non_integer_paging(mock_api):
+    # n_rows/offset are interpolated straight into the query string, so this
+    # check is the whole guard against injection now the route is public.
     client = mock_api.app.test_client()
-    response = client.post(
-        "/tns_alerts",
-        json={"n_rows": "lots", "offset": 0},
-        headers={"Authorization": auth_token},
-    )
-    assert response.status_code == 500
-    assert response.json["type"] == "server"
+
+    response = client.post("/tns_alerts", json={"n_rows": "lots", "offset": 0})
+
+    assert response.status_code == 400
+    assert response.json["type"] == "validation"
+    mock_api.txv_db.query.assert_not_called()
+
+
+def test_search_objects_allows_anonymous(mock_api):
+    # Object search is public: no Authorization header must still return matches.
+    client = mock_api.app.test_client()
+    mock_api.txv_db.query.return_value = [{"object_id": "2018mqw"}]
+
+    response = client.post("/search_objects", json={"search": {}})
+
+    assert response.status_code == 200
+    assert response.json == ["2018mqw"]
 
 
 def test_cone_search_route_returns_results(mock_api):

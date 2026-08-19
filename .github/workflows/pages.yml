@@ -10,7 +10,7 @@ name: Deploy mockups to Pages
 
 on:
   push:
-    branches: [main, jl/ui-redesign]
+    branches: [main]
     paths:
       - "mockups/**"
       - ".github/workflows/pages.yml"

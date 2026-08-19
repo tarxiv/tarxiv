@@ -590,8 +590,6 @@ class API(TarxivModule):
                 "source_id": source_id,
             }
             try:
-                # Require a valid token (raises PermissionError -> 401 below).
-                self._require_authenticated_user_id(token)
                 # Find object info
                 tarxiv_id = self.txv_db.get_source_txv_id(source_id)
                 result = self.txv_db.get(tarxiv_id, scope="objects", collection="meta")
@@ -712,47 +710,15 @@ class API(TarxivModule):
                 "token": token,
                 "n_rows": request_json.get("n_rows"),
                 "offset": request_json.get("offset"),
-                "tag_ids": request_json.get("tag_ids", []),
             }
             try:
-                # Return error if bad token
-                validation = self.validate_token_request(token)
-                if not validation["is_valid"]:
-                    if validation["status"] == "expired":
-                        raise PermissionError("Session expired — please log in again.")
-                    else:
-                        raise PermissionError("Invalid or missing token.")
+                # No token required: alerts are public. The paging check below is
+                # the only guard on the values interpolated into the query, so it
+                # must stay ahead of it.
                 if not isinstance(request_json.get("n_rows"), int) or not isinstance(
                     request_json.get("offset"), int
                 ):
                     raise ValueError("n_rows/offset must be an integer")
-                if not isinstance(request_json.get("tag_ids", []), list):
-                    raise ValueError("tag_ids must be a list")
-
-                user_id = self._require_authenticated_user_id(token)
-                tag_ids = request_json.get("tag_ids", [])
-                tagged_object_ids: list[str] | None = None
-                if tag_ids:
-                    tagged_object_ids = self.user_db.list_tagged_object_ids_for_user(
-                        user_id, tag_ids
-                    )
-                    if not tagged_object_ids:
-                        result = []
-                        status_code = 200
-                        log["status"] = "Success"
-                        self.logger.info(log, extra=log)
-                        return server_response(result, status_code)
-
-                # object_filter = ""
-                # if tagged_object_ids is not None:
-                #     escaped_ids = [
-                #         object_id.replace("\\", "\\\\").replace('"', '\\"')
-                #         for object_id in tagged_object_ids
-                #     ]
-                #     object_list = ", ".join(
-                #         f'"{object_id}"' for object_id in escaped_ids
-                #     )
-                #     object_filter = f" AND META().id IN [{object_list}]"
 
                 # Per-source TNS fields now live under data_sources.tns; the
                 # object's canonical coordinates/provenance live at the top
@@ -775,10 +741,11 @@ class API(TarxivModule):
                 # Normal return
                 status_code = 200
                 log["status"] = "Success"
-            except PermissionError as e:
-                result = {"error": str(e), "type": "token"}
-                status_code = 401
-                log["status"] = "PermissionError"
+            except ValueError as e:
+                # Public endpoint: malformed paging is a client error, not a 500.
+                result = {"error": str(e), "type": "validation"}
+                status_code = 400
+                log["status"] = "ValueError"
             except LookupError as e:
                 result = {"error": str(e), "type": "lookup"}
                 status_code = 404
@@ -806,10 +773,6 @@ class API(TarxivModule):
                 "search": search,
             }
             try:
-                # Return error if bad token
-                validation = self.validate_token_request(token)
-                if not validation["is_valid"]:
-                    raise PermissionError("bad token")
                 # Build query
                 query_str = "SELECT object_id FROM tarxiv.tns.objects objWHERE 1=1 AND "
                 # Add restrictions from search fields, then append search params to query

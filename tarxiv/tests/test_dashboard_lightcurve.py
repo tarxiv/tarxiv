@@ -52,9 +52,6 @@ def lightcurve_module(monkeypatch):
 def _render_empty_layout(lightcurve_module, monkeypatch):
     """Render the page layout for the empty (no-object) state."""
     monkeypatch.setattr(lightcurve_module, "get_jwt_from_request", lambda *a, **k: None)
-    monkeypatch.setattr(
-        lightcurve_module, "get_authenticated_user", lambda *a, **k: None
-    )
 
     app = flask.Flask(__name__)
     app.config["TXV_LOGGER"] = MagicMock()

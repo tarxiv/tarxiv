@@ -27,7 +27,6 @@ from ...dto import (
     MetadataResponseModel,
 )
 from ...auth import (
-    get_authenticated_user,
     get_jwt_from_request,
     validate_token,
     TokenStatus,
@@ -52,10 +51,9 @@ def layout(id=None, **kwargs):
     logger = current_app.config["TXV_LOGGER"]
 
     token = get_jwt_from_request(request)
-    user = get_authenticated_user(jwt_token=token)
 
-    if id and user:
-        # User came via deep link and has a saved session
+    if id:
+        # Deep link to an object: searching is public, so no login needed.
         (
             results_top,
             metadata_card,
@@ -66,32 +64,6 @@ def layout(id=None, **kwargs):
             lc_store,
             aladin_store,
         ) = perform_search(id, token, logger)
-    elif id and not user:
-        validation = validate_token(token)
-
-        # Deep link but no token: show the search card pre-filled with the ID
-        # but warn the user that a token is missing.
-        results_top = build_empty_search_state(prefill=id)
-        metadata_card, citations_card, full_metadata = (
-            html.Div(),
-            html.Div(),
-            html.Div(),
-        )
-        status = "Authentication required"
-
-        if validation["status"] == TokenStatus.EXPIRED:
-            banner = create_message_banner(
-                "Your session has expired. Please log in again.", "warning"
-            )
-        elif validation["status"] == TokenStatus.INVALID and token:
-            banner = create_message_banner(
-                "Invalid authentication token. Please log in again.", "error"
-            )
-        else:
-            banner = create_message_banner("Please log in to view data.", "warning")
-
-        lc_store = None
-        aladin_store = None
     else:
         # Default empty search page
         results_top = build_empty_search_state()

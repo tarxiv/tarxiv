@@ -683,7 +683,6 @@ def build_openapi_spec() -> dict:
             "/get_object_meta/{obj_name}": {
                 "post": {
                     "summary": "Get object metadata",
-                    "security": bearer_auth,
                     "parameters": [
                         {
                             "name": "obj_name",
@@ -703,7 +702,6 @@ def build_openapi_spec() -> dict:
                                 }
                             },
                         },
-                        "401": {"description": "Unauthorized"},
                         "404": {"description": "Object not found"},
                     },
                 }
@@ -711,7 +709,6 @@ def build_openapi_spec() -> dict:
             "/get_object_lc/{obj_name}": {
                 "post": {
                     "summary": "Get object lightcurve",
-                    "security": bearer_auth,
                     "parameters": [
                         {
                             "name": "obj_name",
@@ -734,7 +731,6 @@ def build_openapi_spec() -> dict:
                                 }
                             },
                         },
-                        "401": {"description": "Unauthorized"},
                         "404": {"description": "Object not found"},
                     },
                 }
@@ -742,7 +738,6 @@ def build_openapi_spec() -> dict:
             "/tns_alerts": {
                 "post": {
                     "summary": "List recent TNS alerts",
-                    "security": bearer_auth,
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -752,13 +747,6 @@ def build_openapi_spec() -> dict:
                                     "properties": {
                                         "n_rows": {"type": "integer"},
                                         "offset": {"type": "integer"},
-                                        "tag_ids": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "string",
-                                                "format": "uuid",
-                                            },
-                                        },
                                     },
                                     "required": ["n_rows", "offset"],
                                 }
@@ -777,14 +765,13 @@ def build_openapi_spec() -> dict:
                                 }
                             },
                         },
-                        "401": {"description": "Unauthorized"},
+                        "400": {"description": "Invalid paging parameters"},
                     },
                 }
             },
             "/search_objects": {
                 "post": {
                     "summary": "Search objects by metadata conditions",
-                    "security": bearer_auth,
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -808,14 +795,12 @@ def build_openapi_spec() -> dict:
                                 }
                             },
                         },
-                        "401": {"description": "Unauthorized"},
                     },
                 }
             },
             "/cone_search": {
                 "post": {
                     "summary": "Cone search around sky coordinates",
-                    "security": bearer_auth,
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -846,7 +831,6 @@ def build_openapi_spec() -> dict:
                                 }
                             },
                         },
-                        "401": {"description": "Unauthorized"},
                     },
                 }
             },

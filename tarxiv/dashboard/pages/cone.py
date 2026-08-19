@@ -24,7 +24,7 @@ from pydantic import ValidationError
 from flask import current_app, request
 from werkzeug.exceptions import Unauthorized
 
-from ...auth import get_jwt_from_request, validate_token, TokenStatus
+from ...auth import get_jwt_from_request
 from ..components import (
     title_card,
     expressive_card,
@@ -180,13 +180,9 @@ def layout(ra=None, dec=None, radius=None, **kwargs):
     if coordinates:
         ra, dec, radius = coordinates
         token = get_jwt_from_request(request)
-        auth_banner = cone_auth_banner(token)
-        if auth_banner is not None:
-            banner = auth_banner
-        else:
-            results, status, banner, store_data = render_cone_search(
-                ra, dec, radius, token, logger
-            )
+        results, status, banner, store_data = render_cone_search(
+            ra, dec, radius, token, logger
+        )
     else:
         # Nothing usable in the URL: leave the inputs empty as before.
         ra, dec, radius = None, None, None
@@ -418,24 +414,6 @@ def parse_combined_coordinates(combined: str) -> tuple[float, float]:
     return parse_hms_dms_coordinates(ra_hms, dec_dms)
 
 
-def cone_auth_banner(token):
-    """Return a banner explaining why `token` cannot be used, or None if it can."""
-    validation = validate_token(token)
-
-    if validation["status"] == TokenStatus.EXPIRED:
-        return create_message_banner(
-            "Your session has expired. Please log in again.", "warning"
-        )
-    elif validation["status"] == TokenStatus.INVALID and token:
-        return create_message_banner(
-            "Invalid authentication token. Please log in again.", "error"
-        )
-    elif not token or validation["status"] != TokenStatus.VALID:
-        return create_message_banner("Please log in to perform the search.", "warning")
-
-    return None
-
-
 def render_cone_search(ra, dec, radius, token, logger):
     """Run a cone search and build everything the page needs to show it.
 
@@ -633,9 +611,6 @@ def run_cone_search(search, settings):
     ra, dec, radius = coordinates
 
     token = get_jwt_from_request(request)
-    auth_banner = cone_auth_banner(token)
-    if auth_banner is not None:
-        return html.Div(), "", auth_banner, no_update, no_update
 
     if not isinstance(settings, dict):
         settings = {}
