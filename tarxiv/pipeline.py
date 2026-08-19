@@ -70,9 +70,9 @@ class TNSPipeline(TarxivModule):
         self.producer = Producer(conf)
         self.consumer = None
         # Forced phot utils
-        self.phot_util = ForcedPhotPipelineUtil(script_name="forced_phot_submit",
-                                                reporting_mode=reporting_mode,
-                                                debug=debug)
+        self.phot_util = ForcedPhotPipelineUtil(
+            script_name="forced_phot_submit", reporting_mode=reporting_mode, debug=debug
+        )
         self.forced_phot_services = ["atlas"]
 
         # Signal handling

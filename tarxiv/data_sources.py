@@ -1012,7 +1012,6 @@ class AlerceMod(TarxivModule):
                 meta = None
                 raise SurveyMetaMissingError
 
-
         except SurveyMetaMissingError:
             status["status"] = "no match"
 
