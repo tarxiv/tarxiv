@@ -156,3 +156,6 @@ aux/my_cred_file.json
 # vscode settings
 .vscode/
 *.code-workspace
+
+# Agents
+.claude
