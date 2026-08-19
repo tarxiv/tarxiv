@@ -1,22 +1,32 @@
 import dash
-from dash import html, callback, no_update, dcc, clientside_callback
+from dash import (
+    ClientsideFunction,
+    html,
+    callback,
+    no_update,
+    dcc,
+    clientside_callback,
+)
 from dash.dependencies import Input, Output, State
-from dash_extensions import Keyboard
 from flask import current_app, request
 from werkzeug.exceptions import Unauthorized
 import dash_mantine_components as dmc
+from dash_iconify import DashIconify
 from ..components import (
-    title_card,
     expressive_card,
     format_object_metadata,
     create_message_banner,
+    build_empty_search_state,
+    build_photometry_table,
+    build_tag_chips,
+    scheme_from_template,
+    tag_badge,
 )
 from ...dto import (
     LightcurveResponseModel,
     MetadataResponseModel,
 )
 from ...auth import (
-    get_authenticated_user,
     get_jwt_from_request,
     validate_token,
     TokenStatus,
@@ -41,12 +51,12 @@ def layout(id=None, **kwargs):
     logger = current_app.config["TXV_LOGGER"]
 
     token = get_jwt_from_request(request)
-    user = get_authenticated_user(jwt_token=token)
 
-    if id and user:
-        # User came via deep link and has a saved session
+    if id:
+        # Deep link to an object: searching is public, so no login needed.
         (
             results_top,
+            metadata_card,
             citations_card,
             full_metadata,
             status,
@@ -54,34 +64,10 @@ def layout(id=None, **kwargs):
             lc_store,
             aladin_store,
         ) = perform_search(id, token, logger)
-    elif id and not user:
-        validation = validate_token(token)
-
-        # Deep link but no token: Show the search bar pre-filled with ID
-        # but warn the user that a token is missing.
-        results_top, citations_card, full_metadata = (
-            html.Div(),
-            html.Div(),
-            html.Div(),
-        )
-        status = "Authentication required"
-
-        if validation["status"] == TokenStatus.EXPIRED:
-            banner = create_message_banner(
-                "Your session has expired. Please log in again.", "warning"
-            )
-        elif validation["status"] == TokenStatus.INVALID and token:
-            banner = create_message_banner(
-                "Invalid authentication token. Please log in again.", "error"
-            )
-        else:
-            banner = create_message_banner("Please log in to view data.", "warning")
-
-        lc_store = None
-        aladin_store = None
     else:
         # Default empty search page
-        results_top, citations_card, full_metadata, status, banner = (
+        results_top = build_empty_search_state()
+        metadata_card, citations_card, full_metadata, status, banner = (
             html.Div(),
             html.Div(),
             html.Div(),
@@ -104,83 +90,44 @@ def layout(id=None, **kwargs):
                 storage_type="memory",
                 data=aladin_store,
             ),
-            title_card(
-                title_text="TarXiv Database Explorer",
-                subtitle_text="Explore astronomical transients and their lightcurves",
+            dmc.Box(id="message-banner", children=[banner]),
+            dmc.Text(
+                id="search-status",
+                children=status,
+                size="xs",
+                c="dimmed",
+                fs="italic",
             ),
-            expressive_card(
-                title="Lightcurve Search",
-                children=[
-                    dmc.Stack([
-                        dmc.Text(
-                            "Enter a TNS object name to view its metadata and lightcurve",
-                        ),
-                        dmc.Group(
-                            [
-                                Keyboard(
-                                    children=[
-                                        dmc.TextInput(
-                                            id="object-id-input",
-                                            placeholder="Enter object ID (e.g., 2024abc)",
-                                            value=id,  # Pre-populate with URL parameter
-                                            style={
-                                                "width": "400px",
-                                                "marginRight": "10px",
-                                            },
-                                        ),
-                                    ],
-                                    captureKeys=["Enter"],
-                                    id="search-id-keyboard",
-                                    n_keydowns=0,
-                                ),
-                                dmc.Button(
-                                    "Search",
-                                    id="search-id-button",
-                                    n_clicks=0,
-                                ),
-                            ],
-                        ),
-                    ]),
-                ],
-            ),
-            dmc.Box(
-                id="message-banner",
-                children=[banner],
-                style={"marginBottom": "20px"},
-            ),
+            # Page head, key facts, lightcurve + sky view.
             dmc.Stack(
-                [
-                    dmc.Text(
-                        id="search-status",
-                        style={
-                            "padding": "10px",
-                            "fontStyle": "italic",
-                            "fontSize": "14px",
-                        },
-                        children=status,
-                    ),
-                    dmc.Stack(
-                        id="results-container",
-                        children=[results_top],
-                    ),
-                    # Citations sits half-half with the object tagging panel. The
-                    # tagging container lives here in the base layout (not inside
-                    # the search results) so its callbacks always have a target,
-                    # even on the empty page.
-                    dmc.Grid(
-                        [
-                            dmc.GridCol(citations_card, span=6),
-                            dmc.GridCol(
-                                html.Div(id="object-tagging-container"), span=6
-                            ),
-                        ],
-                        gutter="md",
-                    ),
-                    # Full metadata JSON dump pinned to the very bottom.
-                    full_metadata,
-                ],
+                id="results-container",
+                children=[results_top],
+                gap="md",
             ),
+            # Per-source metadata pairs with the tagging panel and citations.
+            # The tagging container lives here in the base layout (not inside
+            # the search results) so its callbacks always have a target, even
+            # on the empty page.
+            dmc.Grid(
+                [
+                    dmc.GridCol(metadata_card, span={"base": 12, "lg": 7}),
+                    dmc.GridCol(
+                        dmc.Stack(
+                            [
+                                html.Div(id="object-tagging-container"),
+                                citations_card,
+                            ],
+                            gap="md",
+                        ),
+                        span={"base": 12, "lg": 5},
+                    ),
+                ],
+                gutter="md",
+            ),
+            # Full metadata JSON dump pinned to the very bottom.
+            full_metadata,
         ],
+        gap="md",
     )
 
 
@@ -202,55 +149,54 @@ def search_navigation(n_clicks, n_keydowns, object_id):
     return f"/lightcurve/{object_id}"
 
 
+# The Aladin bootstrap lives in assets/lightcurve_aladin.js under an explicit
+# clientside namespace, matching assets/cone_aladin.js. Inline callback strings
+# are unreliable under Dash 4.
 clientside_callback(
-    """
-    function(storeData) {
-    if (!storeData || storeData.ra_deg === null || storeData.dec_deg === null) {
-        return "No TNS coordinates available for Aladin";
-    }
-
-    const ra = storeData.ra_deg;
-    const dec = storeData.dec_deg;
-
-    // log the coordinates for debugging
-    console.log("Initializing Aladin with coordinates:", ra, dec);
-
-    // The ID Plotly generates for pattern-matching is complex,
-    // so we target the container expressive_card or a stable parent.
-    const graphContainer = document.body;
-
-    const observer = new MutationObserver((mutations, obs) => {
-        // Look for the Plotly internal class that signifies rendering is done
-        const graphExists = document.querySelector('.js-plotly-plot');
-
-        if (graphExists) {
-            obs.disconnect(); // Stop watching
-
-            window.A.init.then(() => {
-                const container = document.getElementById('aladin-lite-div');
-                if (container) {
-                    container.innerHTML = '';
-                    window.A.aladin('#aladin-lite-div', {
-                        survey: 'P/PanSTARRS/DR1/color-z-zg-g',
-                        target: ra + ' ' + dec,
-                        fov: 0.025,
-                    });
-                }
-            });
-        }
-    });
-
-    observer.observe(graphContainer, {
-        childList: true,
-        subtree: true
-    });
-
-    return "Observer active";
-}
-    """,
+    ClientsideFunction(namespace="lightcurve_aladin", function_name="initialize"),
     Output("aladin-status-dummy", "children"),
     Input("lightcurve-aladin-store", "data"),
 )
+
+
+# "Tag" in the page head jumps to the tag card and focuses its select, so the
+# card stays the single place tags are managed. See assets/object_page.js.
+clientside_callback(
+    ClientsideFunction(namespace="object_page", function_name="scrollToTags"),
+    Output("tag-scroll-dummy", "children"),
+    Input("jump-to-tags", "n_clicks"),
+    prevent_initial_call=True,
+)
+
+
+@callback(
+    [
+        Output("lc-plot-wrap", "style"),
+        Output("lc-table-wrap", "style"),
+        Output("lc-table-wrap", "children"),
+    ],
+    [
+        Input("lc-view-toggle", "value"),
+        Input("active-settings-store", "data"),
+    ],
+    State("lightcurve-store", "data"),
+    prevent_initial_call=True,
+)
+def toggle_lightcurve_view(view, settings, store):
+    """Swap the lightcurve card between the plot and the photometry table.
+
+    Also re-renders the table on a theme change so the band swatches follow the
+    colour scheme.
+    """
+    hidden = {"display": "none"}
+    shown = {"display": "block"}
+
+    if view != "Table":
+        return shown, hidden, no_update
+
+    scheme = scheme_from_template((settings or {}).get("theme"))
+    table = build_photometry_table((store or {}).get("data"), scheme)
+    return hidden, shown, table
 
 
 # Map source-keyed metadata source names to citation .bib file stems.
@@ -407,70 +353,72 @@ def render_tagging_panel(object_id, visible_tags, assigned_tags):
         if tag["id"] not in assigned_tag_ids
     ]
 
-    assigned_blocks = (
-        [
-            dmc.Paper(
-                withBorder=True,
-                p="sm",
-                radius="md",
-                children=dmc.Group(
-                    [
-                        dmc.Group(
-                            [
-                                dmc.Badge(
-                                    item["tag"]["name"],
-                                    color=(item["tag"].get("color") or "gray").lstrip(
-                                        "#"
-                                    ),
-                                    variant="light",
-                                ),
-                                dmc.Text(
-                                    item["owner_type"].capitalize(),
-                                    size="sm",
-                                    c="dimmed",
-                                ),
-                            ],
-                            gap="xs",
-                        ),
-                        dmc.Button(
-                            "Remove",
-                            id={
-                                "type": "remove-object-tag",
-                                "assignment_id": item["id"],
-                            },
-                            n_clicks=0,
-                            variant="subtle",
-                            color="red",
-                        ),
-                    ],
-                    justify="space-between",
-                ),
+    # Assigned tags read as a compact wrapping row of chips above the assign
+    # controls, rather than a stack of full-width rows.
+    if assigned_tags:
+        assigned_chips = [
+            dmc.Group(
+                [
+                    tag_badge(item["tag"], size="sm"),
+                    dmc.ActionIcon(
+                        DashIconify(icon="mdi:close", width=12),
+                        id={
+                            "type": "remove-object-tag",
+                            "assignment_id": item["id"],
+                        },
+                        n_clicks=0,
+                        variant="subtle",
+                        color="gray",
+                        size="xs",
+                        # dmc.ActionIcon 2.6.0 has no `title` prop.
+                        **{
+                            "aria-label": (
+                                f"Remove {item['tag'].get('name', 'tag')} "
+                                f"({item['owner_type']})"
+                            )
+                        },
+                    ),
+                ],
+                gap=2,
+                wrap="nowrap",
+                align="center",
             )
             for item in assigned_tags
         ]
-        if assigned_tags
-        else [dmc.Text("No tags assigned to this object.", c="dimmed")]
-    )
+    else:
+        assigned_chips = [
+            dmc.Text("No tags assigned to this object.", size="xs", c="dimmed")
+        ]
 
     return expressive_card(
-        title=f"Object Tags: {object_id}",
+        id="object-tag-card",
+        title="Tags",
+        icon="mdi:tag-outline",
         children=[
-            dmc.Text(
-                "Assign any tag available to you, including personal tags and team tags from your memberships.",
-                c="dimmed",
-            ),
-            dmc.Group([
-                dmc.Select(
-                    id="assign-object-tag-select",
-                    placeholder="Choose a tag",
-                    data=available_options,
-                    value=None,
-                    style={"minWidth": "320px"},
-                ),
-                dmc.Button("Assign tag", id="assign-object-tag-button", n_clicks=0),
-            ]),
+            dmc.Group(id="object-tagging-list", children=assigned_chips, gap="xs"),
             html.Div(id="object-tagging-banner"),
-            dmc.Stack(id="object-tagging-list", children=assigned_blocks),
+            dmc.Group(
+                [
+                    dmc.Select(
+                        id="assign-object-tag-select",
+                        placeholder="Choose a tag",
+                        data=available_options,
+                        value=None,
+                        size="xs",
+                        searchable=True,
+                        style={"flex": 1, "minWidth": 0},
+                    ),
+                    dmc.Button(
+                        "Assign",
+                        id="assign-object-tag-button",
+                        n_clicks=0,
+                        size="xs",
+                        variant="default",
+                    ),
+                ],
+                gap="xs",
+                wrap="nowrap",
+            ),
         ],
     )
 
@@ -594,13 +542,20 @@ def perform_search(object_id, token, logger):
     """The core logic shared by both Button and URL triggers.
 
     Returns a tuple of
-    ``(results_top, citations_card, full_metadata, status, banner, lc_store,
-    aladin_store)``. The three render slots correspond to the pieces produced by
-    ``format_object_metadata``; ``layout`` drops them into the page so the
-    object-tagging container can stay in the always-present base layout.
+    ``(results_top, metadata_card, citations_card, full_metadata, status,
+    banner, lc_store, aladin_store)``. The four render slots correspond to the
+    pieces produced by ``format_object_metadata``; ``layout`` drops them into
+    the page so the object-tagging container can stay in the always-present
+    base layout.
     """
-    # Render slots used by every non-success early return (no object to show).
-    empty_render = (html.Div(), html.Div(), html.Div())
+    # Render slots used by every non-success early return: keep the search card
+    # on screen (pre-filled) so the user can correct the ID and retry.
+    empty_render = (
+        build_empty_search_state(prefill=object_id),
+        html.Div(),
+        html.Div(),
+        html.Div(),
+    )
 
     status_msg = f"Searching for object: {object_id}"
     logger.info({"search_type": "id", "object_id": object_id})
@@ -654,12 +609,21 @@ def perform_search(object_id, token, logger):
         list((meta.get("data_sources") or {}).keys()), token, logger
     )
 
+    # Assigned tags, so the head chips are correct on first paint rather than
+    # popping in once the tagging callback lands.
+    assigned_tags = []
+    tags_response = fetch_object_tags(object_id, token, logger)
+    if tags_response is not None and tags_response.status_code == 200:
+        assigned_tags = tags_response.json()
+
     # Display metadata
-    results_top, citations_card, full_metadata = format_object_metadata(
-        object_id, meta, citation_str, logger
-    )
-    success_banner = create_message_banner(
-        f"Successfully loaded object: {object_id}", "success"
+    results_top, metadata_card, citations_card, full_metadata = format_object_metadata(
+        object_id,
+        meta,
+        citation_str,
+        lc_data=lc_data,
+        assigned_tags=assigned_tags,
+        logger=logger,
     )
     logger.info({"info": f"Object {object_id} loaded successfully."})
 
@@ -675,10 +639,13 @@ def perform_search(object_id, token, logger):
 
     return (
         results_top,
+        metadata_card,
         citations_card,
         full_metadata,
-        status_msg,
-        success_banner,
+        # A successful load needs no announcement -- the page itself is the
+        # feedback. Both the status line and the banner slot stay empty.
+        "",
+        html.Div(),
         lc_store,
         aladin_store,
     )
@@ -733,6 +700,9 @@ def load_object_tagging_panel(lightcurve_store):
         Output("object-tagging-container", "children", allow_duplicate=True),
         Output("lightcurve-object-tags-store", "data", allow_duplicate=True),
         Output("assign-object-tag-select", "value"),
+        # Safe to target here (unlike in load_object_tagging_panel): assigning
+        # requires a loaded object, so the page head always exists.
+        Output("object-tag-chips", "children", allow_duplicate=True),
     ],
     Input("assign-object-tag-button", "n_clicks"),
     [
@@ -744,32 +714,39 @@ def load_object_tagging_panel(lightcurve_store):
 )
 def handle_assign_object_tag(n_clicks, tag_id, lightcurve_store, visible_tags):
     if not n_clicks or not lightcurve_store or not tag_id:
-        return no_update, no_update, no_update
+        return no_update, no_update, no_update, no_update
 
     object_id = lightcurve_store.get("id")
     logger = current_app.config["TXV_LOGGER"]
     token = get_jwt_from_request(request)
     response = assign_object_tag(object_id, tag_id, token, logger)
-    if response.status_code != 201:
-        assigned_tags = fetch_object_tags(object_id, token, logger)
-        current_assignments = (
-            assigned_tags.json() if assigned_tags.status_code == 200 else []
-        )
-        panel = render_tagging_panel(object_id, visible_tags or [], current_assignments)
-        return panel, current_assignments, no_update
 
     updated_response = fetch_object_tags(object_id, token, logger)
     updated_assignments = (
         updated_response.json() if updated_response.status_code == 200 else []
     )
     panel = render_tagging_panel(object_id, visible_tags or [], updated_assignments)
-    return panel, updated_assignments, None
+    chips = build_tag_chips(updated_assignments)
+
+    if response.status_code != 201:
+        # Surface the failure rather than silently re-rendering an unchanged
+        # panel, which used to look like the click did nothing.
+        logger.warning({
+            "warning": (
+                f"Failed to assign tag {tag_id} to {object_id}: "
+                f"status {response.status_code}"
+            )
+        })
+        return panel, updated_assignments, no_update, chips
+
+    return panel, updated_assignments, None, chips
 
 
 @callback(
     [
         Output("object-tagging-container", "children", allow_duplicate=True),
         Output("lightcurve-object-tags-store", "data", allow_duplicate=True),
+        Output("object-tag-chips", "children", allow_duplicate=True),
     ],
     Input({"type": "remove-object-tag", "assignment_id": dash.ALL}, "n_clicks"),
     [
@@ -781,11 +758,11 @@ def handle_assign_object_tag(n_clicks, tag_id, lightcurve_store, visible_tags):
 )
 def handle_remove_object_tag(n_clicks, button_ids, lightcurve_store, visible_tags):
     if not lightcurve_store or not any(n_clicks or []):
-        return no_update, no_update
+        return no_update, no_update, no_update
 
     triggered = dash.ctx.triggered_id
     if not triggered:
-        return no_update, no_update
+        return no_update, no_update, no_update
 
     object_id = lightcurve_store.get("id")
     assignment_id = triggered.get("assignment_id")
@@ -798,4 +775,4 @@ def handle_remove_object_tag(n_clicks, button_ids, lightcurve_store, visible_tag
         updated_response.json() if updated_response.status_code == 200 else []
     )
     panel = render_tagging_panel(object_id, visible_tags or [], updated_assignments)
-    return panel, updated_assignments
+    return panel, updated_assignments, build_tag_chips(updated_assignments)

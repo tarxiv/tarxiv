@@ -46,6 +46,14 @@ class TarxivDashboard(TarxivModule):
                 "https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js",
                 # "//aladin.u-strasbg.fr/AladinLite/api/v3/3.2.0/aladin.js",
             ],
+            external_stylesheets=[
+                # UI + monospace faces referenced by the Mantine theme
+                # (theme_manager.FONT_STACK / MONO_STACK). Both fall back to
+                # system fonts if the CDN is unreachable.
+                "https://fonts.googleapis.com/css2"
+                "?family=Inter:wght@400;500;600;700"
+                "&family=JetBrains+Mono:wght@400;600&display=swap",
+            ],
         )
 
         # Attach the class instances to the underlying Flask server.

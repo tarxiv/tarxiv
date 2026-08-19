@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TarXiv mockup 3 — Spacious</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<script>
+  try { document.documentElement.dataset.theme = localStorage.getItem("tarxiv-mock-theme") || "light"; } catch (e) {}
+</script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+<style>
+  .container { max-width: 1180px; margin: 0 auto; padding: 0 28px 80px; }
+
+  .hero {
+    padding: 64px 0 40px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+  .hero .eyebrow {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--primary-ink); margin-bottom: 10px;
+  }
+  .hero h1 { font-size: 44px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+  .hero .sub {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    margin-top: 16px; color: var(--ink-2); font-size: 15px;
+  }
+  .hero .sub .mono { font-size: 15px; }
+  .hero .facts-row {
+    display: flex; gap: 48px; flex-wrap: wrap; margin-top: 34px;
+  }
+  .hero .stat .v { font-size: 20px; }
+
+  .section { margin-bottom: 56px; }
+  .section-head { margin-bottom: 18px; }
+  .section-head .eyebrow {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 4px;
+  }
+  .section-head h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .section-head p { color: var(--ink-2); margin-top: 4px; max-width: 640px; }
+
+  #lc-body { height: 520px; padding: 12px; }
+  #lc-table-wrap { display: none; max-height: 520px; overflow: auto; padding: 0 12px 12px; }
+  #lc-card.show-table #lc-table-wrap { display: block; }
+  #lc-card.show-table #lc-body { display: none; }
+
+  .sky-grid {
+    display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px;
+    align-items: stretch;
+  }
+  #sky-body { height: 480px; padding: 0; }
+  .sky-side { display: flex; flex-direction: column; gap: 20px; }
+
+  .lower-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+
+  @media (max-width: 980px) {
+    .hero h1 { font-size: 34px; }
+    .sky-grid, .lower-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar" id="topbar"></header>
+
+<div class="container">
+
+  <section class="hero">
+    <div class="eyebrow">Transient · TXV-2023-051901</div>
+    <h1>SN 2023ixf</h1>
+    <div class="sub">
+      <span class="chip brand">SN II</span>
+      <span id="coords-slot"></span>
+      <span class="faint">J2000</span>
+    </div>
+    <div class="facts-row">
+      <div class="stat"><span class="k">Redshift</span><span class="v">0.000804</span></div>
+      <div class="stat"><span class="k">Host galaxy</span><span class="v">M101</span></div>
+      <div class="stat"><span class="k">Discovered</span><span class="v">2023-05-19</span></div>
+      <div class="stat"><span class="k">Peak magnitude</span><span class="v">10.9 <span class="unit">o</span></span></div>
+      <div class="stat"><span class="k">Distance</span><span class="v">6.85 <span class="unit">Mpc</span></span></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="eyebrow">Photometry</div>
+      <h2>Lightcurve</h2>
+      <p>237 detections from ZTF and ATLAS spanning 128 days, with pre-discovery
+         non-detection limits. Drag to zoom; double-click to reset.</p>
+    </div>
+    <div class="card" id="lc-card">
+      <div class="card-head">
+        <h2 id="lc-title-icon">ZTF g · r &nbsp;+&nbsp; ATLAS c · o</h2>
+        <div class="spacer"></div>
+        <div class="seg" id="lc-seg">
+          <button class="active" data-view="plot">Plot</button>
+          <button data-view="table">Table</button>
+        </div>
+      </div>
+      <div class="card-body" id="lc-body"><div id="lc-plot" class="plot-host"></div></div>
+      <div id="lc-table-wrap"></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="eyebrow">Sky context</div>
+      <h2>Field &amp; host association</h2>
+      <p>PanSTARRS DR1 colour imagery centred on the transient. Sherlock associates
+         this object with the nearby spiral M101 at 6.85 Mpc.</p>
+    </div>
+    <div class="sky-grid">
+      <div class="card">
+        <div class="card-body" id="sky-body"><div id="aladin-div" class="aladin-host" style="border-radius:13px"></div></div>
+      </div>
+      <div class="sky-side">
+        <div class="card">
+          <div class="card-head"><h2>Host association</h2></div>
+          <div class="card-body facts" id="sherlock-facts"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="eyebrow">Provenance</div>
+      <h2>Source metadata</h2>
+    </div>
+    <div class="card">
+      <div class="card-body" style="padding:10px 20px 20px">
+        <div id="meta-tabs" style="display:flex;flex-direction:column"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="eyebrow">Workspace</div>
+      <h2>Tags &amp; citations</h2>
+    </div>
+    <div class="lower-grid">
+      <div class="card">
+        <div class="card-head"><h2 id="tags-title-icon">Tags</h2></div>
+        <div class="card-body">
+          <div style="display:flex;flex-wrap:wrap;gap:8px" id="tags-list"></div>
+          <div id="tags-assign"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2 id="cite-title-icon">Citations</h2>
+          <div class="spacer"></div>
+          <button class="btn btn-outline btn-sm" onclick="copyText(CITATIONS_BIB, this)">Copy BibTeX</button>
+        </div>
+        <div class="card-body"><pre class="codeblock" style="max-height:260px" id="cite-block"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <details class="accordion">
+    <summary id="json-summary"></summary>
+    <div class="accordion-body"><pre class="codeblock" style="max-height:400px" id="json-block"></pre></div>
+  </details>
+
+</div>
+
+<script src="shared.js"></script>
+<script>
+  document.getElementById("topbar").innerHTML = topbarHTML("lightcurve");
+  document.getElementById("coords-slot").innerHTML = coordsCopyHTML();
+  document.getElementById("lc-title-icon").innerHTML = ICONS.curve + " ZTF g · r &nbsp;+&nbsp; ATLAS c · o";
+  document.getElementById("tags-title-icon").innerHTML = ICONS.tag + " Tags";
+  document.getElementById("cite-title-icon").innerHTML = ICONS.quote + " Citations";
+  document.getElementById("json-summary").innerHTML = ICONS.chev + " Full metadata (JSON)";
+  document.getElementById("cite-block").textContent = CITATIONS_BIB;
+  document.getElementById("json-block").textContent = fullJsonDump();
+  document.getElementById("tags-list").innerHTML = tagsHTML();
+  document.getElementById("tags-assign").innerHTML = tagAssignHTML();
+
+  /* Sherlock highlights beside the sky view */
+  const sh = SOURCES.find((s) => s.key === "sherlock").fields;
+  document.getElementById("sherlock-facts").innerHTML =
+    ["Association Type", "Catalogue Object ID", "Best Distance", "Separation (arcsec)", "Physical Separation (kpc)", "Classification Reliability"]
+      .map((k) => `<div class="fact"><span class="k">${k}</span><span class="v">${sh[k]}</span></div>`).join("");
+
+  mountLightcurve(document.getElementById("lc-plot"));
+  mountAladin(document.getElementById("aladin-div"));
+  mountMetaTabs(document.getElementById("meta-tabs"), "underline");
+
+  const lcCard = document.getElementById("lc-card");
+  document.querySelectorAll("#lc-seg button").forEach((b) => {
+    b.onclick = () => {
+      document.querySelectorAll("#lc-seg button").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+      const table = b.dataset.view === "table";
+      lcCard.classList.toggle("show-table", table);
+      if (table) document.getElementById("lc-table-wrap").innerHTML = photometryTableHTML();
+      else Plotly.Plots.resize(document.getElementById("lc-plot"));
+    };
+  });
+  onThemeChange(() => {
+    if (lcCard.classList.contains("show-table"))
+      document.getElementById("lc-table-wrap").innerHTML = photometryTableHTML();
+  });
+</script>
+</body>
+</html>

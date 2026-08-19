@@ -17,8 +17,13 @@ from ...auth import (
     validate_token,
 )
 from ..components.auth import avatar_fallback, avatar_image
-from ..components.cards import create_message_banner, expressive_card, title_card
-from ..styles import ORCID_BUTTON_STYLE
+from ..components.cards import (
+    create_message_banner,
+    expressive_card,
+    tag_badge,
+    title_card,
+)
+from ..styles import ORCID_BUTTON_STYLE, TAG_SWATCHES
 
 
 dash.register_page(
@@ -541,18 +546,9 @@ def render_tag_create_form(team_memberships):
             dmc.ColorInput(
                 id="new-tag-color",
                 label="Color",
-                value="#7c3aed",
+                value=TAG_SWATCHES[0],
                 format="hex",
-                swatches=[
-                    "#7c3aed",
-                    "#2563eb",
-                    "#059669",
-                    "#d97706",
-                    "#dc2626",
-                    "#db2777",
-                    "#0891b2",
-                    "#4b5563",
-                ],
+                swatches=TAG_SWATCHES,
             ),
             dmc.Select(
                 id="new-tag-owner",
@@ -960,13 +956,7 @@ def tag_section(title, tags):
                             [
                                 dmc.Group(
                                     [
-                                        dmc.Badge(
-                                            tag.get("name", "Unnamed"),
-                                            color=(tag.get("color") or "gray").lstrip(
-                                                "#"
-                                            ),
-                                            variant="light",
-                                        ),
+                                        tag_badge(tag),
                                         (
                                             dmc.Text(
                                                 tag.get("description"),

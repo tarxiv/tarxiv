@@ -897,9 +897,11 @@ class AlerceMod(TarxivModule):
 
         try:
             # Now get lsst
-            lsst_df = self.client.query_objects(ra=ra_deg, dec=dec_deg, radius=radius, survey="lsst")
+            lsst_df = self.client.query_objects(
+                ra=ra_deg, dec=dec_deg, radius=radius, survey="lsst"
+            )
             if "oid" in lsst_df.columns and not lsst_df["oid"].empty:
-                lsst_id = lsst_df["oid"].iat[0]
+                lsst_id = lsst_df["oid"].iloc[0]
                 meta["lsst_object_id"] = str(lsst_id)
 
                 # Get probabilities
@@ -1009,7 +1011,6 @@ class AlerceMod(TarxivModule):
             if not meta:
                 meta = None
                 raise SurveyMetaMissingError
-
 
         except SurveyMetaMissingError:
             status["status"] = "no match"

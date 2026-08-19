@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TarXiv cone mockup 4 — Data table</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<script>
+  try { document.documentElement.dataset.theme = localStorage.getItem("tarxiv-mock-theme") || "light"; } catch (e) {}
+</script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+<style>
+  .container { max-width: 1440px; margin: 0 auto; padding: 18px 22px 40px; }
+
+  .page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .page-head h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+  .page-head .spacer { flex: 1; }
+
+  .bar-wrap { margin-bottom: 10px; }
+  .sum-line { margin: 0 0 14px 2px; }
+
+  /* sky collapses away — this layout is for triaging a long list, not looking */
+  .sky-fold { margin-bottom: 14px; }
+  .sky-body { height: 320px; padding: 0; margin-top: 4px; border-radius: 10px; overflow: hidden;
+              border: 1px solid var(--border); }
+
+  .table-card { padding: 0; overflow: hidden; }
+  .table-wrap { overflow-x: auto; }
+
+  .cone-table th { cursor: pointer; user-select: none; white-space: nowrap; }
+  .cone-table th:hover { color: var(--ink-2); }
+  .cone-table th svg { opacity: 0.45; vertical-align: -1px; margin-left: 2px; }
+  .cone-table th.sorted svg { opacity: 1; }
+  .cone-table th.sorted { color: var(--primary-ink); }
+
+  .cone-table tbody tr { cursor: pointer; }
+  .cone-table tbody tr:hover td { background: var(--card-2); }
+  .cone-table tr.open td { background: var(--primary-soft); }
+  .cone-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .cone-table td.name { font-weight: 700; white-space: nowrap; }
+  .cone-table td.spark-cell { padding: 2px 10px; width: 108px; }
+  .cone-table td.spark-cell svg { vertical-align: middle; }
+
+  .detail-td { padding: 0 !important; background: var(--card-2); }
+  .detail-inner { padding: 14px 16px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 18px; }
+
+  .table-foot {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 16px; border-top: 1px solid var(--border);
+    font-size: 12.5px; color: var(--ink-3);
+  }
+  .table-foot .spacer { flex: 1; }
+
+  @media (max-width: 900px) { .detail-inner { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header class="topbar" id="topbar"></header>
+
+<div class="container">
+
+  <div class="page-head">
+    <h1>Cone search</h1>
+    <div class="spacer"></div>
+    <button class="btn btn-outline btn-sm">Export CSV</button>
+  </div>
+
+  <div class="bar-wrap" id="cone-bar"></div>
+  <p class="cone-summary sum-line" id="cone-summary"></p>
+
+  <details class="accordion sky-fold">
+    <summary><span id="fold-icon"></span> Sky view <span class="faint" style="font-weight:400">&mdash; 24 markers</span></summary>
+    <div class="accordion-body"><div class="sky-body" id="sky"></div></div>
+  </details>
+
+  <section class="card table-card">
+    <div class="card-head"><h2 id="res-title"></h2><div class="spacer"></div>
+      <span class="faint small">click a row to expand</span></div>
+    <div class="table-wrap">
+      <table class="data-table cone-table" id="res-table">
+        <thead><tr id="res-head"></tr></thead>
+        <tbody id="res-body"></tbody>
+      </table>
+    </div>
+    <div class="table-foot">
+      <span>Showing <b>24</b> of 24 &middot; 50 per page</span>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost btn-sm">Previous</button>
+      <button class="btn btn-outline btn-sm">Next</button>
+    </div>
+  </section>
+</div>
+
+<script src="shared.js"></script>
+<script>
+  document.getElementById("topbar").innerHTML = topbarHTML("cone");
+  document.getElementById("res-title").innerHTML = ICONS.table + " Results";
+  document.getElementById("fold-icon").innerHTML = ICONS.chev;
+
+  mountConeSearchBar(document.getElementById("cone-bar"));
+  document.getElementById("cone-summary").innerHTML = coneSummaryHTML(CONE_RESULTS);
+  mountConeAladin(document.getElementById("sky"));
+
+  const COLS = [
+    { k: "obj_name",    label: "Name",   cls: "name" },
+    { k: "object_type", label: "Type",   cls: "" },
+    { k: "sep_arcsec",  label: "Sep",    cls: "num" },
+    { k: "ra",          label: "RA",     cls: "num mono" },
+    { k: "dec",         label: "Dec",    cls: "num mono" },
+    { k: "redshift",    label: "z",      cls: "num" },
+    { k: "peak_mag",    label: "Peak",   cls: "num" },
+    { k: "n_detections", label: "Dets",  cls: "num" },
+    { k: "discovery_date", label: "Found", cls: "" },
+    { k: "sources",     label: "Sources", cls: "" },
+    { k: "phot",        label: "Lightcurve", cls: "spark-cell" },
+  ];
+
+  let sortKey = "sep_arcsec", sortAsc = true;
+
+  const cellHTML = (o, c) => {
+    switch (c.k) {
+      case "obj_name":  return coneNameHTML(o);
+      case "object_type": return fmtType(o.object_type);
+      case "sep_arcsec": return fmtSep(o.sep_arcsec);
+      case "ra":        return o.ra.toFixed(5);
+      case "dec":       return (o.dec >= 0 ? "+" : "") + o.dec.toFixed(5);
+      case "redshift":  return fmtZ(o.redshift);
+      case "peak_mag":  return `${fmtMag(o.peak_mag)} <span class="faint">${o.peak_filter}</span>`;
+      case "n_detections": return o.n_detections;
+      case "discovery_date": return o.discovery_date;
+      case "sources":   return `<span class="src-pills">${coneSourcesHTML(o.sources)}</span>`;
+      case "phot":      return sparklineSVG(o.phot, currentTheme(), { w: 96, h: 30 });
+      default:          return "";
+    }
+  };
+
+  const detailHTML = (o) => `
+    <tr class="detail-row" hidden><td class="detail-td" colspan="${COLS.length}">
+      <div class="detail-inner">
+        <div class="facts">
+          <div class="fact"><span class="k">Sexagesimal</span><span class="v mono">${o.ra_hms} ${o.dec_dms}</span></div>
+          <div class="fact"><span class="k">TarXiv ID</span><span class="v mono">${o.tarxiv_id}</span></div>
+          <div class="fact"><span class="k">ZTF alias</span><span class="v mono">${o.ztf_id || EM_DASH}</span></div>
+        </div>
+        <div class="facts">
+          <div class="fact"><span class="k">Host</span><span class="v">${o.host || EM_DASH}</span></div>
+          <div class="fact"><span class="k">Host separation</span><span class="v">${o.host_sep_kpc ? o.host_sep_kpc + " kpc" : EM_DASH}</span></div>
+          <div class="fact"><span class="k">Reporting group</span><span class="v">${o.reporting_group}</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px;align-items:flex-start">
+          <div class="band-chips">${bandChipsHTML(o.phot)}</div>
+          ${o.tags.length ? `<div style="display:flex;gap:5px;flex-wrap:wrap">${coneTagsHTML(o.tags)}</div>` : ""}
+          <a class="btn btn-primary btn-sm" href="mockup-2-balanced.html">Open object page</a>
+        </div>
+      </div>
+    </td></tr>`;
+
+  const sorted = () => {
+    const v = (o) => {
+      const x = o[sortKey];
+      if (x == null) return sortAsc ? Infinity : -Infinity;   /* nulls always last */
+      return x;
+    };
+    return [...CONE_RESULTS].sort((a, b) => {
+      const av = v(a), bv = v(b);
+      if (av === bv) return 0;
+      return (av < bv ? -1 : 1) * (sortAsc ? 1 : -1);
+    });
+  };
+
+  const draw = () => {
+    document.getElementById("res-head").innerHTML = COLS.map((c) =>
+      `<th data-k="${c.k}" class="${sortKey === c.k ? "sorted" : ""}">${c.label}${
+        c.k === "phot" ? "" : ICONS.sort}</th>`).join("");
+
+    document.getElementById("res-body").innerHTML = sorted().map((o) =>
+      `<tr class="obj-row">${COLS.map((c) =>
+        `<td class="${c.cls}">${cellHTML(o, c)}</td>`).join("")}</tr>` + detailHTML(o)).join("");
+  };
+  draw();
+  onThemeChange(draw);   /* sparklines are theme-coloured, so redraw them */
+
+  document.getElementById("res-head").addEventListener("click", (e) => {
+    const th = e.target.closest("th");
+    if (!th || th.dataset.k === "phot") return;
+    if (sortKey === th.dataset.k) { sortAsc = !sortAsc; } else { sortKey = th.dataset.k; sortAsc = true; }
+    draw();
+  });
+
+  document.getElementById("res-body").addEventListener("click", (e) => {
+    const row = e.target.closest(".obj-row");
+    if (!row || e.target.closest("a")) return;
+    const detail = row.nextElementSibling;
+    detail.hidden = !detail.hidden;
+    row.classList.toggle("open", !detail.hidden);
+  });
+</script>
+</body>
+</html>

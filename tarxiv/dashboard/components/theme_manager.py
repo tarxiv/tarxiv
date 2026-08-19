@@ -1,117 +1,116 @@
 import os
 
-from dash import html
 import plotly.io as pio
 import plotly.graph_objects as go
 
-from ..styles import COLORS, FILTER_COLORS
-from .cards import create_nav_item
+from ..styles import ARXIV_RED_RAMP, BAND_COLORS, COLORS, FOOTER_BG
 
+FONT_STACK = "'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif"
+MONO_STACK = "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
 
-brand_palette = [COLORS["primary"]] * 10
 THEME = {
     "primaryColor": "arxiv_red",
     "colors": {
-        "arxiv_red": brand_palette,
+        "arxiv_red": ARXIV_RED_RAMP,
     },
-    # Material 3 Expressive uses very rounded corners
-    "defaultRadius": "xl",
-    "white": COLORS["bg_light"],
-    "black": COLORS["bg_dark"],
-    # Customizing component defaults for that 'Expressive' feel
+    # Brand red is dark, so the dark scheme takes a lighter step.
+    "primaryShade": {"light": 6, "dark": 5},
+    "fontFamily": FONT_STACK,
+    "fontFamilyMonospace": MONO_STACK,
+    "headings": {"fontFamily": FONT_STACK, "fontWeight": "700"},
+    "defaultRadius": "md",
+    "white": COLORS["light"]["card"],
+    "black": COLORS["dark"]["bg"],
     "components": {
-        "Card": {
-            "defaultProps": {
-                "padding": "xl",
-                "shadow": "sm",
-                # "withBorder": True,
-            }
-        },
-        "TextInput": {
-            "defaultProps": {
-                "size": "md",
-                "labelProps": {"fz": "sm"},
-            }
-        },
-        "NumberInput": {
-            "defaultProps": {
-                "size": "md",
-                "labelProps": {"fz": "sm"},
-            }
-        },
-        "PasswordInput": {
-            "defaultProps": {
-                "size": "md",
-            }
-        },
-        "Button": {
-            "defaultProps": {
-                # "fw": 600,
-                "size": "md",
-            }
-        },
+        "Card": {"defaultProps": {"padding": "md", "radius": 14}},
+        "Paper": {"defaultProps": {"radius": 14}},
+        "TextInput": {"defaultProps": {"size": "sm", "labelProps": {"fz": "sm"}}},
+        "NumberInput": {"defaultProps": {"size": "sm", "labelProps": {"fz": "sm"}}},
+        "PasswordInput": {"defaultProps": {"size": "sm"}},
+        "Select": {"defaultProps": {"size": "sm"}},
+        "Button": {"defaultProps": {"size": "sm"}},
     },
 }
 
-
-def generate_css():
-    """Generates CSS variables for light and dark themes."""
-    light_css = f"""
-:root[data-mantine-color-scheme="light"] {{
-    --mantine-color-bg: {COLORS["bg_light"]};
-    --mantine-color-body: {COLORS["bg_light"]};
-    --mantine-color-text: {COLORS["bg_dark"]};
-    --tarxiv-color-primary: {COLORS["primary"]};
-    --tarxiv-card-1: {COLORS["card_light"]};
-    --tarxiv-footer-bg: {COLORS["card_dark"]};
-    --tarxiv-surface-1: {COLORS["vlight_gray"]};
-    --tarxiv-surface-2: {COLORS["surface_light"]};
-}}
-
-"""
-    #     light_css = f"""
-    # [data-mantine-color-scheme="light"] {{
-    #     --mantine-color-bg: {COLORS["bg_light"]};
-    #     --mantine-color-body: {COLORS["bg_light"]};
-    #     --mantine-color-text: {COLORS["bg_dark"]};
-    #     --tarxiv-card-1: {COLORS["card_light"]};
-    # }}
-
-    # """
-
-    dark_css = f"""
-:root[data-mantine-color-scheme="dark"] {{
-    --mantine-color-bg: {COLORS["bg_dark"]};
-    --mantine-color-body: {COLORS["bg_dark"]};
-    --mantine-color-text: {COLORS["bg_light"]};
-    --tarxiv-color-primary: {COLORS["primary"]};
-    --tarxiv-card-1: {COLORS["card_dark"]};
-    --tarxiv-footer-bg: {COLORS["bg_dark"]};
-    --tarxiv-surface-1: {COLORS["surface_dark"]};
-    --tarxiv-surface-2: {COLORS["surface_dark"]};
-}}
-
-"""
-
-    nav_hover = """
-/* Only apply hover colors on devices with a mouse/pointer */
-@media (hover: hover) {
-    .nav-item-hover:hover {
-        background-color: var(--mantine-color-bg);
-        transform: scale(1.03);
-        transition: transform 200ms ease;
-    }
-
-    /* Change the icon/text color on hover */
-    .nav-item-hover:hover * {
-        color: var(--mantine-color-indigo-6);
-    }
+# CSS custom property name -> key in COLORS[scheme]. Emitted for both schemes.
+_CSS_VARS = {
+    "--tarxiv-bg": "bg",
+    "--tarxiv-card": "card",
+    "--tarxiv-card-2": "card_2",
+    "--tarxiv-border": "border",
+    "--tarxiv-border-strong": "border_strong",
+    "--tarxiv-ink": "ink",
+    "--tarxiv-ink-2": "ink_2",
+    "--tarxiv-ink-3": "ink_3",
+    "--tarxiv-primary-hover": "primary_hover",
+    "--tarxiv-primary-ink": "primary_ink",
+    "--tarxiv-primary-soft": "primary_soft",
+    "--tarxiv-primary-soft-2": "primary_soft_2",
+    "--tarxiv-grid": "grid",
+    "--tarxiv-axis": "axis",
+    "--tarxiv-shadow": "shadow",
+    "--tarxiv-shadow-lg": "shadow_lg",
 }
 
-/* Tactile feedback for mobile and desktop when clicking */
-.nav-item-hover:active {
-    transform: scale(0.95);
-    transition: transform 50ms ease;
+# Older component code refers to these names; keep them pointing at the new
+# tokens so untouched pages restyle for free.
+_LEGACY_ALIASES = {
+    "--tarxiv-card-1": "card",
+    "--tarxiv-surface-1": "card_2",
+    "--tarxiv-surface-2": "card_2",
+}
+
+_STATIC_CSS = """
+/* ------------------------------------------------------------- page plane */
+/* Mantine paints the body from its own `body` rule, which would otherwise win
+   on load order and leave the page pure white against white cards. The
+   :root[...] prefix raises specificity above a bare `body` selector so the
+   off-white plane holds whichever stylesheet lands last. */
+:root[data-mantine-color-scheme] body,
+:root[data-mantine-color-scheme] .mantine-AppShell-root,
+:root[data-mantine-color-scheme] .mantine-AppShell-main {
+    background-color: var(--tarxiv-bg);
+}
+
+/* ---------------------------------------------------------------- topbar */
+.tarxiv-wordmark {
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: -0.02em;
+    color: var(--tarxiv-ink);
+    text-decoration: none;
+    white-space: nowrap;
+}
+.tarxiv-wordmark:hover { text-decoration: none; }
+.tarxiv-wordmark .x { color: var(--tarxiv-primary-ink); }
+
+.tarxiv-topnav-link {
+    display: inline-block;
+    color: var(--tarxiv-ink-2);
+    font-weight: 500;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: background-color 120ms ease, color 120ms ease;
+}
+.tarxiv-topnav-link:hover {
+    color: var(--tarxiv-ink);
+    background-color: var(--tarxiv-card-2);
+    text-decoration: none;
+}
+.tarxiv-topnav-link.active {
+    color: var(--tarxiv-primary-ink);
+    background-color: var(--tarxiv-primary-soft);
+}
+
+/* ------------------------------------------------------------ card head */
+.tarxiv-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--tarxiv-border);
 }
 
 /* Ensure long words wrap instead of clipping */
@@ -120,41 +119,42 @@ def generate_css():
     word-break: break-word;
     line-height: 1.1;
 }
-
 """
-    os.makedirs(
-        # TODO JL: Two things
-        # 1) Hardcoded path is not ideal - probably should be a config or
-        #    environment variable
-        # 2) We should probably commit this file to the repo and only regenerate
-        #    it when styles.py changes, instead of regenerating on every app
-        #    start
-        "tarxiv/dashboard/assets",
-        exist_ok=True,
-    )  # TODO: Update if dashboard moves to another repo
-    with open("tarxiv/dashboard/assets/theme.css", "w") as f:
-        f.write(light_css)
-        f.write(dark_css)
-        f.write(nav_hover)
+
+
+def _scheme_block(scheme: str) -> str:
+    """Emit the CSS custom properties for one colour scheme."""
+    tokens = COLORS[scheme]
+    lines = [
+        f"    --mantine-color-bg: {tokens['bg']};",
+        f"    --mantine-color-body: {tokens['bg']};",
+        f"    --mantine-color-text: {tokens['ink']};",
+        f"    --tarxiv-color-primary: {COLORS['primary']};",
+        f"    --tarxiv-footer-bg: {FOOTER_BG};",
+    ]
+    lines += [f"    {var}: {tokens[key]};" for var, key in _CSS_VARS.items()]
+    lines += [f"    {var}: {tokens[key]};" for var, key in _LEGACY_ALIASES.items()]
+    body = "\n".join(lines)
+    return f':root[data-mantine-color-scheme="{scheme}"] {{\n{body}\n}}\n\n'
+
+
+def generate_css():
+    """Write the themed CSS custom properties into the assets directory."""
+    assets_dir = os.path.join(os.path.dirname(__file__), os.pardir, "assets")
+    assets_dir = os.path.abspath(assets_dir)
+    os.makedirs(assets_dir, exist_ok=True)
+
+    with open(os.path.join(assets_dir, "theme.css"), "w") as f:
+        f.write("/* Generated by theme_manager.generate_css() -- do not edit. */\n\n")
+        f.write(_scheme_block("light"))
+        f.write(_scheme_block("dark"))
+        f.write(_STATIC_CSS)
     return None
 
 
-def get_theme_components() -> tuple[dict, html.Div]:
-    """Returns the Theme and the Toggle Button for the rail."""
-    return (
-        THEME,
-        # The Toggle Button (Unstyled to match your Rail)
-        html.Div(
-            create_nav_item(
-                icon="line-md:moon-to-sunny-outline-transition",
-                label="Light/Dark",
-                is_active=False,
-                id="theme-icon",
-            ),
-            id="color-scheme-toggle",
-            style={"marginTop": "auto"},  # Pushes theme toggle to the very bottom
-        ),
-    )
+def get_theme() -> dict:
+    """Returns the Mantine theme dict."""
+    return THEME
 
 
 def apply_theme(fig, theme_template):
@@ -168,53 +168,68 @@ def apply_theme(fig, theme_template):
     return fig
 
 
+def scheme_from_template(theme_template: str | None) -> str:
+    """Map a template name to a colour scheme: "dark" if it mentions dark."""
+    return "dark" if theme_template and "dark" in theme_template else "light"
+
+
+def _template_for(scheme: str) -> go.layout.Template:
+    """Build a Plotly template from the design tokens for one scheme."""
+    tokens = COLORS[scheme]
+    surface = tokens["card"]
+    axis = {
+        "gridcolor": tokens["grid"],
+        "linecolor": tokens["axis"],
+        "zerolinecolor": tokens["grid"],
+        "ticks": "outside",
+        "tickcolor": tokens["axis"],
+        "ticklen": 4,
+        "tickfont": {"size": 11, "color": tokens["ink_3"]},
+        "title": {"font": {"size": 11, "color": tokens["ink_3"]}},
+    }
+
+    template = go.layout.Template()
+    template.layout = {
+        # Match the card the figure sits on, so there is no seam.
+        "paper_bgcolor": surface,
+        "plot_bgcolor": surface,
+        "font": {"family": FONT_STACK, "size": 12, "color": tokens["ink_2"]},
+        "margin": {"l": 52, "r": 12, "t": 12, "b": 42},
+        "xaxis": axis,
+        "yaxis": axis,
+        "legend": {
+            "orientation": "h",
+            "x": 0,
+            "y": 1.02,
+            "xanchor": "left",
+            "yanchor": "bottom",
+            "font": {"size": 11.5, "color": tokens["ink_2"]},
+            "grouptitlefont": {"size": 11, "color": tokens["ink_3"]},
+            "itemsizing": "constant",
+        },
+        "hoverlabel": {
+            # Inverted plate: dark tooltip on light, light tooltip on dark.
+            "bgcolor": COLORS["dark" if scheme == "light" else "light"]["card"],
+            "font": {
+                "family": FONT_STACK,
+                "size": 12,
+                "color": COLORS["dark" if scheme == "light" else "light"]["ink"],
+            },
+            "bordercolor": "rgba(0,0,0,0)",
+        },
+        "colorway": [
+            BAND_COLORS["c"][0 if scheme == "light" else 1],
+            BAND_COLORS["o"][0 if scheme == "light" else 1],
+            BAND_COLORS["g"][0 if scheme == "light" else 1],
+            BAND_COLORS["r"][0 if scheme == "light" else 1],
+            BAND_COLORS["u"][0 if scheme == "light" else 1],
+            BAND_COLORS["z"][0 if scheme == "light" else 1],
+        ],
+    }
+    return template
+
+
 def register_tarxiv_templates():
-    # 1. Define the Dark Template
-    dark_layout = go.layout.Template()
-    dark_layout.layout = {
-        "paper_bgcolor": "#1A1B1E",  # Matches Mantine Dark Default
-        "plot_bgcolor": "#1A1B1E",
-        # "font": {"color": "#C1C2C5", "family": "Arial"},
-        "font": {"color": "#E1E2E5", "family": "Arial"},
-        "xaxis": {
-            "gridcolor": "#373A40",
-            "linecolor": "#373A40",
-            "zerolinecolor": "#373A40",
-        },
-        "yaxis": {
-            "gridcolor": "#373A40",
-            "linecolor": "#373A40",
-            "zerolinecolor": "#373A40",
-        },
-        # This is where you inject your styles.py primary color
-        # "colorway": [COLORS["primary"], "#2ecc71", "#e74c3c", "#f1c40f"],
-        "colorway": ["#4C84C6", "#27ae60", "#c0392b", "#f39c12"],
-    }
-    pio.templates["tarxiv_dark"] = dark_layout
-
-    # 2. Define the Light Template
-    light_layout = go.layout.Template()
-    light_layout.layout = {
-        "paper_bgcolor": "#FEFEFE",
-        "plot_bgcolor": "#ffffff",
-        # "font": {"color": COLORS["secondary"], "family": "Arial"},
-        "font": {"color": "#121617", "family": "Arial"},
-        "xaxis": {
-            "gridcolor": "#f1f3f5",
-            "linecolor": "#dee2e6",
-            "zerolinecolor": "#dee2e6",
-        },
-        "yaxis": {
-            "gridcolor": "#f1f3f5",
-            "linecolor": "#dee2e6",
-            "zerolinecolor": "#dee2e6",
-        },
-        # "colorway": [COLORS["primary"], "#27ae60", "#c0392b", "#f39c12"],
-        "colorway": ["#4C84C6", "#27ae60", "#c0392b", "#f39c12"],
-    }
-    pio.templates["tarxiv_light"] = light_layout
-
-
-def get_filter_style(filter_name):
-    """Returns marker color based on filter name from styles.py."""
-    return FILTER_COLORS.get(filter_name, FILTER_COLORS["Unknown"])
+    """Register the light/dark Plotly templates built from design tokens."""
+    pio.templates["tarxiv_light"] = _template_for("light")
+    pio.templates["tarxiv_dark"] = _template_for("dark")

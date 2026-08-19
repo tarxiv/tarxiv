@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TarXiv cone mockup 3 — Split workspace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<script>
+  try { document.documentElement.dataset.theme = localStorage.getItem("tarxiv-mock-theme") || "light"; } catch (e) {}
+</script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+<style>
+  .container { max-width: 1440px; margin: 0 auto; padding: 18px 22px 40px; }
+
+  .page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .page-head h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+  .page-head .spacer { flex: 1; }
+
+  .bar-wrap { margin-bottom: 10px; }
+  .sum-line { margin: 0 0 14px 2px; }
+
+  /* sky sticks while the result list scrolls past it — the point of this layout */
+  .split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 14px; align-items: start; }
+
+  .sky-col { position: sticky; top: 66px; display: flex; flex-direction: column; gap: 14px; }
+  .sky-body { height: calc(100vh - 320px); min-height: 340px; padding: 0; border-radius: 0 0 14px 14px; overflow: hidden; }
+
+  .legend-card { padding: 12px 14px; display: flex; flex-direction: column; gap: 9px; }
+  .legend-row { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--ink-2); }
+  .legend-row .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--primary); flex-shrink: 0; }
+  .legend-row .ring { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--primary); flex-shrink: 0; }
+
+  .list-card { padding: 0; }
+
+  .res-row {
+    display: grid; grid-template-columns: 120px minmax(0, 1fr) auto;
+    gap: 14px; align-items: center;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background 0.12s;
+  }
+  .res-row:hover { background: var(--card-2); }
+  .res-row.open { background: var(--primary-soft); }
+
+  .thumb { display: flex; flex-direction: column; gap: 4px; }
+  .ident { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+  .facts-line { display: flex; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+  .sep-cell { text-align: right; display: flex; flex-direction: column; gap: 1px; }
+
+  /* the expanded detail — a real Plotly lightcurve, no navigation needed */
+  .detail { border-bottom: 1px solid var(--border); background: var(--card-2); padding: 14px 16px 16px; }
+  .detail-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+  .detail-plot { height: 260px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 6px; }
+  .detail-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+
+  @media (max-width: 1080px) {
+    .split { grid-template-columns: 1fr; }
+    .sky-col { position: static; }
+    .sky-body { height: 300px; }
+    .detail-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar" id="topbar"></header>
+
+<div class="container">
+
+  <div class="page-head">
+    <h1>Cone search</h1>
+    <div class="spacer"></div>
+    <button class="btn btn-outline btn-sm">Export CSV</button>
+  </div>
+
+  <div class="bar-wrap" id="cone-bar"></div>
+  <p class="cone-summary sum-line" id="cone-summary"></p>
+
+  <div class="split">
+    <div class="sky-col">
+      <section class="card">
+        <div class="card-head"><h2 id="sky-title"></h2></div>
+        <div class="sky-body" id="sky"></div>
+      </section>
+      <section class="card legend-card">
+        <div class="legend-row"><span class="ring"></span> Search radius &mdash; <span class="mono">600&Prime;</span></div>
+        <div class="legend-row"><span class="dot"></span> Result marker &mdash; hover a row to highlight</div>
+        <div class="legend-row faint">Click any row to open its lightcurve without leaving the page.</div>
+      </section>
+    </div>
+
+    <section class="card list-card">
+      <div class="card-head"><h2 id="res-title"></h2><div class="spacer"></div>
+        <span class="faint small">click to expand</span></div>
+      <div id="res-list"></div>
+    </section>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+  document.getElementById("topbar").innerHTML = topbarHTML("cone");
+  document.getElementById("sky-title").innerHTML = ICONS.globe + " Sky view";
+  document.getElementById("res-title").innerHTML = ICONS.curve + " Results";
+
+  mountConeSearchBar(document.getElementById("cone-bar"));
+  document.getElementById("cone-summary").innerHTML = coneSummaryHTML(CONE_RESULTS);
+  mountConeAladin(document.getElementById("sky"));
+
+  const rowHTML = (o, i) => `
+    <div class="res-row" data-i="${i}">
+      <div class="thumb">
+        ${sparklineSVG(o.phot, currentTheme(), { w: 120, h: 38 })}
+        <div class="band-chips">${bandChipsHTML(o.phot)}</div>
+      </div>
+      <div>
+        <div class="ident">${coneNameHTML(o)} ${fmtType(o.object_type)}</div>
+        <div class="facts-line">
+          <span class="kv"><span class="k">z</span><span class="v">${fmtZ(o.redshift)}</span></span>
+          <span class="kv"><span class="k">peak</span><span class="v">${fmtMag(o.peak_mag)} ${o.peak_filter}</span></span>
+          <span class="kv"><span class="k">dets</span><span class="v">${o.n_detections}</span></span>
+          <span class="src-pills">${coneSourcesHTML(o.sources)}</span>
+        </div>
+      </div>
+      <div class="sep-cell">
+        <span class="sep-val">${fmtSep(o.sep_arcsec)}</span>
+        <span class="sep-lab">sep</span>
+      </div>
+    </div>
+    <div class="detail" id="d-${i}" hidden>
+      <div class="detail-grid">
+        <div class="detail-plot"><div class="plot-host" id="p-${i}"></div></div>
+        <div class="detail-side">
+          <div class="facts">
+            <div class="fact"><span class="k">Coordinates</span><span class="v mono">${o.ra_hms} ${o.dec_dms}</span></div>
+            <div class="fact"><span class="k">Decimal</span><span class="v mono">${o.ra.toFixed(6)} ${o.dec >= 0 ? "+" : ""}${o.dec.toFixed(6)}</span></div>
+            <div class="fact"><span class="k">TarXiv ID</span><span class="v mono">${o.tarxiv_id}</span></div>
+            <div class="fact"><span class="k">Host</span><span class="v">${o.host || EM_DASH}</span></div>
+            <div class="fact"><span class="k">Host separation</span><span class="v">${o.host_sep_kpc ? o.host_sep_kpc + " kpc" : EM_DASH}</span></div>
+            <div class="fact"><span class="k">Discovered</span><span class="v">${o.discovery_date} &middot; ${o.reporting_group}</span></div>
+          </div>
+          ${o.tags.length ? `<div style="display:flex;gap:5px;flex-wrap:wrap">${coneTagsHTML(o.tags)}</div>` : ""}
+          <div class="detail-actions">
+            <a class="btn btn-primary btn-sm" href="mockup-2-balanced.html">Open object page</a>
+            <button class="btn btn-outline btn-sm">Add tag</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  const list = document.getElementById("res-list");
+  const open = new Set();
+
+  const draw = () => {
+    list.innerHTML = CONE_RESULTS.map(rowHTML).join("");
+    /* re-open whatever was open before the redraw, and re-plot it */
+    open.forEach((i) => {
+      document.getElementById("d-" + i).hidden = false;
+      list.querySelector(`.res-row[data-i="${i}"]`).classList.add("open");
+      mountLightcurve(document.getElementById("p-" + i), { compact: true });
+    });
+  };
+  draw();
+  onThemeChange(draw);   /* sparklines are theme-coloured, so redraw them */
+
+  list.addEventListener("click", (e) => {
+    const row = e.target.closest(".res-row");
+    if (!row || e.target.closest("a")) return;
+    const i = row.dataset.i;
+    const panel = document.getElementById("d-" + i);
+    const nowOpen = panel.hidden;
+    panel.hidden = !nowOpen;
+    row.classList.toggle("open", nowOpen);
+    if (nowOpen) {
+      open.add(i);
+      /* the mockup plots the same sample lightcurve for every object */
+      mountLightcurve(document.getElementById("p-" + i), { compact: true });
+    } else {
+      open.delete(i);
+    }
+  });
+</script>
+</body>
+</html>

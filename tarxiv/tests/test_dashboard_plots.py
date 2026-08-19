@@ -12,6 +12,7 @@ from tarxiv.dashboard.components.plots import (
     empty_lightcurve_plot,
 )
 from tarxiv.dashboard.components.theme_manager import register_tarxiv_templates
+from tarxiv.dashboard.styles import BAND_COLORS
 
 
 @pytest.fixture(autouse=True)
@@ -88,3 +89,79 @@ def test_empty_lightcurve_plot_custom_message():
     fig = empty_lightcurve_plot("2018mqw", "tarxiv_dark", message="Nothing here")
 
     assert "Nothing here" in _annotation_texts(fig)
+
+
+def _two_band_points():
+    return [
+        {
+            "mjd": 58243.1,
+            "mag": 18.87,
+            "mag_err": 0.012,
+            "filter": "g",
+            "survey": "ztf",
+            "detection": 1,
+        },
+        {
+            "mjd": 58244.2,
+            "limit": 20.1,
+            "filter": "o",
+            "survey": "atlas",
+            "detection": 0,
+        },
+    ]
+
+
+def test_traces_are_named_by_survey_and_band():
+    fig = create_lightcurve_plot(_two_band_points(), "2018mqw", "tarxiv_light")
+
+    names = [trace.name for trace in fig.data]
+    assert "ZTF g" in names
+
+
+def test_detection_trace_styling_and_hover():
+    fig = create_lightcurve_plot(_two_band_points(), "2018mqw", "tarxiv_light")
+
+    detection = next(t for t in fig.data if t.name == "ZTF g")
+    # Symbol encodes the survey (ZTF -> circle), colour encodes the band.
+    assert detection.marker.symbol == "circle"
+    assert detection.marker.color == BAND_COLORS["g"][0]
+    # Error bars are hairlines with no caps.
+    assert detection.error_y.width == 0
+    assert detection.error_y.thickness == 1.2
+    # Uncertainty is surfaced on hover via customdata.
+    assert "customdata" in detection.hovertemplate
+
+
+def test_dark_scheme_uses_dark_band_colours():
+    points = [
+        {
+            "mjd": 58243.1,
+            "mag": 18.0,
+            "mag_err": 0.01,
+            "filter": "o",
+            "survey": "atlas",
+            "detection": 1,
+        }
+    ]
+
+    fig = create_lightcurve_plot(points, "2018mqw", "tarxiv_dark")
+
+    assert fig.data[0].marker.color == BAND_COLORS["o"][1]
+
+
+def test_limit_traces_are_hollow_and_absent_from_legend():
+    fig = create_lightcurve_plot(_two_band_points(), "2018mqw", "tarxiv_light")
+
+    limit = next(t for t in fig.data if "limit" in (t.name or ""))
+    assert limit.marker.symbol == "triangle-down-open"
+    assert limit.showlegend is False
+
+
+def test_axis_formatting_for_mjd_and_magnitude():
+    fig = create_lightcurve_plot(_two_band_points(), "2018mqw", "tarxiv_light")
+
+    # MJDs are large integers; ".2f" ticks read as noise.
+    assert fig.layout.xaxis.tickformat == "d"
+    assert fig.layout.yaxis.autorange == "reversed"
+    # The card header carries the title, so the figure must not repeat it.
+    assert fig.layout.title.text is None

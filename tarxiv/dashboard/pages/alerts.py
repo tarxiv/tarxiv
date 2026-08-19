@@ -18,10 +18,7 @@ from ..components import (
     create_message_banner,
 )
 
-from ...auth import (
-    get_authenticated_user,
-    get_jwt_from_request,
-)
+from ...auth import get_jwt_from_request
 import requests
 # from pydantic import ValidationError
 
@@ -37,33 +34,25 @@ dash.register_page(
 
 
 def layout(**kwargs):
-    # perform search if id is provided in URL, otherwise show empty search page
-    token = get_jwt_from_request(request)
-    user = get_authenticated_user(jwt_token=token)
-
-    print(f"User: {user}")
-
-    page_contents = create_message_banner("Please log in to view alerts.", "warning")
-    if user:
-        # User came via deep link and has a saved session
-        page_contents = (
-            expressive_card(
-                title="Alerts",
-                children=[
-                    dmc.Box(
-                        id="alerts-table-body",
+    # Alerts are public: no login needed to browse them.
+    page_contents = (
+        expressive_card(
+            title="Alerts",
+            children=[
+                dmc.Box(
+                    id="alerts-table-body",
+                ),
+                dmc.Center(
+                    dmc.Pagination(
+                        id="alerts-pagination",
+                        total=20,
+                        siblings=2,
+                        value=1,
                     ),
-                    dmc.Center(
-                        dmc.Pagination(
-                            id="alerts-pagination",
-                            total=20,
-                            siblings=2,
-                            value=1,
-                        ),
-                    ),
-                ],
-            ),
-        )
+                ),
+            ],
+        ),
+    )
 
     return dmc.Stack(
         children=[
@@ -100,9 +89,6 @@ def update_alerts_table(page_number):
         token=token,
         logger=current_app.config["TXV_LOGGER"],
     )
-
-    if response.status_code == 401:
-        return create_message_banner("Session expired. Please log in again.", "warning")
 
     if response.status_code != 200:
         return create_message_banner(

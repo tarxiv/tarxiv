@@ -6,10 +6,13 @@ from dash import (
     ALL,
     clientside_callback,
     ctx,
+    dcc,
+    no_update,
     page_registry,
 )
+import dash_mantine_components as dmc
 import plotly.io as pio
-from ..components import create_nav_link
+from dash_iconify import DashIconify
 
 
 def register_style_callbacks(app, logger):
@@ -86,22 +89,63 @@ def register_style_callbacks(app, logger):
         return [theme_patch] * len(plot_outputs), theme_icon
 
     @app.callback(
-        Output("nav-rail-content", "children"),
+        [
+            Output("topbar-nav", "children"),
+            Output("mobile-nav-content", "children"),
+        ],
         Input("url", "pathname"),  # Requires dcc.Location(id="url") in the layout
     )
     def refresh_navigation(pathname):
-        # # Sort pages by the 'order' key you added in dash.register_page
+        # Sort pages by the 'order' key set in dash.register_page
         pages = page_registry.values()
         nav_pages = [p for p in pages if p.get("order") is not None]
         nav_pages = sorted(nav_pages, key=lambda x: x["order"])
 
-        return [
-            create_nav_link(
-                icon=page.get("icon", "mdi:help-circle"),
-                label=page["name"],
-                # label=page["title"],
+        topbar_links = [
+            dcc.Link(
+                page["name"],
                 href=page["relative_path"],
-                is_active=(pathname == page["relative_path"]),
+                className="tarxiv-topnav-link"
+                + (" active" if pathname == page["relative_path"] else ""),
             )
             for page in nav_pages
         ]
+        mobile_links = [
+            dmc.NavLink(
+                label=page["name"],
+                href=page["relative_path"],
+                leftSection=DashIconify(
+                    icon=page.get("icon", "mdi:help-circle"), width=20
+                ),
+                active=(pathname == page["relative_path"]),
+            )
+            for page in nav_pages
+        ]
+
+        return (
+            dmc.Group(topbar_links, gap=2, wrap="nowrap"),
+            mobile_links,
+        )
+
+    # --- Global object search (topbar, present on every page) ---
+    @app.callback(
+        Output("url", "pathname", allow_duplicate=True),
+        Input("global-search-keyboard", "n_keydowns"),
+        State("global-search-input", "value"),
+        prevent_initial_call=True,
+    )
+    def global_search(n_keydowns, object_id):
+        if not object_id or not object_id.strip():
+            return no_update
+        return f"/lightcurve/{object_id.strip()}"
+
+    # --- Mobile navigation drawer ---
+    @app.callback(
+        Output("app-shell", "navbar"),
+        Input("burger", "opened"),
+        prevent_initial_call=True,
+    )
+    def toggle_mobile_nav(opened):
+        navbar = Patch()
+        navbar["collapsed"]["mobile"] = not opened
+        return navbar

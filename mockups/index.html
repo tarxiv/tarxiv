@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TarXiv redesign mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<script>
+  try { document.documentElement.dataset.theme = localStorage.getItem("tarxiv-mock-theme") || "light"; } catch (e) {}
+</script>
+<style>
+  .container { max-width: 980px; margin: 0 auto; padding: 56px 28px 80px; }
+  h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.03em; }
+  .lede { color: var(--ink-2); font-size: 15px; margin-top: 10px; max-width: 640px; }
+
+  h2 { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+       color: var(--ink-3); margin: 44px 0 14px; }
+
+  .options { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .option {
+    display: block; padding: 20px; color: inherit;
+    transition: border-color 0.15s, transform 0.15s;
+  }
+  .option:hover { text-decoration: none; border-color: var(--primary-ink); transform: translateY(-1px); }
+  .option .num {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--primary-ink); margin-bottom: 6px;
+  }
+  .option h3 { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+  .option p { color: var(--ink-2); font-size: 13px; margin-top: 6px; }
+  .option .trade { margin-top: 10px; font-size: 12px; color: var(--ink-3); }
+  .option .trade b { color: var(--ink-2); }
+
+  .option.chosen { border-color: var(--primary-ink); }
+  .pick {
+    display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+    background: var(--primary-soft-2); color: var(--primary-ink);
+    font-size: 10px; letter-spacing: 0.06em;
+  }
+
+  .swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+  .swatch-tile { width: 108px; }
+  .swatch-tile .sq {
+    height: 52px; border-radius: 10px; border: 1px solid var(--border);
+  }
+  .swatch-tile .name { font-size: 11px; font-weight: 600; margin-top: 6px; }
+  .swatch-tile .hex { font-size: 10.5px; color: var(--ink-3); }
+
+  .note {
+    margin-top: 40px; padding: 14px 18px; font-size: 13px; color: var(--ink-2);
+    background: var(--primary-soft); border: 1px solid transparent; border-radius: 12px;
+  }
+  .note b { color: var(--primary-ink); }
+  @media (max-width: 760px) { .options { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="wordmark" href="index.html">tar<span class="x">X</span>iv</a>
+  <span class="faint small">redesign mockups · August 2026</span>
+  <div class="spacer"></div>
+  <button class="icon-btn" onclick="toggleTheme()" title="Toggle theme" id="theme-btn"></button>
+</header>
+
+<div class="container">
+  <h1>TarXiv redesign mockups</h1>
+  <p class="lede">Layout options for the pages being reworked, sharing one visual language:
+  refined arXiv-red palette, neutral surfaces, Inter + JetBrains Mono, live Plotly + Aladin
+  widgets. Toggle light/dark in any page — the choice persists across all of them.</p>
+
+  <h2>Lightcurve page</h2>
+  <div class="options">
+    <a class="card option" href="mockup-1-dense.html">
+      <div class="num">Option 1 · Dense</div>
+      <h3>Mission control</h3>
+      <p>Everything on one screen, zero page scroll: lightcurve, sky view and metadata in a
+         fixed 100vh grid. Tags, citations and JSON move to slide-in drawers.</p>
+      <div class="trade"><b>Trade-off:</b> metadata pane scrolls internally and gets tight on
+         small laptops; low-frequency content is a click away rather than visible.</div>
+    </a>
+
+    <a class="card option chosen" href="mockup-2-balanced.html">
+      <div class="num">Option 2 · Middle ground <span class="pick">chosen</span></div>
+      <h3>Balanced</h3>
+      <p>A summary strip of key facts + lightcurve + sky view all above the fold at 1440×900;
+         full metadata, tags and citations one short scroll below.</p>
+      <div class="trade"><b>Trade-off:</b> the summary strip must choose the "key" fields —
+         the full per-source tables aren't visible without scrolling.</div>
+    </a>
+
+    <a class="card option" href="mockup-3-spacious.html">
+      <div class="num">Option 3 · Spacious</div>
+      <h3>Editorial</h3>
+      <p>Generous whitespace and narrative sections: hero identity block, full-width
+         lightcurve, sky context with host-association highlights, then provenance.</p>
+      <div class="trade"><b>Trade-off:</b> deliberately fails the no-scroll request — included
+         as the other extreme to calibrate against.</div>
+    </a>
+
+    <a class="card option" href="mockup-4-workspace.html">
+      <div class="num">Option 4 · Wildcard</div>
+      <h3>Workspace</h3>
+      <p>A persistent object sidebar (identity, key facts, tags, source links) beside tabbed
+         panels: overview split view, photometry table, metadata, citations, JSON.</p>
+      <div class="trade"><b>Trade-off:</b> a bigger departure from the current page model;
+         tabs hide the panels you're not on.</div>
+    </a>
+  </div>
+
+  <h2>Cone search page</h2>
+  <p class="lede" style="margin:-4px 0 14px;font-size:13px">All four share the same
+  <b>compressed search bar</b> — one row of fields with a <span class="mono">deg ↔ hms:dms</span>
+  toggle that converts in place, replacing today's three stacked OR'd input blocks (~380px of
+  form before a single result). They differ only in how the objects under the sky map are
+  presented.</p>
+  <div class="options">
+    <a class="card option" href="cone-1-rows.html">
+      <div class="num">Option 1 · Compact rows</div>
+      <h3>Dense list</h3>
+      <p>Sky map full width, then one row per object: lightcurve thumbnail, name and type,
+         redshift/peak/host inline, tags, separation right-aligned. Hovering a row highlights
+         its marker.</p>
+      <div class="trade"><b>Trade-off:</b> the closest step from what exists today, so it is the
+         least exciting; facts wrap awkwardly below ~900px.</div>
+    </a>
+
+    <a class="card option" href="cone-2-grid.html">
+      <div class="num">Option 2 · Card grid</div>
+      <h3>Browsable tiles</h3>
+      <p>A responsive grid of cards, each led by a full-width lightcurve thumbnail on an inset
+         surface, then a 2×2 stat block, host, tags and source pills.</p>
+      <div class="trade"><b>Trade-off:</b> roughly 3× the vertical space per object — you see six
+         at a time rather than twenty, so it suits small result sets.</div>
+    </a>
+
+    <a class="card option" href="cone-3-split.html">
+      <div class="num">Option 3 · Split workspace</div>
+      <h3>Sky beside results</h3>
+      <p>Sticky sky map on the left while results scroll on the right. Clicking a row expands a
+         real Plotly lightcurve and full coordinates inline — triage without ever leaving the
+         search.</p>
+      <div class="trade"><b>Trade-off:</b> halves the width available to each result row; collapses
+         to stacked panels below 1080px, losing the side-by-side benefit.</div>
+    </a>
+
+    <a class="card option" href="cone-4-table.html">
+      <div class="num">Option 4 · Data table</div>
+      <h3>Triage grid</h3>
+      <p>Sky map folds away; results become a sortable table with a sparkline column. Click any
+         row to expand its full facts. Built for scanning a large cone quickly.</p>
+      <div class="trade"><b>Trade-off:</b> the least visual of the four, and wide enough to need
+         horizontal scroll on a laptop; tags and host hide until a row is expanded.</div>
+    </a>
+  </div>
+
+  <h2>Shared palette</h2>
+  <div class="swatches" id="brand-swatches"></div>
+
+  <h2>Filter colours (validated)</h2>
+  <p class="lede" style="margin:0 0 14px;font-size:13px">Checked with a colour-vision-deficiency
+  palette validator (all-pairs, both themes) against the card surfaces — replacing the current CSS
+  named colours. Marker shapes differ per filter as secondary encoding, and every mockup ships a
+  photometry table view.</p>
+  <div class="swatches" id="filter-swatches"></div>
+
+  <div class="note"><b>Viewing notes:</b> widgets load Plotly and Aladin Lite from CDN, so these
+  pages need network access. Lightcurve option 1 targets ≥1280×800 for its no-scroll guarantee.
+  Nothing in the app codebase is modified — these are standalone HTML files in
+  <span class="mono">mockups/</span>.</div>
+
+  <div class="note"><b>Cone search needs backend work, not just CSS:</b> the
+  <span class="mono">/cone_search</span> endpoint returns exactly four fields per object today —
+  <span class="mono">obj_name</span>, <span class="mono">ra</span>, <span class="mono">dec</span>,
+  <span class="mono">distance_deg</span>. Every richer thing shown here — type, redshift, host,
+  peak magnitude, detection counts, tags and the lightcurve thumbnails — needs the results to be
+  enriched from object metadata first. <span class="mono">format_cone_search_results()</span>
+  already takes an unused <span class="mono">txv_db</span> argument, which is the intended hook.
+  Object names, coordinates and photometry on these pages are generated placeholders.</div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+  document.getElementById("theme-btn").innerHTML = ICONS.sun + ICONS.moon;
+
+  const brand = [
+    ["Primary", "#b31b1b"], ["Primary hover", "#971616"], ["Red on dark", "#e06058"],
+    ["Bg light", "#f7f7f8"], ["Card light", "#ffffff"],
+    ["Bg dark", "#121617"], ["Card dark", "#1c2224"],
+  ];
+  document.getElementById("brand-swatches").innerHTML = brand.map(([n, h]) =>
+    `<div class="swatch-tile"><div class="sq" style="background:${h}"></div>
+     <div class="name">${n}</div><div class="hex mono">${h}</div></div>`).join("");
+
+  const renderFilters = () => {
+    const t = currentTheme();
+    document.getElementById("filter-swatches").innerHTML =
+      Object.entries(FILTER_STYLE).map(([n, s]) =>
+        `<div class="swatch-tile"><div class="sq" style="background:${s[t]}"></div>
+         <div class="name">${n}</div><div class="hex mono">${s[t]} · ${s.symbol}</div></div>`).join("");
+  };
+  renderFilters();
+  onThemeChange(renderFilters);
+</script>
+</body>
+</html>
