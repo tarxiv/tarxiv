@@ -1,10 +1,13 @@
 """
 Python script to export/import/back up the database to/from JSON.
 
-Used initially to create a small example database for testing purposes, and to
-take rotated backups of the couchbase scopes (``--backup``).
+``--backup`` / ``--load-all`` dump and restore every scope/collection in the
+bucket as gzipped JSON Lines (one ``{"scope", "collection", "id", "doc"}`` per
+line). This is a portable, Couchbase-version-independent copy; the primary
+nightly backup is ``scripts/backup_couchbase.sh`` (cbbackupmgr).
 
-Supports two couchbase layouts via ``--legacy``:
+``--dump`` / ``--load`` use the example-dataset format (object meta + lightcurve
+keyed by object id) and support two couchbase layouts via ``--legacy``:
 
 * new (default): metadata under the ``objects`` scope (``tarxiv.objects.meta``)
 * old/legacy: metadata under the ``tns`` scope (``tarxiv.tns.objects``)
@@ -16,17 +19,20 @@ import json
 import os
 import re
 import glob
+import gzip
 import datetime
 import argparse
 import sys
 import time
+from fnmatch import fnmatch
 
 from couchbase.exceptions import (
     AmbiguousTimeoutException,
-    CollectionNotFoundException,
-    ScopeNotFoundException,
     UnAmbiguousTimeoutException,
 )
+from couchbase.kv_range_scan import RangeScan
+from couchbase.options import ScanOptions
+from couchbase.transcoder import Transcoder
 
 from tarxiv.database import TarxivDB
 
@@ -134,14 +140,14 @@ KEEP_DAILY_DAYS = int(os.environ.get("TARXIV_KEEP_DAILY_DAYS", 7))
 KEEP_WEEKLY_DAYS = int(os.environ.get("TARXIV_KEEP_WEEKLY_DAYS", 90))
 KEEP_MONTHLY_DAYS = int(os.environ.get("TARXIV_KEEP_MONTHLY_DAYS", 365))
 
-# Matches the timestamp in "<prefix>-YYYYMMDD-HHMMSS.json" backup filenames.
-_BACKUP_STAMP_RE = re.compile(r"-(\d{8})-(\d{6})\.json$")
+# Matches the timestamp in "<prefix>-YYYYMMDD-HHMMSS.jsonl[.gz]" backup filenames.
+_BACKUP_STAMP_RE = re.compile(r"-(\d{8})-(\d{6})\.jsonl(\.gz)?$")
 
 
 def _gfs_rotate(backup_dir, prefix, today=None):
     """Apply grandfather-father-son rotation to a set of backup files.
 
-    Operates on ``<backup_dir>/<prefix>-YYYYMMDD-HHMMSS.json`` files. Keeps every
+    Operates on ``<backup_dir>/<prefix>-YYYYMMDD-HHMMSS.jsonl[.gz]`` files. Keeps every
     backup from the last ``KEEP_DAILY_DAYS`` days, then one per week up to
     ``KEEP_WEEKLY_DAYS``, then one per month up to ``KEEP_MONTHLY_DAYS``, and
     deletes the rest. Because the files are processed newest-first and the
@@ -151,7 +157,7 @@ def _gfs_rotate(backup_dir, prefix, today=None):
     """
     today = today or datetime.date.today()
     paths = sorted(
-        glob.glob(os.path.join(backup_dir, f"{prefix}-*.json")), reverse=True
+        glob.glob(os.path.join(backup_dir, f"{prefix}-*.jsonl*")), reverse=True
     )
 
     last_week = last_month = None
@@ -187,48 +193,135 @@ def _gfs_rotate(backup_dir, prefix, today=None):
     return removed
 
 
-def backup_couchbase(backup_dir=None, layouts=("new", "old"), limit=None):
-    """Back up the couchbase scopes to timestamped JSON files, with GFS rotation.
+def _matches(scope, collection, include):
+    """True if ``include`` is empty or a glob matches ``scope`` or ``scope.collection``."""
+    return not include or any(
+        fnmatch(scope, p) or fnmatch(f"{scope}.{collection}", p) for p in include
+    )
 
-    Each layout in ``layouts`` is dumped (meta + lightcurves, see
-    ``dump_database_to_json``) to ``couchbase-<scope>-YYYYMMDD-HHMMSS.json`` and
-    the GFS rotation is then applied per-scope. A scope that doesn't exist (e.g.
-    the legacy ``tns`` scope on a new-schema database) is skipped. A scope that
-    exists but fails to dump is logged and skipped rather than aborting the whole
-    backup, and reported as failed. Returns ``(written, failed)``: the files
-    written this run and the scopes that failed.
+
+def list_collections(db, include=None):
+    """Return ``[(scope, collection), ...]`` for every collection in the bucket.
+
+    The ``_system`` scope is skipped. ``include`` optionally narrows the list to
+    scopes/collections matching any of its globs (e.g. ``misc`` or ``xmatch.*``).
+    """
+    return [
+        (scope.name, coll.name)
+        for scope in db.conn.collections().get_all_scopes()
+        if scope.name != "_system"
+        for coll in scope.collections
+        if _matches(scope.name, coll.name, include)
+    ]
+
+
+class _RawTranscoder(Transcoder):
+    """Return document bytes untouched, whatever their flags.
+
+    ``misc.idx`` holds binary-increment counters rather than JSON-flagged docs,
+    which the default JSON transcoder can refuse; their body is still valid JSON.
+    """
+
+    def encode_value(self, value):
+        raise NotImplementedError("read-only transcoder")
+
+    def decode_value(self, value, flags):
+        return bytes(value)
+
+
+def _write_collection(raw, db, scope, collection):
+    """Range-scan one collection into ``raw`` as a gzip member of JSON lines."""
+    coll = db.conn.scope(scope).collection(collection)
+    count = 0
+    with gzip.GzipFile(fileobj=raw, mode="wb") as out:
+        for res in coll.scan(RangeScan(), ScanOptions(transcoder=_RawTranscoder())):
+            doc = json.loads(res.content_as[bytes])
+            line = {"scope": scope, "collection": collection, "id": res.id, "doc": doc}
+            out.write(json.dumps(line).encode() + b"\n")
+            count += 1
+    return count
+
+
+def dump_collections(filename, collections, db, attempts=GET_ATTEMPTS):
+    """Dump ``collections`` to a gzipped JSON Lines file with KV range scans.
+
+    Each collection is written as its own gzip member (concatenated members are
+    a valid gzip file), so a scan that times out part-way is truncated away and
+    retried with backoff (1s, 2s, 4s, ...). A collection that still fails is
+    left out and reported. Returns ``(counts, failed)``: docs written per
+    ``"scope.collection"`` and the names that failed.
+    """
+    counts, failed = {}, []
+    with open(filename, "wb") as raw:
+        for scope, collection in collections:
+            name = f"{scope}.{collection}"
+            start = raw.tell()
+            for attempt in range(attempts):
+                try:
+                    counts[name] = _write_collection(raw, db, scope, collection)
+                    break
+                except Exception as exc:
+                    raw.seek(start)
+                    raw.truncate()
+                    if isinstance(exc, _TIMEOUT_EXCEPTIONS) and attempt < attempts - 1:
+                        time.sleep(2**attempt)
+                        continue
+                    print(f"FAILED collection '{name}': {exc!r}")
+                    failed.append(name)
+                    break
+    return counts, failed
+
+
+def load_collections(filename, scope_map=None, include=None):
+    """Upsert every doc from a ``dump_collections`` file back into couchbase.
+
+    ``scope_map`` renames scopes on the way in (``{"misc": "misc_restore"}``),
+    like ``cbbackupmgr --map-data``; the target scope/collection must exist.
+    ``include`` filters by the original scope/collection (see ``list_collections``).
+    Returns the number of docs loaded.
+    """
+    scope_map = scope_map or {}
+    db = TarxivDB("pipeline", "utils-load", 1)
+    opener = gzip.open if filename.endswith(".gz") else open
+    count = 0
+    with opener(filename, "rt") as f:
+        for line in f:
+            rec = json.loads(line)
+            if not _matches(rec["scope"], rec["collection"], include):
+                continue
+            scope = scope_map.get(rec["scope"], rec["scope"])
+            db.upsert(rec["id"], rec["doc"], scope=scope, collection=rec["collection"])
+            count += 1
+    return count
+
+
+def backup_couchbase(backup_dir=None, include=None):
+    """Back up every collection in the bucket to one timestamped JSONL file.
+
+    Writes ``couchbase-tarxiv-YYYYMMDD-HHMMSS.jsonl.gz`` (via a ``.partial`` file
+    and an atomic rename), then applies GFS rotation. If any collection failed
+    the file is still kept, since the rest of it is valid, but rotation is
+    skipped so a partial backup never pushes out a complete one. Returns
+    ``(dest, failed)``.
     """
     backup_dir = backup_dir or os.environ.get(
         "TARXIV_COUCHBASE_BACKUP_DIR", ".data/couchbase/backups"
     )
     os.makedirs(backup_dir, exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    prefix = "couchbase-tarxiv"
+    dest = os.path.join(backup_dir, f"{prefix}-{timestamp}.jsonl.gz")
+    tmp = f"{dest}.partial"
 
-    written, failed = [], []
-    for layout in layouts:
-        scope = SCHEMA_LAYOUTS[layout]["scope"]
-        prefix = f"couchbase-{scope}"
-        dest = os.path.join(backup_dir, f"{prefix}-{timestamp}.json")
-        # Write to a .partial file first so an interrupted dump never looks like
-        # a usable backup; only atomically rename once it completes.
-        tmp = f"{dest}.partial"
-        try:
-            count = dump_database_to_json(filename=tmp, limit=limit, layout=layout)
-        except Exception as exc:
-            if os.path.exists(tmp):
-                os.remove(tmp)
-            if isinstance(exc, (ScopeNotFoundException, CollectionNotFoundException)):
-                print(f"Skipping scope '{scope}' ({layout} layout): not found")
-            else:
-                print(f"FAILED scope '{scope}' ({layout} layout): {exc}")
-                failed.append(scope)
-            continue
-        os.replace(tmp, dest)
-        written.append(dest)
-        print(f"Backed up scope '{scope}' -> {dest} ({count} objects)")
+    db = TarxivDB("pipeline", "utils-backup", 1)
+    counts, failed = dump_collections(tmp, list_collections(db, include), db)
+    os.replace(tmp, dest)
+    for name, count in counts.items():
+        print(f"  {name}: {count} docs")
+    print(f"Backed up {len(counts)} collection(s) -> {dest}")
+    if not failed:
         _gfs_rotate(backup_dir, prefix)
-
-    return written, failed
+    return dest, failed
 
 
 def build_argparser():
@@ -249,9 +342,31 @@ def build_argparser():
         "-b",
         action="store_true",
         help=(
-            "Back up both couchbase scopes to timestamped JSON files with GFS "
-            "rotation (daily for a week, weekly for 3 months, monthly for a year)."
+            "Back up every couchbase scope/collection to a timestamped "
+            "JSONL.gz file with GFS rotation (daily for a week, weekly for 3 "
+            "months, monthly for a year)."
         ),
+    )
+    argparser.add_argument(
+        "--load-all",
+        action="store_true",
+        help="Load a --backup JSONL(.gz) file (given with --filename) into couchbase.",
+    )
+    argparser.add_argument(
+        "--scope",
+        action="append",
+        default=None,
+        help=(
+            "Only back up / load scopes or collections matching this glob "
+            "(e.g. misc, 'xmatch.*'). Repeatable."
+        ),
+    )
+    argparser.add_argument(
+        "--map",
+        action="append",
+        default=[],
+        metavar="OLD=NEW",
+        help="With --load-all, load scope OLD into scope NEW. Repeatable.",
     )
     argparser.add_argument(
         "--backup-dir",
@@ -289,16 +404,20 @@ def main(argv=None):
     args = build_argparser().parse_args(argv)
     layout = "old" if args.legacy else "new"
     if args.backup:
-        _, failed = backup_couchbase(args.backup_dir, limit=args.limit)
+        _, failed = backup_couchbase(args.backup_dir, include=args.scope)
         if failed:
             # Non-zero exit so a partial backup shows up in cron, not just the log.
-            sys.exit(f"Backup failed for scope(s): {', '.join(failed)}")
+            sys.exit(f"Backup failed for collection(s): {', '.join(failed)}")
+    elif args.load_all:
+        scope_map = dict(m.split("=", 1) for m in args.map)
+        count = load_collections(args.filename, scope_map, include=args.scope)
+        print(f"Loaded {count} docs from {args.filename}")
     elif args.load:
         load_database_from_json(args.filename, layout=layout)
     elif args.dump:
         dump_database_to_json(args.filename, args.limit, layout=layout)
     else:
-        print("Please specify either --dump, --load or --backup.")
+        print("Please specify one of --dump, --load, --backup or --load-all.")
 
 
 if __name__ == "__main__":

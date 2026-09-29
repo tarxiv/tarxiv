@@ -23,7 +23,7 @@
 ## Local Services
 - Full local stack lives under `setup/`. Start from `setup/.env.sample` copied to `setup/.env`.
 - Compose startup order matters for local integration: run `docker compose run setup_elasticsearch` before bringing up the main services.
-- A bare `docker compose up` starts only the backing stores (elasticsearch, couchbase, postgres, redis). Everything else is behind a profile: `logging` (logstash, kibana), `kafka` (broker, schema registry, connect, rest proxy, kafbat-ui, prometheus), `monitoring` (prometheus), `tools` (adminer), `tarxiv` (migrate, api, dashboard), `proxy` (nginx). Naming a service on the command line auto-enables its profile.
+- A bare `docker compose up` starts only the backing stores (elasticsearch, couchbase, postgres, redis). Everything else is behind a profile: `logging` (logstash, kibana), `kafka` (broker, schema registry, connect, rest proxy, kafbat-ui, prometheus), `monitoring` (prometheus), `tools` (adminer), `tarxiv` (migrate, api, dashboard), `proxy` (nginx), `backup` (one-shot `cbbackupmgr` runner used by `scripts/backup_couchbase.sh`). Naming a service on the command line auto-enables its profile.
 - Couchbase bootstrap is slow enough that CI explicitly waits for the pipeline user to exist before loading data or starting the app.
 - Local Docker on macOS may need significantly more memory; `setup/README.md` calls out up to 12 GB.
 - Useful integration sequence from CI:

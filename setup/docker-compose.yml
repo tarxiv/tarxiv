@@ -155,6 +155,18 @@ services:
       TARXIV_COUCHBASE_BUCKET_SIZE: ${TARXIV_COUCHBASE_BUCKET_SIZE:-2048}
     restart: unless-stopped
 
+  # One-shot cbbackupmgr runner (see scripts/backup_couchbase.sh). Same image as
+  # the cluster so the tool version matches; the live couchbase container is untouched.
+  couchbase-backup:
+    image: couchbase:latest
+    profiles:
+      - backup
+    entrypoint: ["/opt/couchbase/bin/cbbackupmgr"]
+    volumes:
+      - ${TARXIV_COUCHBASE_ARCHIVE_DIR:-./.data/couchbase-archive}:/backups:Z
+    networks:
+      - tarxiv_net
+
   redis:
     image: redis:latest
     volumes:
