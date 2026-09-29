@@ -18,6 +18,15 @@ import re
 import glob
 import datetime
 import argparse
+import sys
+import time
+
+from couchbase.exceptions import (
+    AmbiguousTimeoutException,
+    CollectionNotFoundException,
+    ScopeNotFoundException,
+    UnAmbiguousTimeoutException,
+)
 
 from tarxiv.database import TarxivDB
 
@@ -37,11 +46,37 @@ def _list_object_ids(db, scope, collection):
     return [row["id"] for row in db.query(statement)]
 
 
+# A full dump is ~400k sequential gets, so the odd transient KV timeout is
+# expected; retry those rather than losing the whole scope. Anything that still
+# fails after the last attempt is re-raised so a backup never silently omits
+# objects.
+GET_ATTEMPTS = 5
+_TIMEOUT_EXCEPTIONS = (AmbiguousTimeoutException, UnAmbiguousTimeoutException)
+
+# Print a progress line every N objects while dumping.
+PROGRESS_EVERY = 50_000
+
+
+def _get_with_retry(db, doc_id, scope, collection, attempts=GET_ATTEMPTS):
+    """``db.get`` with exponential backoff (1s, 2s, 4s, ...) on KV timeouts."""
+    for attempt in range(attempts):
+        try:
+            return db.get(doc_id, scope=scope, collection=collection)
+        except _TIMEOUT_EXCEPTIONS:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(2**attempt)
+
+
 def dump_database_to_json(filename=None, limit=None, layout="new"):
     """Export the database to a JSON file, optionally only the first ``limit`` objects.
 
     ``layout`` selects the couchbase scope/collections to read from: ``"new"``
     (the current ``objects`` scope) or ``"old"`` (the legacy ``tns`` scope).
+
+    The file is a single JSON object keyed by object id, but it is written one
+    object at a time so memory stays flat regardless of the scope size. Returns
+    the number of objects written.
     """
     if not filename:
         filename = os.environ.get("DATABASE_EXPORT_FILENAME", "database_export.json")
@@ -51,19 +86,25 @@ def dump_database_to_json(filename=None, limit=None, layout="new"):
     # Create database connection
     db = TarxivDB("pipeline", "utils-dump", 1)
 
-    # get objects and create dictionaries to export to JSON
+    # get objects and stream them to the JSON file
     obj_list = _list_object_ids(db, paths["scope"], paths["meta"])
     if limit:
         obj_list = obj_list[:limit]
-    database_json = {}
-    for obj in obj_list:
-        meta = db.get(obj, scope=paths["scope"], collection=paths["meta"])
-        lc = db.get(obj, scope=paths["scope"], collection=paths["lc"])
-        database_json[obj] = {"meta": meta, "lc": lc}
-
-    # write to JSON file
     with open(filename, mode="w") as f:
-        json.dump(database_json, f)
+        f.write("{")
+        for i, obj in enumerate(obj_list):
+            meta = _get_with_retry(db, obj, paths["scope"], paths["meta"])
+            lc = _get_with_retry(db, obj, paths["scope"], paths["lc"])
+            if i:
+                f.write(", ")
+            f.write(json.dumps(obj))
+            f.write(": ")
+            json.dump({"meta": meta, "lc": lc}, f)
+            if (i + 1) % PROGRESS_EVERY == 0:
+                print(f"  {paths['scope']}: {i + 1}/{len(obj_list)} objects")
+        f.write("}")
+
+    return len(obj_list)
 
 
 def load_database_from_json(filename=None, layout="new"):
@@ -151,10 +192,11 @@ def backup_couchbase(backup_dir=None, layouts=("new", "old"), limit=None):
 
     Each layout in ``layouts`` is dumped (meta + lightcurves, see
     ``dump_database_to_json``) to ``couchbase-<scope>-YYYYMMDD-HHMMSS.json`` and
-    the GFS rotation is then applied per-scope. A scope that is missing or fails
-    to dump (e.g. the legacy ``tns`` scope on a new-schema database) is logged
-    and skipped rather than aborting the whole backup. Returns the list of files
-    written this run.
+    the GFS rotation is then applied per-scope. A scope that doesn't exist (e.g.
+    the legacy ``tns`` scope on a new-schema database) is skipped. A scope that
+    exists but fails to dump is logged and skipped rather than aborting the whole
+    backup, and reported as failed. Returns ``(written, failed)``: the files
+    written this run and the scopes that failed.
     """
     backup_dir = backup_dir or os.environ.get(
         "TARXIV_COUCHBASE_BACKUP_DIR", ".data/couchbase/backups"
@@ -162,7 +204,7 @@ def backup_couchbase(backup_dir=None, layouts=("new", "old"), limit=None):
     os.makedirs(backup_dir, exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
-    written = []
+    written, failed = [], []
     for layout in layouts:
         scope = SCHEMA_LAYOUTS[layout]["scope"]
         prefix = f"couchbase-{scope}"
@@ -171,18 +213,22 @@ def backup_couchbase(backup_dir=None, layouts=("new", "old"), limit=None):
         # a usable backup; only atomically rename once it completes.
         tmp = f"{dest}.partial"
         try:
-            dump_database_to_json(filename=tmp, limit=limit, layout=layout)
+            count = dump_database_to_json(filename=tmp, limit=limit, layout=layout)
         except Exception as exc:
-            print(f"Skipping scope '{scope}' ({layout} layout): {exc}")
             if os.path.exists(tmp):
                 os.remove(tmp)
+            if isinstance(exc, (ScopeNotFoundException, CollectionNotFoundException)):
+                print(f"Skipping scope '{scope}' ({layout} layout): not found")
+            else:
+                print(f"FAILED scope '{scope}' ({layout} layout): {exc}")
+                failed.append(scope)
             continue
         os.replace(tmp, dest)
         written.append(dest)
-        print(f"Backed up scope '{scope}' -> {dest}")
+        print(f"Backed up scope '{scope}' -> {dest} ({count} objects)")
         _gfs_rotate(backup_dir, prefix)
 
-    return written
+    return written, failed
 
 
 def build_argparser():
@@ -243,7 +289,10 @@ def main(argv=None):
     args = build_argparser().parse_args(argv)
     layout = "old" if args.legacy else "new"
     if args.backup:
-        backup_couchbase(args.backup_dir, limit=args.limit)
+        _, failed = backup_couchbase(args.backup_dir, limit=args.limit)
+        if failed:
+            # Non-zero exit so a partial backup shows up in cron, not just the log.
+            sys.exit(f"Backup failed for scope(s): {', '.join(failed)}")
     elif args.load:
         load_database_from_json(args.filename, layout=layout)
     elif args.dump:

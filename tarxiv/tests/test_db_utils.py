@@ -12,6 +12,7 @@ import os
 from unittest.mock import MagicMock
 
 import pytest
+from couchbase.exceptions import ScopeNotFoundException, UnAmbiguousTimeoutException
 
 _DB_UTILS_PATH = os.path.join(
     os.path.dirname(__file__), "..", "..", "scripts", "db_utils.py"
@@ -124,3 +125,66 @@ def test_main_legacy_flag_selects_old_layout(db_utils, monkeypatch, tmp_path):
     db_utils.main(["--dump", "--legacy", "--filename", str(tmp_path / "x.json")])
 
     assert captured["layout"] == "old"
+
+
+@pytest.fixture
+def no_sleep(db_utils, monkeypatch):
+    monkeypatch.setattr(db_utils.time, "sleep", lambda s: None)
+
+
+def test_dump_retries_transient_timeouts(db_utils, fake_db, no_sleep, tmp_path):
+    fake_db.query.return_value = [{"id": "2023ldd"}]
+    fake_db.get.side_effect = [UnAmbiguousTimeoutException(), {"m": 1}, [{"mjd": 1.0}]]
+    out = tmp_path / "dump.json"
+
+    assert db_utils.dump_database_to_json(str(out), layout="old") == 1
+
+    assert json.loads(out.read_text()) == {
+        "2023ldd": {"meta": {"m": 1}, "lc": [{"mjd": 1.0}]}
+    }
+
+
+def test_dump_streams_valid_json_that_loads_back(db_utils, fake_db, tmp_path):
+    ids = ["a", "b", "c"]
+    fake_db.query.return_value = [{"id": i} for i in ids]
+    fake_db.get.side_effect = lambda obj, scope, collection: {"id": obj}
+    out = tmp_path / "dump.json"
+
+    db_utils.dump_database_to_json(str(out), layout="new")
+    db_utils.load_database_from_json(str(out), layout="new")
+
+    assert list(json.loads(out.read_text())) == ids
+    assert {c.args[0] for c in fake_db.upsert.call_args_list} == set(ids)
+
+
+def test_backup_reports_scope_that_keeps_timing_out(
+    db_utils, fake_db, no_sleep, tmp_path
+):
+    fake_db.query.return_value = [{"id": "2023ldd"}]
+    fake_db.get.side_effect = UnAmbiguousTimeoutException()
+
+    written, failed = db_utils.backup_couchbase(str(tmp_path), layouts=("old",))
+
+    assert written == []
+    assert failed == ["tns"]
+    assert fake_db.get.call_count == db_utils.GET_ATTEMPTS
+    assert os.listdir(tmp_path) == []  # no .partial left behind
+
+
+def test_backup_skips_missing_scope_without_failing(db_utils, fake_db, tmp_path):
+    fake_db.query.side_effect = ScopeNotFoundException()
+
+    written, failed = db_utils.backup_couchbase(str(tmp_path), layouts=("old",))
+
+    assert (written, failed) == ([], [])
+
+
+def test_main_backup_exits_nonzero_on_failed_scope(db_utils, monkeypatch):
+    monkeypatch.setattr(
+        db_utils, "backup_couchbase", lambda *a, **k: (["x.json"], ["tns"])
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        db_utils.main(["--backup"])
+
+    assert "tns" in str(exc.value.code)
