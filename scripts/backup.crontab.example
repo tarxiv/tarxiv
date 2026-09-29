@@ -39,7 +39,7 @@ TARXIV_COUCHBASE_BACKUP_DIR=/srv/backups/tarxiv/couchbase
 30   2    *    *    *    cd $TARXIV_REPO && ./scripts/backup_postgres.sh >> /var/log/tarxiv/pg-backup.log 2>&1
 
 # Couchbase dump (both scopes) every day at 03:00.
-0    3    *    *    *    cd $TARXIV_REPO && uv run python scripts/db_utils.py --backup >> /var/log/tarxiv/couchbase-backup.log 2>&1
+0    3    *    *    *    cd $TARXIV_REPO && uv run --env-file setup/.env python scripts/db_utils.py --backup >> /var/log/tarxiv/couchbase-backup.log 2>&1
 
 # ---------------------------------------------------------------------------
 # Notes

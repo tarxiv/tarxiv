@@ -134,8 +134,11 @@ else
 fi
 
 # --- Sanity-check the DB is reachable before we start -----------------------
-if ! "${COMPOSE[@]}" exec -T "${PG_SERVICE}" pg_isready -U "${PG_USER}" >/dev/null 2>&1; then
-  log "ERROR: Postgres service '${PG_SERVICE}' is not ready. Is the stack up?"
+# Keep compose's output: a missing/incomplete setup/.env makes compose itself
+# fail to parse, which would otherwise be misreported as the DB being down.
+if ! PG_READY_OUT="$("${COMPOSE[@]}" exec -T "${PG_SERVICE}" pg_isready -U "${PG_USER}" 2>&1)"; then
+  log "ERROR: Postgres service '${PG_SERVICE}' is not ready. Is the stack up? Is setup/.env present?"
+  log "compose output: ${PG_READY_OUT}"
   exit 1
 fi
 
