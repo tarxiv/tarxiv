@@ -346,6 +346,10 @@ def build_lightcurve_body():
             dcc.Loading(
                 dcc.Graph(
                     id={"type": "themeable-plot", "index": "lightcurve-plot"},
+                    # Start with a figure: update_all_plots_theme Patches
+                    # figure.layout.template and can land before the plot
+                    # callback, and Dash cannot patch an undefined prop.
+                    figure={"data": [], "layout": {}},
                     style={"height": f"{PLOT_HEIGHT_PX}px", "width": "100%"},
                     config={"responsive": True, "displaylogo": False},
                 ),
