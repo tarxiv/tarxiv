@@ -875,9 +875,10 @@ def render_comment(comment, user_id, owned_team_ids):
             dmc.Text(
                 "[deleted]" if deleted else comment["body"],
                 size="sm",
-                c="dimmed" if deleted else None,
-                fs="italic" if deleted else None,
                 style={"whiteSpace": "pre-wrap", "overflowWrap": "anywhere"},
+                # Only pass these when set: c=None reaches Mantine as null and
+                # it rejects null colours ("expected string, got object").
+                **({"c": "dimmed", "fs": "italic"} if deleted else {}),
             ),
             dmc.Group(actions, gap=0),
         ],
@@ -923,7 +924,8 @@ def render_comments_panel(comments, user_id, teams):
                 placeholder="Write a comment",
                 autosize=True,
                 minRows=2,
-                maxLength=5000,
+                # No maxLength: dmc 2.6 Textarea doesn't support it. The API
+                # enforces the 5000-char cap and the error shows in the banner.
                 size="xs",
             ),
             dmc.Group(

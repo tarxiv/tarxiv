@@ -315,3 +315,64 @@ def test_comment_count_helpers(monkeypatch):
     monkeypatch.setattr(comments.requests, "post", post)
     assert comments.fetch_comment_counts(["2024abc"], None, MagicMock()) == {}
     post.assert_not_called()
+
+
+def test_comments_panel_builds(lightcurve_module):
+    # Constructing the panel validates every dmc prop (dmc raises TypeError on
+    # unknown props), which unit tests of the list alone never exercised.
+    comment = {
+        "id": "a",
+        "parent_id": None,
+        "author_id": "u-me",
+        "author_name": "me",
+        "owner_type": "team",
+        "owner_id": "t-1",
+        "owner_name": "hubble",
+        "body": "text",
+        "deleted": False,
+        "created_at": "2026-11-05T10:00:00",
+        "updated_at": "2026-11-05T11:00:00",
+    }
+    teams = [{"team_id": "t-1", "team_name": "hubble", "role": "owner"}]
+
+    panel = lightcurve_module.render_comments_panel([comment], "u-me", teams)
+
+    ids = collect_component_ids(panel)
+    assert {"comment-body", "comment-owner-select", "comment-submit"} <= ids
+    assert lightcurve_module.render_comments_panel([], "u-me", []) is not None
+
+
+def _none_props(component) -> list[str]:
+    """Props explicitly set to None anywhere in the tree (they reach JS as null)."""
+    if not isinstance(component, Component):
+        return []
+    found = [
+        f"{type(component).__name__}.{name}"
+        for name in component._prop_names
+        if name in component.__dict__ and component.__dict__[name] is None
+    ]
+    children = getattr(component, "children", None)
+    if isinstance(children, Component):
+        children = [children]
+    for child in children if isinstance(children, (list, tuple)) else []:
+        found += _none_props(child)
+    return found
+
+
+@pytest.mark.parametrize("deleted", [False, True])
+def test_rendered_comment_has_no_null_props(lightcurve_module, deleted):
+    # Mantine rejects null for props like `c` ("Failed to parse color").
+    comment = {
+        "id": "a",
+        "parent_id": None,
+        "author_id": "u-me",
+        "author_name": "me",
+        "owner_type": "user",
+        "owner_id": "u-me",
+        "body": "" if deleted else "text",
+        "deleted": deleted,
+        "created_at": "2026-11-05T10:00:00",
+        "updated_at": "2026-11-05T10:00:00",
+    }
+    rendered = lightcurve_module.render_comment(comment, "u-me", set())
+    assert _none_props(rendered) == []
