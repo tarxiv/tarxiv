@@ -9,6 +9,7 @@ from dash import dcc, html
 from dash_iconify import DashIconify
 
 from ..styles import CARD_STYLE
+from .comments import comment_count_badge
 from .object_view import (
     build_hero_grid,
     build_key_facts,
@@ -737,6 +738,7 @@ def build_cone_result_card(idx: int, obj: dict):
                         f"Distance: {distance_arcsec:.2f}″",
                         style={"fontStyle": "italic"},
                     ),
+                    comment_count_badge(obj.get("comment_count")),
                 ],
                 style={"padding": "15px"},
             ),

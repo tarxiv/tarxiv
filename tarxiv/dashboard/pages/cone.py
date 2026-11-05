@@ -31,6 +31,7 @@ from ..components import (
     format_cone_search_results,
     build_cone_result_cards_page,
     create_message_banner,
+    fetch_comment_counts,
 )
 from ...dto import ConeSearchResponseModel
 
@@ -433,6 +434,9 @@ def render_cone_search(ra, dec, radius, token, logger):
 
     try:
         results = get_cone_search_results(ra, dec, radius, token, logger)
+        counts = fetch_comment_counts([r["obj_name"] for r in results], token, logger)
+        for r in results:
+            r["comment_count"] = counts.get(r["obj_name"], 0)
 
         result = format_cone_search_results(results, ra, dec)
         success_banner = create_message_banner(

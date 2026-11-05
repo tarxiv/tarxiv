@@ -223,3 +223,95 @@ def test_tagging_panel_handles_no_assigned_tags(lightcurve_module):
     panel = lightcurve_module.render_tagging_panel("2023ixf", [], [])
 
     assert "assign-object-tag-select" in collect_component_ids(panel)
+
+
+def test_empty_layout_contains_comment_targets(lightcurve_module, monkeypatch):
+    # load_object_comments_panel fires on page load, so its outputs must exist.
+    ids = collect_component_ids(_render_empty_layout(lightcurve_module, monkeypatch))
+    for target in (
+        "object-comments-container",
+        "lightcurve-comments-store",
+        "lightcurve-user-teams-store",
+        "comment-composer-store",
+    ):
+        assert target in ids
+
+
+def _comment_actions(component) -> list[tuple[str, str]]:
+    """(action, comment_id) for every comment-action button, in render order."""
+    found = []
+    if not isinstance(component, Component):
+        return found
+    comp_id = getattr(component, "id", None)
+    if isinstance(comp_id, dict) and comp_id.get("type") == "comment-action":
+        found.append((comp_id["action"], comp_id["comment_id"]))
+    children = getattr(component, "children", None)
+    if isinstance(children, Component):
+        children = [children]
+    for child in children or []:
+        found += _comment_actions(child)
+    return found
+
+
+def test_comment_list_groups_replies_and_gates_actions(lightcurve_module):
+    me, other, team = "u-me", "u-other", "t-1"
+
+    def comment(cid, author, parent=None, deleted=False, owner=("team", team)):
+        return {
+            "id": cid,
+            "parent_id": parent,
+            "author_id": author,
+            "author_name": author,
+            "owner_type": owner[0],
+            "owner_id": owner[1],
+            "body": "" if deleted else "text",
+            "deleted": deleted,
+            "created_at": "2026-11-05T10:00:00",
+            "updated_at": "2026-11-05T10:00:00",
+        }
+
+    comments = [
+        comment("a", other),
+        comment("b", me),
+        comment("a1", me, parent="a"),  # reply to "a", posted after "b"
+        comment("c", other, deleted=True),
+    ]
+
+    # Plain member: only their own comments can be edited or deleted.
+    rendered = lightcurve_module.render_comment_list(
+        comments, me, [{"team_id": team, "role": "member"}]
+    )
+    actions = [a for item in rendered for a in _comment_actions(item)]
+    assert actions == [
+        ("reply", "a"),
+        # the reply renders straight after its parent and cannot be replied to
+        ("edit", "a1"),
+        ("delete", "a1"),
+        ("reply", "b"),
+        ("edit", "b"),
+        ("delete", "b"),
+        ("reply", "c"),  # tombstones still take replies, nothing else
+    ]
+
+    # Team owner: can also delete other people's team comments.
+    rendered = lightcurve_module.render_comment_list(
+        comments, me, [{"team_id": team, "role": "owner"}]
+    )
+    actions = [a for item in rendered for a in _comment_actions(item)]
+    assert ("delete", "a") in actions
+    assert ("edit", "a") not in actions
+    assert ("delete", "c") not in actions
+
+
+def test_comment_count_helpers(monkeypatch):
+    from tarxiv.dashboard.components import comments
+
+    assert comments.comment_count_badge(0) is None
+    assert comments.comment_count_badge(None) is None
+    assert comments.comment_count_badge(2).children == "2"
+
+    # Logged out: no request, no counts.
+    post = MagicMock()
+    monkeypatch.setattr(comments.requests, "post", post)
+    assert comments.fetch_comment_counts(["2024abc"], None, MagicMock()) == {}
+    post.assert_not_called()

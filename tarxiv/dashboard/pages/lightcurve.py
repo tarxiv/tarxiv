@@ -29,6 +29,7 @@ from ...dto import (
 from ...auth import (
     get_jwt_from_request,
     validate_token,
+    verify_token,
     TokenStatus,
 )
 import requests
@@ -85,6 +86,13 @@ def layout(id=None, **kwargs):
             dcc.Store(
                 id="lightcurve-object-tags-store", storage_type="memory", data=[]
             ),
+            dcc.Store(id="lightcurve-comments-store", storage_type="memory", data=[]),
+            dcc.Store(id="lightcurve-user-teams-store", storage_type="memory", data=[]),
+            dcc.Store(
+                id="comment-composer-store",
+                storage_type="memory",
+                data=NEW_COMMENT_MODE,
+            ),
             dcc.Store(
                 id="lightcurve-aladin-store",
                 storage_type="memory",
@@ -115,6 +123,7 @@ def layout(id=None, **kwargs):
                         dmc.Stack(
                             [
                                 html.Div(id="object-tagging-container"),
+                                html.Div(id="object-comments-container"),
                                 citations_card,
                             ],
                             gap="md",
@@ -776,3 +785,382 @@ def handle_remove_object_tag(n_clicks, button_ids, lightcurve_store, visible_tag
     )
     panel = render_tagging_panel(object_id, visible_tags or [], updated_assignments)
     return panel, updated_assignments, build_tag_chips(updated_assignments)
+
+
+# --- Comments ----------------------------------------------------------------
+# One card per object: a flat list (replies indented under their parent) and a
+# single composer that switches between new / reply / edit modes via
+# "comment-composer-store", so there are no per-comment inline forms.
+
+PERSONAL_OWNER = "personal"
+NEW_COMMENT_MODE = {"mode": "new"}
+
+
+def comments_api(method, path, token, logger, json=None):
+    response = requests.request(
+        method,
+        url=f"{api_base_url()}{path}",
+        timeout=10,
+        headers={
+            "accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        json=json,
+    )
+    logger.info({"info": f"{method} {path} response status: {response.status_code}"})
+    return response
+
+
+def _format_timestamp(value):
+    return (value or "")[:16].replace("T", " ")
+
+
+def render_comment(comment, user_id, owned_team_ids):
+    deleted = comment["deleted"]
+    is_author = comment.get("author_id") == user_id
+    can_delete = not deleted and (
+        is_author
+        or (comment["owner_type"] == "team" and comment["owner_id"] in owned_team_ids)
+    )
+    if comment.get("author_id") is None:
+        author = "deleted user"
+    else:
+        author = comment.get("author_name") or "unnamed user"
+    owner_label = (
+        (comment.get("owner_name") or "team")
+        if comment["owner_type"] == "team"
+        else "Only you"
+    )
+    edited = not deleted and comment.get("updated_at") != comment.get("created_at")
+
+    def action(name, label):
+        return dmc.Button(
+            label,
+            id={
+                "type": "comment-action",
+                "action": name,
+                "comment_id": comment["id"],
+            },
+            n_clicks=0,
+            size="compact-xs",
+            variant="subtle",
+            color="gray",
+        )
+
+    actions = []
+    if comment.get("parent_id") is None:
+        actions.append(action("reply", "Reply"))
+    if is_author and not deleted:
+        actions.append(action("edit", "Edit"))
+    if can_delete:
+        actions.append(action("delete", "Delete"))
+
+    return dmc.Stack(
+        [
+            dmc.Group(
+                [
+                    dmc.Text(author, size="xs", fw=600),
+                    dmc.Badge(owner_label, size="xs", variant="light"),
+                    dmc.Text(
+                        _format_timestamp(comment.get("created_at"))
+                        + (" (edited)" if edited else ""),
+                        size="xs",
+                        c="dimmed",
+                    ),
+                ],
+                gap="xs",
+            ),
+            # Plain text: dmc.Text escapes it, pre-wrap keeps the line breaks.
+            dmc.Text(
+                "[deleted]" if deleted else comment["body"],
+                size="sm",
+                c="dimmed" if deleted else None,
+                fs="italic" if deleted else None,
+                style={"whiteSpace": "pre-wrap", "overflowWrap": "anywhere"},
+            ),
+            dmc.Group(actions, gap=0),
+        ],
+        gap=2,
+        pl="lg" if comment.get("parent_id") else 0,
+    )
+
+
+def render_comment_list(comments, user_id, teams):
+    if not comments:
+        return [dmc.Text("No comments yet.", size="xs", c="dimmed")]
+    owned_team_ids = {t["team_id"] for t in teams if t.get("role") == "owner"}
+    replies = {}
+    for comment in comments:
+        if comment.get("parent_id"):
+            replies.setdefault(comment["parent_id"], []).append(comment)
+    return [
+        render_comment(item, user_id, owned_team_ids)
+        for comment in comments
+        if not comment.get("parent_id")
+        for item in [comment, *replies.get(comment["id"], [])]
+    ]
+
+
+def render_comments_panel(comments, user_id, teams):
+    owner_options = [{"value": PERSONAL_OWNER, "label": "Only me"}] + [
+        {"value": t["team_id"], "label": t.get("team_name") or "team"} for t in teams
+    ]
+    return expressive_card(
+        id="object-comment-card",
+        title="Comments",
+        icon="mdi:comment-outline",
+        children=[
+            dmc.Stack(
+                id="object-comments-list",
+                children=render_comment_list(comments, user_id, teams),
+                gap="sm",
+            ),
+            html.Div(id="comment-banner"),
+            dmc.Text(id="comment-composer-label", size="xs", c="dimmed"),
+            dmc.Textarea(
+                id="comment-body",
+                placeholder="Write a comment",
+                autosize=True,
+                minRows=2,
+                maxLength=5000,
+                size="xs",
+            ),
+            dmc.Group(
+                [
+                    dmc.Select(
+                        id="comment-owner-select",
+                        data=owner_options,
+                        value=PERSONAL_OWNER,
+                        allowDeselect=False,
+                        size="xs",
+                        style={"flex": 1, "minWidth": 0},
+                        **{"aria-label": "Who can see this comment"},
+                    ),
+                    dmc.Button(
+                        "Cancel",
+                        id="comment-cancel",
+                        n_clicks=0,
+                        size="xs",
+                        variant="subtle",
+                    ),
+                    dmc.Button("Post", id="comment-submit", n_clicks=0, size="xs"),
+                ],
+                gap="xs",
+                wrap="nowrap",
+            ),
+        ],
+    )
+
+
+def _current_user_id(token):
+    if validate_token(token)["status"] != TokenStatus.VALID:
+        return None
+    return verify_token(token).get("sub")
+
+
+def _refresh_comments(object_id, token, logger):
+    response = comments_api("GET", f"/objects/{object_id}/comments", token, logger)
+    return response.json() if response.status_code == 200 else []
+
+
+# Every composer/list update writes the same seven outputs, in this order.
+COMMENT_OUTPUTS = [
+    Output("object-comments-list", "children", allow_duplicate=True),
+    Output("lightcurve-comments-store", "data", allow_duplicate=True),
+    Output("comment-composer-store", "data", allow_duplicate=True),
+    Output("comment-body", "value", allow_duplicate=True),
+    Output("comment-composer-label", "children", allow_duplicate=True),
+    Output("comment-owner-select", "disabled", allow_duplicate=True),
+    Output("comment-banner", "children", allow_duplicate=True),
+]
+
+
+def _comment_state(comments, user_id, teams, banner=None):
+    """Re-render the list and reset the composer to 'new comment'."""
+    return (
+        render_comment_list(comments, user_id, teams),
+        comments,
+        NEW_COMMENT_MODE,
+        "",
+        "",
+        False,
+        banner,
+    )
+
+
+def _error_banner(response, fallback):
+    try:
+        message = response.json().get("error") or fallback
+    except ValueError:
+        message = fallback
+    return create_message_banner(message, "error")
+
+
+@callback(
+    [
+        Output("object-comments-container", "children"),
+        Output("lightcurve-user-teams-store", "data"),
+        Output("lightcurve-comments-store", "data"),
+    ],
+    Input("lightcurve-store", "data"),
+    prevent_initial_call=False,
+)
+def load_object_comments_panel(lightcurve_store):
+    # Same guards as load_object_tagging_panel: nothing to show without an
+    # object or a logged-in user.
+    if not isinstance(lightcurve_store, dict) or not lightcurve_store.get("id"):
+        return no_update, no_update, no_update
+    token = get_jwt_from_request(request)
+    user_id = _current_user_id(token)
+    if user_id is None:
+        return no_update, no_update, no_update
+
+    logger = current_app.config["TXV_LOGGER"]
+    object_id = lightcurve_store["id"]
+    comments_response = comments_api(
+        "GET", f"/objects/{object_id}/comments", token, logger
+    )
+    teams_response = comments_api("GET", "/user/teams", token, logger)
+    if comments_response.status_code != 200 or teams_response.status_code != 200:
+        return (
+            create_message_banner("Could not load comments.", "warning"),
+            [],
+            [],
+        )
+    teams = teams_response.json()
+    comments = comments_response.json()
+    return render_comments_panel(comments, user_id, teams), teams, comments
+
+
+@callback(
+    COMMENT_OUTPUTS,
+    Input(
+        {"type": "comment-action", "action": dash.ALL, "comment_id": dash.ALL},
+        "n_clicks",
+    ),
+    [
+        State("lightcurve-store", "data"),
+        State("lightcurve-comments-store", "data"),
+        State("lightcurve-user-teams-store", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def handle_comment_action(n_clicks, lightcurve_store, comments, teams):
+    triggered = dash.ctx.triggered_id
+    # Re-rendering the list re-fires this with n_clicks=0; ignore that.
+    if not triggered or not any(n_clicks or []) or not lightcurve_store:
+        return (no_update,) * len(COMMENT_OUTPUTS)
+
+    comment_id = triggered["comment_id"]
+    comment = next((c for c in comments or [] if c["id"] == comment_id), None)
+    if comment is None:
+        return (no_update,) * len(COMMENT_OUTPUTS)
+
+    if triggered["action"] == "reply":
+        label = f"Replying to {comment.get('author_name') or 'comment'}"
+        return (
+            no_update,
+            no_update,
+            {"mode": "reply", "comment_id": comment_id},
+            no_update,
+            label,
+            True,
+            None,
+        )
+    if triggered["action"] == "edit":
+        return (
+            no_update,
+            no_update,
+            {"mode": "edit", "comment_id": comment_id},
+            comment["body"],
+            "Editing your comment",
+            True,
+            None,
+        )
+
+    token = get_jwt_from_request(request)
+    logger = current_app.config["TXV_LOGGER"]
+    response = comments_api("DELETE", f"/comments/{comment_id}", token, logger)
+    banner = (
+        None
+        if response.status_code == 200
+        else _error_banner(response, "Could not delete the comment.")
+    )
+    object_id = lightcurve_store["id"]
+    return _comment_state(
+        _refresh_comments(object_id, token, logger),
+        _current_user_id(token),
+        teams or [],
+        banner,
+    )
+
+
+@callback(
+    COMMENT_OUTPUTS,
+    Input("comment-submit", "n_clicks"),
+    [
+        State("comment-body", "value"),
+        State("comment-owner-select", "value"),
+        State("comment-composer-store", "data"),
+        State("lightcurve-store", "data"),
+        State("lightcurve-user-teams-store", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def handle_comment_submit(n_clicks, body, owner, composer, lightcurve_store, teams):
+    if not n_clicks or not lightcurve_store or not (body or "").strip():
+        return (no_update,) * len(COMMENT_OUTPUTS)
+
+    object_id = lightcurve_store["id"]
+    token = get_jwt_from_request(request)
+    logger = current_app.config["TXV_LOGGER"]
+    composer = composer or NEW_COMMENT_MODE
+
+    if composer["mode"] == "edit":
+        response = comments_api(
+            "PATCH",
+            f"/comments/{composer['comment_id']}",
+            token,
+            logger,
+            {"body": body},
+        )
+        ok = response.status_code == 200
+    else:
+        payload = {"body": body}
+        if composer["mode"] == "reply":
+            payload["parent_id"] = composer["comment_id"]
+        elif owner and owner != PERSONAL_OWNER:
+            payload["owner_team_id"] = owner
+        response = comments_api(
+            "POST", f"/objects/{object_id}/comments", token, logger, payload
+        )
+        ok = response.status_code == 201
+
+    if not ok:
+        # Keep the draft and mode so nothing typed is lost.
+        return (
+            *(no_update,) * (len(COMMENT_OUTPUTS) - 1),
+            _error_banner(response, "Could not save the comment."),
+        )
+    return _comment_state(
+        _refresh_comments(object_id, token, logger),
+        _current_user_id(token),
+        teams or [],
+    )
+
+
+@callback(
+    [
+        Output("comment-composer-store", "data", allow_duplicate=True),
+        Output("comment-body", "value", allow_duplicate=True),
+        Output("comment-composer-label", "children", allow_duplicate=True),
+        Output("comment-owner-select", "disabled", allow_duplicate=True),
+    ],
+    Input("comment-cancel", "n_clicks"),
+    prevent_initial_call=True,
+)
+def handle_comment_cancel(n_clicks):
+    if not n_clicks:
+        return no_update, no_update, no_update, no_update
+    return NEW_COMMENT_MODE, "", "", False
