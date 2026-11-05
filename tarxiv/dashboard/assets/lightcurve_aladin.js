@@ -36,8 +36,8 @@ window.dash_clientside.lightcurve_aladin = {
         function initAladin() {
             const container = document.getElementById("aladin-lite-div");
             if (!container || !window.A) {
-                // Give up after ~10s rather than polling forever.
-                if (attempts++ > 100) {
+                // Give up after ~30s rather than polling forever.
+                if (attempts++ > 300) {
                     console.warn("Aladin Lite did not become available");
                     return;
                 }

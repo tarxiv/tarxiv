@@ -115,40 +115,6 @@ if ! [ -f "$FILE" ]; then
   sleep 2
 
 
-  # Create indexes
-  echo "building indexes"
-  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
-    --script "CREATE PRIMARY INDEX ON tarxiv.tns.objects"
-  sleep 2
-  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
-    --script "CREATE PRIMARY INDEX ON tarxiv.tns.lightcurves"
-  sleep 2
-  # Indexes for objects
-    /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
-    --script "CREATE PRIMARY INDEX ON tarxiv.objects.meta"
-  sleep 2
-  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
-    --script "CREATE PRIMARY INDEX ON tarxiv.objects.lightcurves"
-  sleep 2
-  # Indexes for xmatch
-  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
-    --script "CREATE PRIMARY INDEX ON tarxiv.xmatch.hits"
-  sleep 2
-  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
-    --script "CREATE PRIMARY INDEX ON tarxiv.xmatch.alerts"
-  sleep 2
-  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
-    --script "CREATE PRIMARY INDEX ON tarxiv.xmatch.idx"
-  sleep 2
-  # Index for sub querys
-  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
-    --script "CREATE INDEX detection_idx ON tarxiv.xmatch.hits (ALL ARRAY id.name FOR id IN identifiers END)"
-  sleep 2
-  /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
-    --script "CREATE INDEX update_idx ON tarxiv.xmatch.hits(updated_at)"
-  sleep 2
-
-
   # Submit initial values counts into idx (hopefully wont have to worry about this in 2030)
   /opt/couchbase/bin/cbq -u $TARXIV_COUCHBASE_ADMIN_USERNAME -p $TARXIV_COUCHBASE_ADMIN_PASSWORD \
     --script "INSERT INTO tarxiv.xmatch.idx (KEY, VALUE)
@@ -185,6 +151,36 @@ if ! [ -f "$FILE" ]; then
   # create file so we know that the cluster is setup and don't run the setup again
   touch $FILE
 fi
+
+# Indexes run on every boot, not just first setup: they are idempotent, and a
+# one-shot attempt silently fails if the query service is still starting, which
+# leaves queries falling back to sequential scans (Couchbase error 13014).
+cbq_retry() {
+  local out
+  for _ in $(seq 1 30); do
+    out=$(/opt/couchbase/bin/cbq -q -u "$TARXIV_COUCHBASE_ADMIN_USERNAME" \
+      -p "$TARXIV_COUCHBASE_ADMIN_PASSWORD" --script "$1" 2>&1)
+    if echo "$out" | grep -q '"status": "success"'; then
+      echo "ok: $1"
+      return 0
+    fi
+    sleep 5
+  done
+  echo "FAILED: $1"
+  echo "$out"
+  return 1
+}
+
+echo "ensuring indexes"
+for keyspace in tns.objects tns.lightcurves objects.meta objects.lightcurves \
+  xmatch.hits xmatch.alerts xmatch.idx; do
+  cbq_retry "CREATE PRIMARY INDEX IF NOT EXISTS ON tarxiv.$keyspace"
+done
+# Secondary indexes for lookups and sub-queries
+cbq_retry "CREATE INDEX meta_source_idx IF NOT EXISTS ON tarxiv.objects.meta(source_id, update_date DESC)"
+cbq_retry "CREATE INDEX detection_idx IF NOT EXISTS ON tarxiv.xmatch.hits (ALL ARRAY id.name FOR id IN identifiers END)"
+cbq_retry "CREATE INDEX update_idx IF NOT EXISTS ON tarxiv.xmatch.hits(updated_at)"
+
 # docker compose will stop the container from running unless we do this
 # known issue and workaround
 tail -f /dev/null

@@ -4,6 +4,17 @@ from . import dto
 def build_openapi_spec() -> dict:
     ref_template = "#/components/schemas/{model}"
     bearer_auth = [{"BearerAuth": []}]
+    comment_ref = {"$ref": "#/components/schemas/Comment"}
+
+    def json_body(schema: dict) -> dict:
+        return {"application/json": {"schema": schema}}
+
+    def path_param(name: str, fmt: str | None = None) -> dict:
+        schema = {"type": "string", **({"format": fmt} if fmt else {})}
+        return {"name": name, "in": "path", "required": True, "schema": schema}
+
+    source_id_param = path_param("source_id")
+    comment_id_param = path_param("comment_id", "uuid")
 
     return {
         "openapi": "3.0.3",
@@ -66,6 +77,16 @@ def build_openapi_spec() -> dict:
                     )
                 ),
                 "ObjectTagAssignmentView": dto.ObjectTagAssignmentView.model_json_schema(
+                    ref_template=ref_template
+                ),
+                "Comment": dto.Comment.model_json_schema(ref_template=ref_template),
+                "CommentCreate": dto.CommentCreate.model_json_schema(
+                    ref_template=ref_template
+                ),
+                "CommentUpdate": dto.CommentUpdate.model_json_schema(
+                    ref_template=ref_template
+                ),
+                "CommentCountsRequest": dto.CommentCountsRequest.model_json_schema(
                     ref_template=ref_template
                 ),
                 "TaggedObject": dto.TaggedObject.model_json_schema(
@@ -677,6 +698,100 @@ def build_openapi_spec() -> dict:
                         },
                         "401": {"description": "Unauthorized"},
                         "404": {"description": "Assignment not found"},
+                    },
+                }
+            },
+            "/objects/{source_id}/comments": {
+                "get": {
+                    "summary": "List comments visible on an object (flat, oldest first)",
+                    "security": bearer_auth,
+                    "parameters": [source_id_param],
+                    "responses": {
+                        "200": {
+                            "description": "Comments; replies carry parent_id",
+                            "content": json_body({
+                                "type": "array",
+                                "items": comment_ref,
+                            }),
+                        },
+                        "401": {"description": "Unauthorized"},
+                    },
+                },
+                "post": {
+                    "summary": "Comment on an object, or reply to a comment",
+                    "security": bearer_auth,
+                    "parameters": [source_id_param],
+                    "requestBody": {
+                        "required": True,
+                        "content": json_body({
+                            "$ref": "#/components/schemas/CommentCreate"
+                        }),
+                    },
+                    "responses": {
+                        "201": {
+                            "description": "Created comment",
+                            "content": json_body(comment_ref),
+                        },
+                        "400": {"description": "Validation error"},
+                        "401": {"description": "Unauthorized"},
+                        "403": {"description": "Not a member of the owner team"},
+                        "404": {"description": "Parent comment not found"},
+                    },
+                },
+            },
+            "/comments/{comment_id}": {
+                "patch": {
+                    "summary": "Edit a comment (author only)",
+                    "security": bearer_auth,
+                    "parameters": [comment_id_param],
+                    "requestBody": {
+                        "required": True,
+                        "content": json_body({
+                            "$ref": "#/components/schemas/CommentUpdate"
+                        }),
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Edited comment",
+                            "content": json_body(comment_ref),
+                        },
+                        "400": {"description": "Validation error"},
+                        "401": {"description": "Unauthorized"},
+                        "403": {"description": "Not the author"},
+                        "404": {"description": "Comment not found"},
+                    },
+                },
+                "delete": {
+                    "summary": "Delete a comment (author or team owner)",
+                    "security": bearer_auth,
+                    "parameters": [comment_id_param],
+                    "responses": {
+                        "200": {"description": "Deleted (or tombstoned)"},
+                        "401": {"description": "Unauthorized"},
+                        "403": {"description": "Not the author or team owner"},
+                        "404": {"description": "Comment not found"},
+                    },
+                },
+            },
+            "/comments/counts": {
+                "post": {
+                    "summary": "Count visible comments per object",
+                    "security": bearer_auth,
+                    "requestBody": {
+                        "required": True,
+                        "content": json_body({
+                            "$ref": "#/components/schemas/CommentCountsRequest"
+                        }),
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Map of source_id to count; zeros omitted",
+                            "content": json_body({
+                                "type": "object",
+                                "additionalProperties": {"type": "integer"},
+                            }),
+                        },
+                        "401": {"description": "Unauthorized"},
                     },
                 }
             },
