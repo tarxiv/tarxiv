@@ -127,6 +127,7 @@ def layout(id=None, **kwargs):
                                 citations_card,
                             ],
                             gap="md",
+                            h="100%",
                         ),
                         span={"base": 12, "lg": 5},
                     ),

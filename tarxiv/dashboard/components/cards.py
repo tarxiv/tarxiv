@@ -89,6 +89,7 @@ def expressive_card(
     icon: str | None = None,
     header_extra=None,
     body_padding: str | int = "md",
+    fill: bool = False,
     **kwargs,
 ):
     """Create the standard surface card.
@@ -105,6 +106,9 @@ def expressive_card(
         icon: Optional Iconify name shown before the title
         header_extra: Optional component placed at the right of the header
         body_padding: Padding for the card body (0 lets a child bleed to the edge)
+        fill: Stretch to the parent's height (e.g. an equal-height grid row),
+            with the body taking the space left under the header. Children
+            with ``flex: 1`` grow into it.
         **kwargs: Additional keyword arguments for dmc.Paper
 
     Returns
@@ -129,8 +133,15 @@ def expressive_card(
             header.append(header_extra)
         card_children.append(html.Div(header, className="tarxiv-card-head"))
 
+    grow = {"flex": 1, "minHeight": 0} if fill else {}
     card_children.append(
-        dmc.Box(dmc.Stack(children=children, gap="md"), p=body_padding)
+        dmc.Box(
+            dmc.Stack(children=children, gap="md", style=grow),
+            p=body_padding,
+            style={**grow, "display": "flex", "flexDirection": "column"}
+            if fill
+            else None,
+        )
     )
 
     # Merge rather than clobber any caller-supplied style.
@@ -139,6 +150,11 @@ def expressive_card(
         "border": "1px solid var(--tarxiv-border)",
         "boxShadow": "var(--tarxiv-shadow)",
         "overflow": "hidden",
+        **(
+            {"height": "100%", "display": "flex", "flexDirection": "column"}
+            if fill
+            else {}
+        ),
         **(kwargs.pop("style", None) or {}),
     }
 
@@ -558,20 +574,23 @@ def format_object_metadata(
         icon="clarity:curve-chart-line",
         header_extra=build_view_toggle(),
         body_padding="xs",
+        fill=True,
     )
     sky_card = expressive_card(
         children=[
             # A hidden div to receive the "success" message from our JS
             html.Div(id="aladin-status-dummy", style={"display": "none"}),
+            # Grows to match the lightcurve card beside it.
             html.Div(
                 id="aladin-lite-div",
-                style={"width": "100%", "height": f"{PLOT_HEIGHT_PX}px"},
+                style={"width": "100%", "flex": 1, "minHeight": PLOT_HEIGHT_PX},
             ),
         ],
         title="Sky view",
         icon="mdi:earth",
         header_extra=dmc.Text("PanSTARRS DR1", size="xs", c="dimmed", ff="monospace"),
         body_padding=0,
+        fill=True,
     )
 
     results_top = dmc.Stack(
@@ -588,15 +607,20 @@ def format_object_metadata(
         gap="md",
     )
 
-    # Constrain the metadata pane and scroll any overflow, so a source with
-    # many fields doesn't stretch the page.
+    # Scroll the metadata rather than let a source with many fields stretch the
+    # page: the absolute ScrollArea adds no height of its own, so the card is
+    # at least 420px and otherwise matches the tags + citations column.
     metadata_card = expressive_card(
-        children=dmc.ScrollArea(
-            metadata_component,
-            h=420,
-            type="auto",
-            offsetScrollbars=True,
+        children=html.Div(
+            dmc.ScrollArea(
+                metadata_component,
+                type="auto",
+                offsetScrollbars=True,
+                style={"position": "absolute", "inset": 0},
+            ),
+            style={"position": "relative", "flex": 1, "minHeight": 420},
         ),
+        fill=True,
         title="Source metadata",
         icon="mdi:table",
         header_extra=dmc.Text(
@@ -612,6 +636,9 @@ def format_object_metadata(
         children=citations_component,
         title="Citations",
         icon="mdi:format-quote-close",
+        # Takes up the column's slack so its bottom lines up with the metadata.
+        fill=True,
+        style={"flex": 1},
     )
 
     # Full metadata JSON — collapsible, collapsed by default, at the very bottom.
