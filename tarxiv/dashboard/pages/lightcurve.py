@@ -180,6 +180,14 @@ clientside_callback(
     prevent_initial_call=True,
 )
 
+# "Comment" in the page head jumps to (and focuses) the comment box.
+clientside_callback(
+    ClientsideFunction(namespace="object_page", function_name="scrollToComments"),
+    Output("comment-scroll-dummy", "children"),
+    Input("jump-to-comments", "n_clicks"),
+    prevent_initial_call=True,
+)
+
 
 @callback(
     [
@@ -997,8 +1005,7 @@ def render_comment(comment, user_id, owned_team_ids, composer_box=None):
     )
 
 
-THREAD_OPEN, THREAD_CLOSED = "\u2212", "+"
-LINE_CLASS = "comment-thread-gutter comment-thread-line"
+GUTTER_CLASS = "comment-thread-gutter"
 
 
 def _gutter_row(gutter, content):
@@ -1019,12 +1026,21 @@ def render_thread(comment_id, head, children, collapsed=False):
     re-rendering the list keeps them (object_page.toggleThread updates it).
     """
     if not children:
-        return _gutter_row(html.Div(className="comment-thread-gutter"), head)
+        return _gutter_row(html.Div(className=GUTTER_CLASS), head)
     key = {"comment_id": comment_id}
     gutter = dmc.Stack(
         [
             dmc.ActionIcon(
-                THREAD_CLOSED if collapsed else THREAD_OPEN,
+                # Both icons render; the gutter's is-collapsed class picks one
+                # (CSS in theme_manager), so the toggle only swaps a class.
+                [
+                    DashIconify(
+                        icon="mdi:minus-circle", width=14, className="when-open"
+                    ),
+                    DashIconify(
+                        icon="mdi:plus-circle", width=14, className="when-closed"
+                    ),
+                ],
                 id={"type": "thread-toggle", **key},
                 n_clicks=0,
                 size="xs",
@@ -1035,12 +1051,13 @@ def render_thread(comment_id, head, children, collapsed=False):
             html.Div(
                 id={"type": "thread-line", **key},
                 n_clicks=0,
-                className=LINE_CLASS + (" is-hidden" if collapsed else ""),
+                className="comment-thread-line",
                 title="Collapse thread",
             ),
         ],
+        id={"type": "thread-gutter", **key},
         gap=4,
-        className="comment-thread-gutter",
+        className=GUTTER_CLASS + (" is-collapsed" if collapsed else ""),
     )
     replies = dmc.Collapse(
         dmc.Stack(children, gap="sm", pl="md", pt="sm"),
@@ -1058,9 +1075,8 @@ clientside_callback(
     [
         Output("comment-collapsed-store", "data"),
         Output({"type": "thread-collapse", **_THREAD}, "opened"),
-        Output({"type": "thread-toggle", **_THREAD}, "children"),
         Output({"type": "thread-toggle", **_THREAD}, "aria-label"),
-        Output({"type": "thread-line", **_THREAD}, "className"),
+        Output({"type": "thread-gutter", **_THREAD}, "className"),
     ],
     Input({"type": "thread-toggle", **_THREAD}, "n_clicks"),
     Input({"type": "thread-line", **_THREAD}, "n_clicks"),
@@ -1119,7 +1135,7 @@ def render_comment_list(
         # Same gutter as the threads, so the box lines up with comment text.
         rendered.append(
             _gutter_row(
-                html.Div(className="comment-thread-gutter"),
+                html.Div(className=GUTTER_CLASS),
                 comment_composer(NEW_COMMENT_MODE, teams),
             )
         )

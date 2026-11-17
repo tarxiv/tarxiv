@@ -132,8 +132,16 @@ _STATIC_CSS = """
     background: linear-gradient(var(--tarxiv-border), var(--tarxiv-border))
         center / 2px 100% no-repeat;
 }
-.comment-thread-line.is-hidden {
+/* Collapsed: hide the line, show + instead of -. */
+.is-collapsed .comment-thread-line {
     visibility: hidden;
+}
+.comment-thread-gutter .when-closed,
+.comment-thread-gutter.is-collapsed .when-open {
+    display: none;
+}
+.comment-thread-gutter.is-collapsed .when-closed {
+    display: inline-block;
 }
 .comment-thread-line:hover {
     background-image: linear-gradient(

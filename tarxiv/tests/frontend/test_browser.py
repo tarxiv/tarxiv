@@ -197,6 +197,12 @@ def test_object_page_comments_render_without_errors(logged_in_page, dashboard_ur
     assert not reply_text.is_visible()
     assert card.get_by_role("button", name="Expand thread").count() == 1
 
+    # "Comment" in the page head jumps to the comment box and focuses it.
+    page.get_by_role("button", name="Comment", exact=True).click()
+    page.wait_for_function(
+        "document.activeElement && document.activeElement.id === 'comment-body'"
+    )
+
     page.wait_for_load_state("networkidle")
     # Joined so each error prints in full; pytest truncates a list repr.
     assert not errors, "\n\n".join(errors)

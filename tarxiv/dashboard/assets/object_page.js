@@ -7,41 +7,48 @@
  * comments in lightcurve_aladin.js / cone_aladin.js).
  */
 window.dash_clientside = window.dash_clientside || {};
+/* Scroll `ringId` into view, ring it briefly so it is obvious where the page
+ * landed, then focus `focusId` once the scroll has settled so the user can
+ * type straight away. Missing elements (e.g. logged out) are a no-op. */
+function objectPageJumpTo(ringId, focusId) {
+    const target = document.getElementById(ringId);
+    if (!target) {
+        return;
+    }
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    const previousTransition = target.style.transition;
+    target.style.transition = "box-shadow 200ms ease";
+    target.style.boxShadow = "0 0 0 2px var(--tarxiv-primary-ink)";
+    setTimeout(function () {
+        target.style.boxShadow = "";
+        target.style.transition = previousTransition;
+    }, 1200);
+
+    setTimeout(function () {
+        const field = document.getElementById(focusId);
+        if (field) {
+            field.focus({ preventScroll: true });
+        }
+    }, 400);
+}
+
 window.dash_clientside.object_page = {
-    /* Bring the tag card into view from the "Tag" button in the page head.
-     * The tag card is the single place tags are managed, so rather than
-     * duplicating the assign controls up top we jump to them and put the
-     * cursor in the select. */
+    /* "Tag" in the page head: the tag card is the single place tags are
+     * managed, so jump to it rather than duplicating its controls up top. */
     scrollToTags: function (nClicks) {
-        if (!nClicks) {
-            return window.dash_clientside.no_update;
+        if (nClicks) {
+            objectPageJumpTo("object-tag-card", "assign-object-tag-select");
         }
+        return window.dash_clientside.no_update;
+    },
 
-        const card = document.getElementById("object-tag-card");
-        if (!card) {
-            return window.dash_clientside.no_update;
+    /* "Comment" in the page head: jump to the comment box, wherever it
+     * currently sits (bottom of the list, or inside a reply/edit). */
+    scrollToComments: function (nClicks) {
+        if (nClicks) {
+            objectPageJumpTo("comment-body", "comment-body");
         }
-
-        card.scrollIntoView({ behavior: "smooth", block: "center" });
-
-        // Brief ring so it is obvious where the page landed.
-        const previousTransition = card.style.transition;
-        card.style.transition = "box-shadow 200ms ease";
-        card.style.boxShadow = "0 0 0 2px var(--tarxiv-primary-ink)";
-        setTimeout(function () {
-            card.style.boxShadow = "";
-            card.style.transition = previousTransition;
-        }, 1200);
-
-        // Focus the tag select once the scroll has settled, so the button
-        // leaves the user ready to type.
-        setTimeout(function () {
-            const select = document.getElementById("assign-object-tag-select");
-            if (select) {
-                select.focus();
-            }
-        }, 400);
-
         return window.dash_clientside.no_update;
     },
 
@@ -67,10 +74,9 @@ window.dash_clientside.object_page = {
         return [
             Array.from(closed),
             isOpen,
-            isOpen.map(function (o) { return o ? "\u2212" : "+"; }),
             isOpen.map(function (o) { return o ? "Collapse thread" : "Expand thread"; }),
             isOpen.map(function (o) {
-                return "comment-thread-gutter comment-thread-line" + (o ? "" : " is-hidden");
+                return "comment-thread-gutter" + (o ? "" : " is-collapsed");
             }),
         ];
     },

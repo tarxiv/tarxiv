@@ -307,6 +307,7 @@ def test_page_head_has_actions_and_no_duplicate_search():
     ids = collect_component_ids(head)
 
     assert "jump-to-tags" in ids
+    assert "jump-to-comments" in ids
     assert "cite-copy" in ids
     assert "object-tag-chips" in ids
     assert "object-id-input" not in ids
