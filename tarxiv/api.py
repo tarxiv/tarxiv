@@ -67,7 +67,8 @@ class API(TarxivModule):
         self.app.register_blueprint(Blueprint("main", __name__))
 
     def start_server(self):
-        host, port = "0.0.0.0", self.config["api_port"]
+        host = "0.0.0.0"
+        port = int(os.getenv("TARXIV_API_PORT", self.config["api_port"]))
         if self.debug:
             # Local development: Flask's dev server with the interactive reloader.
             self.app.run(host=host, port=port, debug=True)
