@@ -829,6 +829,12 @@ def _format_timestamp(value):
     return (value or "")[:16].replace("T", " ")
 
 
+# Extra inset for the comment box beyond the card's own padding: left, right and
+# bottom for the new-comment box (0 = left edge in line with the thread
+# toggles), right only for reply/edit boxes, which keep the reply indent.
+COMPOSER_INSET = "0px"
+
+
 def comment_composer(composer, teams, body="", reply_to=None):
     """The one comment text box; render_comment_list puts it where `composer` says.
 
@@ -889,6 +895,8 @@ def comment_composer(composer, teams, body="", reply_to=None):
         ],
         id="comment-composer",
         gap="xs",
+        # Right inset matches the left one (thread gutter + gap) in every mode.
+        style={"paddingRight": COMPOSER_INSET},
     )
 
 
@@ -1133,19 +1141,13 @@ def render_comment_list(
     if not rendered:
         rendered.append(dmc.Text("No comments yet.", size="xs", c="dimmed"))
     if mode == "new":
-        # Same gutter as the threads, so the box lines up with comment text;
-        # the right and bottom insets are padded out to match that left one
-        # (gutter + gap; bottom already gets the card's md padding).
+        # The composer pads its own right; add the matching left and bottom.
         rendered.append(
             dmc.Box(
-                _gutter_row(
-                    html.Div(className=GUTTER_CLASS),
-                    comment_composer(NEW_COMMENT_MODE, teams),
-                ),
+                comment_composer(NEW_COMMENT_MODE, teams),
                 style={
-                    "paddingRight": "calc(18px + var(--mantine-spacing-xs))",
-                    "paddingBottom": "calc(18px + var(--mantine-spacing-xs)"
-                    " - var(--mantine-spacing-md))",
+                    "paddingLeft": COMPOSER_INSET,
+                    "paddingBottom": COMPOSER_INSET,
                 },
             )
         )
@@ -1163,7 +1165,9 @@ def render_comments_panel(comments, user_id, teams):
                 children=render_comment_list(comments, user_id, teams),
                 gap="sm",
             ),
-            html.Div(id="comment-banner"),
+            # display:contents: an empty banner takes no box, so it adds no
+            # flex gap under the list; messages still render as normal.
+            html.Div(id="comment-banner", style={"display": "contents"}),
         ],
     )
 
