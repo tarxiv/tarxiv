@@ -23,6 +23,7 @@ from .object_view import (
     build_key_facts,
     build_photometry_table,
     build_tag_chips,
+    default_sky_survey,
 )
 from .comments import (
     comment_count_badge,
@@ -56,6 +57,7 @@ __all__ = [
     "build_key_facts",
     "build_photometry_table",
     "build_tag_chips",
+    "default_sky_survey",
     "comment_count_badge",
     "fetch_comment_counts",
     "apply_theme",

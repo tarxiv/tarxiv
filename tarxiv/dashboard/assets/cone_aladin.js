@@ -38,9 +38,11 @@ window.dash_clientside.cone_aladin = {
             window.A.init.then(function () {
                 container.innerHTML = "";
                 const aladin = window.A.aladin("#cone-aladin-div", {
-                    survey: "P/PanSTARRS/DR1/color-z-zg-g",
+                    survey: storeData.survey,
                     target: ra + " " + dec,
                     fov: fov,
+                    // The usage logger's host (alasky.unistra.fr) is dead.
+                    log: false,
                 });
 
                 try {

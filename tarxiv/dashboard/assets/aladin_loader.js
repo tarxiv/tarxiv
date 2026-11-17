@@ -6,7 +6,7 @@
  * import() works from this classic script. lightcurve_aladin.js and
  * cone_aladin.js poll for window.A before initialising.
  */
-import("https://cdn.jsdelivr.net/npm/aladin-lite@3.8.2/dist/aladin.js")
+import("https://cdn.jsdelivr.net/npm/aladin-lite@3.9.4/dist/aladin.js")
     .then(function (m) {
         window.A = m.default;
     })

@@ -8,7 +8,9 @@ Everything here is a pure function of the metadata/photometry documents so the
 layout can be unit tested without a running Dash app.
 """
 
+import astropy.units as u
 import dash_mantine_components as dmc
+from astropy.coordinates import Angle
 from dash import dcc, html
 from dash_iconify import DashIconify
 
@@ -384,6 +386,27 @@ def build_view_toggle():
         size="xs",
         radius="md",
     )
+
+
+# Sky-view default surveys (HiPS IDs). color-i-r-g rather than color-z-zg-g
+# because it has a non-CDS mirror (MAST), so it still renders when CDS is down.
+PANSTARRS_HIPS = "CDS/P/PanSTARRS/DR1/color-i-r-g"
+DESI_HIPS = "CDS/P/DESI-Legacy-Surveys/DR11/color"
+SKY_SURVEY_LABELS = {PANSTARRS_HIPS: "PanSTARRS DR1", DESI_HIPS: "DESI LS DR11"}
+
+
+def default_sky_survey(dec) -> str:
+    """HiPS ID for a Dec (degrees or sexagesimal): PanSTARRS stops at -30.
+
+    Users can switch to any other survey with Aladin's own layers control.
+    ponytail: Dec cutoff, not a coverage lookup; DESI has gaps (Galactic
+    plane), query the HiPS MOCs if blank tiles become a complaint.
+    """
+    try:
+        dec_deg = Angle(dec, unit=u.deg).deg
+    except (TypeError, ValueError):
+        return PANSTARRS_HIPS
+    return DESI_HIPS if dec_deg < -30 else PANSTARRS_HIPS
 
 
 def build_photometry_table(lc_data, scheme: str = "light"):

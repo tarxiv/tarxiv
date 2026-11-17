@@ -19,6 +19,8 @@ import pytest
 
 pytest.importorskip("playwright")
 
+from playwright.sync_api import expect  # noqa: E402
+
 from tarxiv.auth.token_utils import sign_token  # noqa: E402
 from tarxiv.dashboard.components.cookies import COOKIE_DEFAULTS  # noqa: E402
 from tarxiv.tests.frontend import browser_app
@@ -206,3 +208,12 @@ def test_object_page_comments_render_without_errors(logged_in_page, dashboard_ur
     page.wait_for_load_state("networkidle")
     # Joined so each error prints in full; pytest truncates a list repr.
     assert not errors, "\n\n".join(errors)
+
+
+def test_sky_card_labels_default_survey(logged_in_page, dashboard_url):
+    page, errors = logged_in_page
+    page.goto(f"{dashboard_url}/lightcurve/{browser_app.SOURCE_ID}")
+
+    # The fixture object is at Dec +39, inside PanSTARRS coverage.
+    expect(page.get_by_text("PanSTARRS DR1")).to_be_visible()
+    assert errors == []

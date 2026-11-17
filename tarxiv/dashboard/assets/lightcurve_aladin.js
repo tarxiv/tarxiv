@@ -48,11 +48,15 @@ window.dash_clientside.lightcurve_aladin = {
             window.A.init.then(function () {
                 container.innerHTML = "";
                 const aladin = window.A.aladin("#aladin-lite-div", {
-                    survey: "P/PanSTARRS/DR1/color-z-zg-g",
+                    // Default picked by Dec server-side; the layers control
+                    // lets users switch to any other survey.
+                    survey: storeData.survey,
                     target: ra + " " + dec,
                     fov: fov,
                     showFullscreenControl: true,
-                    showLayersControl: false,
+                    showLayersControl: true,
+                    // The usage logger's host (alasky.unistra.fr) is dead.
+                    log: false,
                     showFrame: false,
                     reticleColor: "#e34948",
                 });

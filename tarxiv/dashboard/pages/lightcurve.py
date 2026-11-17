@@ -19,6 +19,7 @@ from ..components import (
     build_empty_search_state,
     build_photometry_table,
     build_tag_chips,
+    default_sky_survey,
     scheme_from_template,
     tag_badge,
 )
@@ -278,6 +279,7 @@ def _build_aladin_store(meta):
         "source": "tns",
         "ra_deg": ra,
         "dec_deg": dec,
+        "survey": default_sky_survey(dec),
     }
 
 
@@ -637,6 +639,8 @@ def perform_search(object_id, token, logger):
     if tags_response is not None and tags_response.status_code == 200:
         assigned_tags = tags_response.json()
 
+    aladin_store = _build_aladin_store(meta)
+
     # Display metadata
     results_top, metadata_card, citations_card, full_metadata = format_object_metadata(
         object_id,
@@ -645,11 +649,11 @@ def perform_search(object_id, token, logger):
         lc_data=lc_data,
         assigned_tags=assigned_tags,
         logger=logger,
+        sky_survey=default_sky_survey((aladin_store or {}).get("dec_deg")),
     )
     logger.info({"info": f"Object {object_id} loaded successfully."})
 
     lc_store = {"data": lc_data, "id": object_id}
-    aladin_store = _build_aladin_store(meta)
     if aladin_store is None:
         logger.warning({
             "warning": (
