@@ -88,6 +88,7 @@ def layout(id=None, **kwargs):
             ),
             dcc.Store(id="lightcurve-comments-store", storage_type="memory", data=[]),
             dcc.Store(id="lightcurve-user-teams-store", storage_type="memory", data=[]),
+            dcc.Store(id="comment-collapsed-store", storage_type="memory", data=[]),
             dcc.Store(
                 id="comment-composer-store",
                 storage_type="memory",
@@ -123,7 +124,6 @@ def layout(id=None, **kwargs):
                         dmc.Stack(
                             [
                                 html.Div(id="object-tagging-container"),
-                                html.Div(id="object-comments-container"),
                                 citations_card,
                             ],
                             gap="md",
@@ -133,6 +133,9 @@ def layout(id=None, **kwargs):
                 ],
                 gutter="md",
             ),
+            # Full width: threads can get long, and in the side column they
+            # left big gaps beside the metadata card.
+            html.Div(id="object-comments-container"),
             # Full metadata JSON dump pinned to the very bottom.
             full_metadata,
         ],
@@ -789,8 +792,9 @@ def handle_remove_object_tag(n_clicks, button_ids, lightcurve_store, visible_tag
 
 # --- Comments ----------------------------------------------------------------
 # One card per object: a flat list (replies indented under their parent) and a
-# single composer that switches between new / reply / edit modes via
-# "comment-composer-store", so there are no per-comment inline forms.
+# single composer that render_comment_list places by the mode in
+# "comment-composer-store": in place of an edited comment, after a replied-to
+# thread, or at the end for a new comment.
 
 PERSONAL_OWNER = "personal"
 NEW_COMMENT_MODE = {"mode": "new"}
@@ -816,7 +820,71 @@ def _format_timestamp(value):
     return (value or "")[:16].replace("T", " ")
 
 
-def render_comment(comment, user_id, owned_team_ids):
+def comment_composer(composer, teams, body="", reply_to=None):
+    """The one comment text box; render_comment_list puts it where `composer` says.
+
+    Fixed ids are safe because only one composer is ever rendered at a time.
+    """
+    mode = composer["mode"]
+    owner_options = [{"value": PERSONAL_OWNER, "label": "Only me"}] + [
+        {"value": t["team_id"], "label": t.get("team_name") or "team"} for t in teams
+    ]
+    controls = [
+        # Always rendered (submit reads it as State) but hidden for replies and
+        # edits, which inherit the parent's / original's visibility.
+        dmc.Select(
+            id="comment-owner-select",
+            data=owner_options,
+            value=PERSONAL_OWNER,
+            allowDeselect=False,
+            size="xs",
+            style={"flex": 1, "minWidth": 0} if mode == "new" else {"display": "none"},
+            **{"aria-label": "Who can see this comment"},
+        ),
+        # Always rendered (it's an Input) but hidden on the default new box,
+        # where there's nothing to cancel back to.
+        dmc.Button(
+            "Cancel",
+            id="comment-cancel",
+            n_clicks=0,
+            size="xs",
+            variant="subtle",
+            style=None if mode != "new" else {"display": "none"},
+        ),
+        dmc.Button(
+            "Save" if mode == "edit" else "Post",
+            id="comment-submit",
+            n_clicks=0,
+            size="xs",
+        ),
+    ]
+    placeholder = {
+        "new": "Write a comment",
+        "reply": f"Reply to {reply_to or 'comment'}",
+        "edit": "Edit your comment",
+    }[mode]
+    return dmc.Stack(
+        [
+            dmc.Textarea(
+                id="comment-body",
+                value=body,
+                placeholder=placeholder,
+                autosize=True,
+                minRows=2,
+                # No maxLength: dmc 2.6 Textarea doesn't support it. The API
+                # enforces the 5000-char cap and the error shows in the banner.
+                size="xs",
+                **{"aria-label": placeholder},
+            ),
+            dmc.Group(controls, gap="xs", wrap="nowrap", justify="flex-end"),
+        ],
+        id="comment-composer",
+        gap="xs",
+    )
+
+
+def render_comment(comment, user_id, owned_team_ids, composer_box=None):
+    """One comment; with `composer_box`, that box replaces its text (editing)."""
     deleted = comment["deleted"]
     is_author = comment.get("author_id") == user_id
     can_delete = not deleted and (
@@ -834,7 +902,7 @@ def render_comment(comment, user_id, owned_team_ids):
     )
     edited = not deleted and comment.get("updated_at") != comment.get("created_at")
 
-    def action(name, label):
+    def action(name, label, **style):
         return dmc.Button(
             label,
             id={
@@ -844,8 +912,7 @@ def render_comment(comment, user_id, owned_team_ids):
             },
             n_clicks=0,
             size="compact-xs",
-            variant="subtle",
-            color="gray",
+            **({"variant": "subtle", "color": "gray"} | style),
         )
 
     actions = []
@@ -854,7 +921,58 @@ def render_comment(comment, user_id, owned_team_ids):
     if is_author and not deleted:
         actions.append(action("edit", "Edit"))
     if can_delete:
-        actions.append(action("delete", "Delete"))
+        # Mantine opens the popover client-side; only its confirm button
+        # carries the "delete" action, so deleting takes two clicks.
+        actions.append(
+            dmc.Popover(
+                [
+                    dmc.PopoverTarget(
+                        # display:block: dmc wraps the target in a div, and an
+                        # inline button there sits on the baseline, below Edit.
+                        dmc.Button(
+                            "Delete",
+                            size="compact-xs",
+                            variant="subtle",
+                            color="gray",
+                            style={"display": "block"},
+                        )
+                    ),
+                    dmc.PopoverDropdown(
+                        dmc.Group(
+                            [
+                                dmc.Text("Delete this comment?", size="xs"),
+                                action(
+                                    "delete",
+                                    "Confirm delete",
+                                    variant="filled",
+                                    color="red",
+                                ),
+                            ],
+                            gap="xs",
+                        )
+                    ),
+                ],
+                position="bottom-start",
+                withArrow=True,
+                shadow="sm",
+            )
+        )
+
+    if composer_box is not None:
+        content = [composer_box]
+    else:
+        content = [
+            # Plain text: dmc.Text escapes it, pre-wrap keeps the line breaks.
+            dmc.Text(
+                "[deleted]" if deleted else comment["body"],
+                size="sm",
+                style={"whiteSpace": "pre-wrap", "overflowWrap": "anywhere"},
+                # Only pass these when set: c=None reaches Mantine as null and
+                # it rejects null colours ("expected string, got object").
+                **({"c": "dimmed", "fs": "italic"} if deleted else {}),
+            ),
+            dmc.Group(actions, gap=0),
+        ]
 
     return dmc.Stack(
         [
@@ -871,42 +989,144 @@ def render_comment(comment, user_id, owned_team_ids):
                 ],
                 gap="xs",
             ),
-            # Plain text: dmc.Text escapes it, pre-wrap keeps the line breaks.
-            dmc.Text(
-                "[deleted]" if deleted else comment["body"],
-                size="sm",
-                style={"whiteSpace": "pre-wrap", "overflowWrap": "anywhere"},
-                # Only pass these when set: c=None reaches Mantine as null and
-                # it rejects null colours ("expected string, got object").
-                **({"c": "dimmed", "fs": "italic"} if deleted else {}),
-            ),
-            dmc.Group(actions, gap=0),
+            *content,
         ],
+        id={"type": "comment", "comment_id": comment["id"]},
         gap=2,
-        pl="lg" if comment.get("parent_id") else 0,
+        style={"flex": 1, "minWidth": 0},
     )
 
 
-def render_comment_list(comments, user_id, teams):
-    if not comments:
-        return [dmc.Text("No comments yet.", size="xs", c="dimmed")]
+THREAD_OPEN, THREAD_CLOSED = "\u2212", "+"
+LINE_CLASS = "comment-thread-gutter comment-thread-line"
+
+
+def _gutter_row(gutter, content):
+    """Fixed-width left gutter (toggle + line) beside the comment column."""
+    return dmc.Group(
+        [gutter, dmc.Box(content, style={"flex": 1, "minWidth": 0})],
+        gap="xs",
+        wrap="nowrap",
+        align="stretch",
+    )
+
+
+def render_thread(comment_id, head, children, collapsed=False):
+    """A top-level comment; replies sit behind a +/- toggle and a line.
+
+    The line runs down the gutter from just under the toggle; clicking either
+    collapses the thread. Collapsed ids live in "comment-collapsed-store" so
+    re-rendering the list keeps them (object_page.toggleThread updates it).
+    """
+    if not children:
+        return _gutter_row(html.Div(className="comment-thread-gutter"), head)
+    key = {"comment_id": comment_id}
+    gutter = dmc.Stack(
+        [
+            dmc.ActionIcon(
+                THREAD_CLOSED if collapsed else THREAD_OPEN,
+                id={"type": "thread-toggle", **key},
+                n_clicks=0,
+                size="xs",
+                variant="subtle",
+                color="gray",
+                **{"aria-label": "Expand thread" if collapsed else "Collapse thread"},
+            ),
+            html.Div(
+                id={"type": "thread-line", **key},
+                n_clicks=0,
+                className=LINE_CLASS + (" is-hidden" if collapsed else ""),
+                title="Collapse thread",
+            ),
+        ],
+        gap=4,
+        className="comment-thread-gutter",
+    )
+    replies = dmc.Collapse(
+        dmc.Stack(children, gap="sm", pl="md", pt="sm"),
+        id={"type": "thread-collapse", **key},
+        opened=not collapsed,
+    )
+    return _gutter_row(gutter, [head, replies])
+
+
+# Collapse/expand from a toggle or a line; see assets/object_page.js. ALL (not
+# MATCH) so the same call can also write the collapsed-ids store.
+_THREAD = {"comment_id": dash.ALL}
+clientside_callback(
+    ClientsideFunction(namespace="object_page", function_name="toggleThread"),
+    [
+        Output("comment-collapsed-store", "data"),
+        Output({"type": "thread-collapse", **_THREAD}, "opened"),
+        Output({"type": "thread-toggle", **_THREAD}, "children"),
+        Output({"type": "thread-toggle", **_THREAD}, "aria-label"),
+        Output({"type": "thread-line", **_THREAD}, "className"),
+    ],
+    Input({"type": "thread-toggle", **_THREAD}, "n_clicks"),
+    Input({"type": "thread-line", **_THREAD}, "n_clicks"),
+    State("comment-collapsed-store", "data"),
+    State({"type": "thread-collapse", **_THREAD}, "id"),
+    prevent_initial_call=True,
+)
+
+
+def _thread_of(comments, composer):
+    """Top-level id of the thread a reply/edit composer sits in, else None."""
+    target = composer.get("comment_id")
+    comment = next((c for c in comments if c["id"] == target), None)
+    if composer["mode"] == "new" or comment is None:
+        return None
+    return comment.get("parent_id") or comment["id"]
+
+
+def render_comment_list(
+    comments, user_id, teams, composer=NEW_COMMENT_MODE, collapsed=()
+):
+    """Threads (replies under their parent) with the composer placed in context.
+
+    It replaces the edited comment, follows the replied-to thread, or ends the
+    list. Threads in `collapsed` render closed, except the composer's own.
+    """
+    mode, target = composer["mode"], composer.get("comment_id")
+    if mode != "new" and target not in {c["id"] for c in comments}:
+        mode, target = "new", None  # target vanished (deleted elsewhere)
     owned_team_ids = {t["team_id"] for t in teams if t.get("role") == "owner"}
     replies = {}
     for comment in comments:
         if comment.get("parent_id"):
             replies.setdefault(comment["parent_id"], []).append(comment)
-    return [
-        render_comment(item, user_id, owned_team_ids)
-        for comment in comments
-        if not comment.get("parent_id")
-        for item in [comment, *replies.get(comment["id"], [])]
-    ]
+
+    def render(item):
+        editing = mode == "edit" and item["id"] == target
+        box = comment_composer(composer, teams, body=item["body"]) if editing else None
+        return render_comment(item, user_id, owned_team_ids, box)
+
+    open_thread = _thread_of(comments, composer)
+    rendered = []
+    for comment in comments:
+        if comment.get("parent_id"):
+            continue
+        children = [render(r) for r in replies.get(comment["id"], [])]
+        if mode == "reply" and comment["id"] == target:
+            name = comment.get("author_name") or "comment"
+            children.append(comment_composer(composer, teams, reply_to=name))
+        closed = comment["id"] in collapsed and comment["id"] != open_thread
+        rendered.append(render_thread(comment["id"], render(comment), children, closed))
+
+    if not rendered:
+        rendered.append(dmc.Text("No comments yet.", size="xs", c="dimmed"))
+    if mode == "new":
+        # Same gutter as the threads, so the box lines up with comment text.
+        rendered.append(
+            _gutter_row(
+                html.Div(className="comment-thread-gutter"),
+                comment_composer(NEW_COMMENT_MODE, teams),
+            )
+        )
+    return rendered
 
 
 def render_comments_panel(comments, user_id, teams):
-    owner_options = [{"value": PERSONAL_OWNER, "label": "Only me"}] + [
-        {"value": t["team_id"], "label": t.get("team_name") or "team"} for t in teams
-    ]
     return expressive_card(
         id="object-comment-card",
         title="Comments",
@@ -918,39 +1138,6 @@ def render_comments_panel(comments, user_id, teams):
                 gap="sm",
             ),
             html.Div(id="comment-banner"),
-            dmc.Text(id="comment-composer-label", size="xs", c="dimmed"),
-            dmc.Textarea(
-                id="comment-body",
-                placeholder="Write a comment",
-                autosize=True,
-                minRows=2,
-                # No maxLength: dmc 2.6 Textarea doesn't support it. The API
-                # enforces the 5000-char cap and the error shows in the banner.
-                size="xs",
-            ),
-            dmc.Group(
-                [
-                    dmc.Select(
-                        id="comment-owner-select",
-                        data=owner_options,
-                        value=PERSONAL_OWNER,
-                        allowDeselect=False,
-                        size="xs",
-                        style={"flex": 1, "minWidth": 0},
-                        **{"aria-label": "Who can see this comment"},
-                    ),
-                    dmc.Button(
-                        "Cancel",
-                        id="comment-cancel",
-                        n_clicks=0,
-                        size="xs",
-                        variant="subtle",
-                    ),
-                    dmc.Button("Post", id="comment-submit", n_clicks=0, size="xs"),
-                ],
-                gap="xs",
-                wrap="nowrap",
-            ),
         ],
     )
 
@@ -966,28 +1153,33 @@ def _refresh_comments(object_id, token, logger):
     return response.json() if response.status_code == 200 else []
 
 
-# Every composer/list update writes the same seven outputs, in this order.
+# Every list update writes the same four outputs, in this order. The composer
+# lives inside the list, so re-rendering the list also moves/resets it.
 COMMENT_OUTPUTS = [
     Output("object-comments-list", "children", allow_duplicate=True),
     Output("lightcurve-comments-store", "data", allow_duplicate=True),
     Output("comment-composer-store", "data", allow_duplicate=True),
-    Output("comment-body", "value", allow_duplicate=True),
-    Output("comment-composer-label", "children", allow_duplicate=True),
-    Output("comment-owner-select", "disabled", allow_duplicate=True),
     Output("comment-banner", "children", allow_duplicate=True),
+    Output("comment-collapsed-store", "data", allow_duplicate=True),
 ]
+COLLAPSED_STATE = State("comment-collapsed-store", "data")
 
 
-def _comment_state(comments, user_id, teams, banner=None):
-    """Re-render the list and reset the composer to 'new comment'."""
+def _comment_state(
+    comments, user_id, teams, banner=None, composer=NEW_COMMENT_MODE, collapsed=()
+):
+    """Re-render the list with the composer in `composer` mode.
+
+    Collapsed threads stay collapsed, except the one the composer opens into.
+    """
+    opened = _thread_of(comments, composer)
+    collapsed = [c for c in collapsed or [] if c != opened]
     return (
-        render_comment_list(comments, user_id, teams),
+        render_comment_list(comments, user_id, teams, composer, collapsed),
         comments,
-        NEW_COMMENT_MODE,
-        "",
-        "",
-        False,
+        composer,
         banner,
+        collapsed,
     )
 
 
@@ -1045,10 +1237,11 @@ def load_object_comments_panel(lightcurve_store):
         State("lightcurve-store", "data"),
         State("lightcurve-comments-store", "data"),
         State("lightcurve-user-teams-store", "data"),
+        COLLAPSED_STATE,
     ],
     prevent_initial_call=True,
 )
-def handle_comment_action(n_clicks, lightcurve_store, comments, teams):
+def handle_comment_action(n_clicks, lightcurve_store, comments, teams, collapsed):
     triggered = dash.ctx.triggered_id
     # Re-rendering the list re-fires this with n_clicks=0; ignore that.
     if not triggered or not any(n_clicks or []) or not lightcurve_store:
@@ -1059,29 +1252,14 @@ def handle_comment_action(n_clicks, lightcurve_store, comments, teams):
     if comment is None:
         return (no_update,) * len(COMMENT_OUTPUTS)
 
-    if triggered["action"] == "reply":
-        label = f"Replying to {comment.get('author_name') or 'comment'}"
-        return (
-            no_update,
-            no_update,
-            {"mode": "reply", "comment_id": comment_id},
-            no_update,
-            label,
-            True,
-            None,
-        )
-    if triggered["action"] == "edit":
-        return (
-            no_update,
-            no_update,
-            {"mode": "edit", "comment_id": comment_id},
-            comment["body"],
-            "Editing your comment",
-            True,
-            None,
+    token = get_jwt_from_request(request)
+    user_id = _current_user_id(token)
+    if triggered["action"] in ("reply", "edit"):
+        composer = {"mode": triggered["action"], "comment_id": comment_id}
+        return _comment_state(
+            comments, user_id, teams or [], composer=composer, collapsed=collapsed
         )
 
-    token = get_jwt_from_request(request)
     logger = current_app.config["TXV_LOGGER"]
     response = comments_api("DELETE", f"/comments/{comment_id}", token, logger)
     banner = (
@@ -1092,9 +1270,10 @@ def handle_comment_action(n_clicks, lightcurve_store, comments, teams):
     object_id = lightcurve_store["id"]
     return _comment_state(
         _refresh_comments(object_id, token, logger),
-        _current_user_id(token),
+        user_id,
         teams or [],
         banner,
+        collapsed=collapsed,
     )
 
 
@@ -1107,10 +1286,13 @@ def handle_comment_action(n_clicks, lightcurve_store, comments, teams):
         State("comment-composer-store", "data"),
         State("lightcurve-store", "data"),
         State("lightcurve-user-teams-store", "data"),
+        COLLAPSED_STATE,
     ],
     prevent_initial_call=True,
 )
-def handle_comment_submit(n_clicks, body, owner, composer, lightcurve_store, teams):
+def handle_comment_submit(
+    n_clicks, body, owner, composer, lightcurve_store, teams, collapsed
+):
     if not n_clicks or not lightcurve_store or not (body or "").strip():
         return (no_update,) * len(COMMENT_OUTPUTS)
 
@@ -1141,28 +1323,30 @@ def handle_comment_submit(n_clicks, body, owner, composer, lightcurve_store, tea
 
     if not ok:
         # Keep the draft and mode so nothing typed is lost.
-        return (
-            *(no_update,) * (len(COMMENT_OUTPUTS) - 1),
-            _error_banner(response, "Could not save the comment."),
-        )
+        banner = _error_banner(response, "Could not save the comment.")
+        return no_update, no_update, no_update, banner, no_update
     return _comment_state(
         _refresh_comments(object_id, token, logger),
         _current_user_id(token),
         teams or [],
+        collapsed=collapsed,
     )
 
 
 @callback(
-    [
-        Output("comment-composer-store", "data", allow_duplicate=True),
-        Output("comment-body", "value", allow_duplicate=True),
-        Output("comment-composer-label", "children", allow_duplicate=True),
-        Output("comment-owner-select", "disabled", allow_duplicate=True),
-    ],
+    COMMENT_OUTPUTS,
     Input("comment-cancel", "n_clicks"),
+    [
+        State("lightcurve-comments-store", "data"),
+        State("lightcurve-user-teams-store", "data"),
+        COLLAPSED_STATE,
+    ],
     prevent_initial_call=True,
 )
-def handle_comment_cancel(n_clicks):
+def handle_comment_cancel(n_clicks, comments, teams, collapsed):
     if not n_clicks:
-        return no_update, no_update, no_update, no_update
-    return NEW_COMMENT_MODE, "", "", False
+        return (no_update,) * len(COMMENT_OUTPUTS)
+    token = get_jwt_from_request(request)
+    return _comment_state(
+        comments or [], _current_user_id(token), teams or [], collapsed=collapsed
+    )

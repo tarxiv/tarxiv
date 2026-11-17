@@ -44,4 +44,34 @@ window.dash_clientside.object_page = {
 
         return window.dash_clientside.no_update;
     },
+
+    /* Collapse or expand a comment thread (lightcurve.render_thread) from
+     * its +/- toggle or its line. Keeps the collapsed ids in
+     * comment-collapsed-store so a server re-render of the list keeps them,
+     * then redraws every thread from that store. */
+    toggleThread: function (toggleClicks, lineClicks, collapsed, ids) {
+        const ctx = window.dash_clientside.callback_context;
+        const fired = ctx.triggered.filter(function (t) { return t.value; });
+        if (!fired.length) {
+            // New components rendering (n_clicks 0), not a click.
+            return window.dash_clientside.no_update;
+        }
+        const clicked = JSON.parse(fired[0].prop_id.split(".")[0]).comment_id;
+        const closed = new Set(collapsed || []);
+        if (closed.has(clicked)) {
+            closed.delete(clicked);
+        } else {
+            closed.add(clicked);
+        }
+        const isOpen = ids.map(function (id) { return !closed.has(id.comment_id); });
+        return [
+            Array.from(closed),
+            isOpen,
+            isOpen.map(function (o) { return o ? "\u2212" : "+"; }),
+            isOpen.map(function (o) { return o ? "Collapse thread" : "Expand thread"; }),
+            isOpen.map(function (o) {
+                return "comment-thread-gutter comment-thread-line" + (o ? "" : " is-hidden");
+            }),
+        ];
+    },
 };

@@ -119,6 +119,27 @@ _STATIC_CSS = """
     word-break: break-word;
     line-height: 1.1;
 }
+
+/* -------------------------------------------------------- comment threads */
+/* Same width as the size="xs" ActionIcon toggle, so the line sits under it. */
+.comment-thread-gutter {
+    flex: none;
+    width: 18px;
+}
+.comment-thread-line {
+    flex: 1;
+    cursor: pointer;
+    background: linear-gradient(var(--tarxiv-border), var(--tarxiv-border))
+        center / 2px 100% no-repeat;
+}
+.comment-thread-line.is-hidden {
+    visibility: hidden;
+}
+.comment-thread-line:hover {
+    background-image: linear-gradient(
+        var(--tarxiv-primary-ink), var(--tarxiv-primary-ink)
+    );
+}
 """
 
 

@@ -128,11 +128,74 @@ def test_object_page_comments_render_without_errors(logged_in_page, dashboard_ur
     for text in ("[deleted]", "deleted user", "Private note", "(edited)"):
         assert card.get_by_text(text).count() >= 1, text
 
-    # Switching the composer into reply and edit modes re-renders it.
+    # One composer, moved to where the action is.
+    composer = card.locator("textarea")
+    assert composer.count() == 1
+
+    # Reply: the box follows c1's thread (after its reply c2), before c3.
     card.get_by_role("button", name="Reply").first.click()
-    card.get_by_text("Replying to other").wait_for()
+    reply_box = card.get_by_placeholder("Reply to other")
+    reply_box.wait_for()
+    assert composer.count() == 1
+
+    def top(locator):
+        return locator.bounding_box()["y"]
+
+    assert (
+        top(card.get_by_text("Agreed."))
+        < top(reply_box)
+        < top(card.get_by_text("Private note"))
+    )
+
+    # Edit: the box replaces the comment's text, prefilled with it.
     card.get_by_role("button", name="Edit").first.click()
-    card.get_by_text("Editing your comment").wait_for()
+    edit_box = card.get_by_placeholder("Edit your comment")
+    edit_box.wait_for()
+    assert composer.count() == 1
+    assert edit_box.input_value() == "Agreed.\nSecond line."
+
+    # Cancel puts the box back at the bottom as a new comment.
+    card.get_by_role("button", name="Cancel").click()
+    card.get_by_placeholder("Write a comment").wait_for()
+    # ...where Cancel has nothing to go back to, so it's hidden.
+    assert not card.get_by_role("button", name="Cancel").is_visible()
+
+    # Delete lines up with its siblings despite the popover's wrapper div.
+    edit_btn = card.get_by_role("button", name="Edit").first
+    # Same action row as that Edit.
+    delete_btn = edit_btn.locator("xpath=..").get_by_role("button", name="Delete")
+    assert abs(edit_btn.bounding_box()["y"] - delete_btn.bounding_box()["y"]) < 1
+
+    # Delete asks first: the confirm button only appears in the popover.
+    confirm = page.get_by_role("button", name="Confirm delete")
+    assert confirm.count() == 0
+    delete_btn.click()
+    confirm.wait_for()
+    page.keyboard.press("Escape")
+
+    # The thread line starts just under its toggle.
+    toggle = card.get_by_role("button", name="Collapse thread").first
+    line = card.locator(".comment-thread-line").first
+    toggle_box = toggle.bounding_box()
+    gap = line.bounding_box()["y"] - (toggle_box["y"] + toggle_box["height"])
+    assert 0 <= gap <= 8, gap
+
+    # Threads collapse from the toggle and from the line, and reopen.
+    reply_text = card.get_by_text("Agreed.")
+    card.get_by_role("button", name="Collapse thread").first.click()
+    reply_text.wait_for(state="hidden")
+    card.get_by_role("button", name="Expand thread").first.click()
+    reply_text.wait_for()
+    card.locator(".comment-thread-line").first.click()
+    reply_text.wait_for(state="hidden")
+
+    # Collapsed threads survive a list re-render (reply elsewhere, cancel).
+    card.get_by_role("button", name="Reply").nth(1).click()  # c3's, by me
+    card.get_by_placeholder("Reply to me").wait_for()
+    card.get_by_role("button", name="Cancel").click()
+    card.get_by_placeholder("Write a comment").wait_for()
+    assert not reply_text.is_visible()
+    assert card.get_by_role("button", name="Expand thread").count() == 1
 
     page.wait_for_load_state("networkidle")
     # Joined so each error prints in full; pytest truncates a list repr.

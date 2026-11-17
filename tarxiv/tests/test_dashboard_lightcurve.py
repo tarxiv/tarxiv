@@ -303,6 +303,88 @@ def test_comment_list_groups_replies_and_gates_actions(lightcurve_module):
     assert ("delete", "c") not in actions
 
 
+def test_comment_composer_follows_mode(lightcurve_module):
+    def comment(cid, parent=None):
+        return {
+            "id": cid,
+            "parent_id": parent,
+            "author_id": "u-me",
+            "author_name": "me",
+            "owner_type": "personal",
+            "owner_id": "u-me",
+            "body": f"body {cid}",
+            "deleted": False,
+            "created_at": "2026-11-05T10:00:00",
+            "updated_at": "2026-11-05T10:00:00",
+        }
+
+    comments = [comment("a"), comment("b"), comment("a1", parent="a")]
+
+    def walk(component):
+        """Comment ids and 'composer' in render order ('editing' = holds it)."""
+        if not isinstance(component, Component):
+            return []
+        comp_id = getattr(component, "id", None)
+        if comp_id == "comment-composer":
+            return ["composer"]
+        children = getattr(component, "children", None)
+        if isinstance(children, Component):
+            children = [children]
+        if isinstance(comp_id, dict) and comp_id.get("type") == "comment":
+            holds = "comment-body" in collect_component_ids(component)
+            return ["editing" if holds else comp_id["comment_id"]]
+        return [x for c in children or [] for x in walk(c)]
+
+    def layout(composer):
+        rendered = lightcurve_module.render_comment_list(comments, "u-me", [], composer)
+        return [x for item in rendered for x in walk(item)]
+
+    plain = ["a", "a1", "b"]
+    assert layout({"mode": "new"}) == [*plain, "composer"]
+    # Reply: after the parent's last reply, not straight after the parent.
+    assert layout({"mode": "reply", "comment_id": "a"}) == [
+        "a",
+        "a1",
+        "composer",
+        "b",
+    ]
+    # Edit: the composer replaces a1's text; nothing at the end.
+    assert layout({"mode": "edit", "comment_id": "a1"}) == ["a", "editing", "b"]
+    # A target that has since disappeared falls back to a new comment.
+    assert layout({"mode": "edit", "comment_id": "gone"}) == [*plain, "composer"]
+
+    def thread_a_opened(composer):
+        """Collapse thread "a", render with `composer`: is "a" shown open?"""
+        found = []
+
+        def find(component):
+            if not isinstance(component, Component):
+                return
+            if getattr(component, "id", None) == {
+                "type": "thread-collapse",
+                "comment_id": "a",
+            }:
+                found.append(component.opened)
+            children = getattr(component, "children", None)
+            if isinstance(children, Component):
+                children = [children]
+            for child in children or []:
+                find(child)
+
+        state = lightcurve_module._comment_state(
+            comments, "u-me", [], composer=composer, collapsed=["a"]
+        )
+        for item in state[0]:
+            find(item)
+        return found[0], state[-1]
+
+    # Collapsed threads stay collapsed across a re-render...
+    assert thread_a_opened({"mode": "new"}) == (False, ["a"])
+    # ...unless the composer opens into them (reply, or editing a reply).
+    assert thread_a_opened({"mode": "reply", "comment_id": "a"}) == (True, [])
+    assert thread_a_opened({"mode": "edit", "comment_id": "a1"}) == (True, [])
+
+
 def test_comment_count_helpers(monkeypatch):
     from tarxiv.dashboard.components import comments
 
