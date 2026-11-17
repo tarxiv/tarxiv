@@ -111,7 +111,9 @@ def main(port: int) -> None:
 
     import tarxiv.dashboard.app as app_module
 
-    app_module.generate_css = lambda: None
+    # generate_css() is left real: theme.css is gitignored, so on a fresh
+    # checkout (CI) it only exists once generated, and the page's own styles
+    # (e.g. the comment thread line's width) depend on it.
     app = app_module.TarxivDashboard("browser-test", 0).app
     app.run(host="127.0.0.1", port=port, debug=False)
 
