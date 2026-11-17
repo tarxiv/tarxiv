@@ -1133,11 +1133,20 @@ def render_comment_list(
     if not rendered:
         rendered.append(dmc.Text("No comments yet.", size="xs", c="dimmed"))
     if mode == "new":
-        # Same gutter as the threads, so the box lines up with comment text.
+        # Same gutter as the threads, so the box lines up with comment text;
+        # the right and bottom insets are padded out to match that left one
+        # (gutter + gap; bottom already gets the card's md padding).
         rendered.append(
-            _gutter_row(
-                html.Div(className=GUTTER_CLASS),
-                comment_composer(NEW_COMMENT_MODE, teams),
+            dmc.Box(
+                _gutter_row(
+                    html.Div(className=GUTTER_CLASS),
+                    comment_composer(NEW_COMMENT_MODE, teams),
+                ),
+                style={
+                    "paddingRight": "calc(18px + var(--mantine-spacing-xs))",
+                    "paddingBottom": "calc(18px + var(--mantine-spacing-xs)"
+                    " - var(--mantine-spacing-md))",
+                },
             )
         )
     return rendered

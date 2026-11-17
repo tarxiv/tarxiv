@@ -105,11 +105,15 @@ _STATIC_CSS = """
 }
 
 /* ------------------------------------------------------------ card head */
+/* Fixed height (not padding-driven) so a header holding a control, like the
+   lightcurve's Plot/Table switch, matches plain-title headers beside it. */
 .tarxiv-card-head {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 12px 16px;
+    box-sizing: border-box;
+    min-height: 43px;
+    padding: 0 16px;
     border-bottom: 1px solid var(--tarxiv-border);
 }
 
