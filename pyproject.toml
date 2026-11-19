@@ -64,6 +64,7 @@ dev = [
     "ipython",
     "jupyter",
     "testcontainers[postgres]>=4.8.2",
+    "pytest-playwright",
 ]
 
 [tool.setuptools.packages]
@@ -78,6 +79,7 @@ markers = [
     "imap",
     "gmail",
     "auth: marks tests for the authentication system (token_utils, providers, API auth routes)",
+    "browser: renders dashboard pages in Chromium via Playwright (needs `playwright install chromium`)",
 ]
 
 [dependency-groups]

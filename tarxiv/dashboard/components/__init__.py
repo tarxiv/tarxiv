@@ -24,6 +24,10 @@ from .object_view import (
     build_photometry_table,
     build_tag_chips,
 )
+from .comments import (
+    comment_count_badge,
+    fetch_comment_counts,
+)
 from .theme_manager import (
     apply_theme,
     get_theme,
@@ -52,6 +56,8 @@ __all__ = [
     "build_key_facts",
     "build_photometry_table",
     "build_tag_chips",
+    "comment_count_badge",
+    "fetch_comment_counts",
     "apply_theme",
     "get_theme",
     "register_tarxiv_templates",

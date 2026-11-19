@@ -191,3 +191,56 @@ class ObjectTagAssignment(TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("object_id", "tag_id", name="uq_object_tag_assignment"),
     )
+
+
+COMMENT_MAX_LENGTH = 5000
+
+
+class Comment(TimestampMixin, Base):
+    """A plain-text comment on an object, visible to its owner (user XOR team).
+
+    Replies are one level deep and share their parent's owner; both rules are
+    enforced in ``UserDB.create_comment``. A deleted top-level comment that
+    still has replies is kept as a tombstone (``deleted_at`` set, body empty).
+    """
+
+    __tablename__ = "comments"
+
+    id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    source_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    parent_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("comments.id", ondelete="CASCADE"),
+        index=True,
+    )
+    author_user_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    owner_user_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE")
+    )
+    owner_team_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE")
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    parent: Mapped["Comment | None"] = relationship(remote_side=[id])
+    author: Mapped[User | None] = relationship(foreign_keys=[author_user_id])
+    owner_user: Mapped[User | None] = relationship(foreign_keys=[owner_user_id])
+    owner_team: Mapped[Team | None] = relationship(foreign_keys=[owner_team_id])
+
+    __table_args__ = (
+        CheckConstraint(
+            "(owner_user_id IS NOT NULL AND owner_team_id IS NULL) OR "
+            "(owner_user_id IS NULL AND owner_team_id IS NOT NULL)",
+            name="ck_comments_single_owner",
+        ),
+        CheckConstraint(
+            f"char_length(body) <= {COMMENT_MAX_LENGTH} AND "
+            "(deleted_at IS NOT NULL OR char_length(body) >= 1)",
+            name="ck_comments_body_length",
+        ),
+    )

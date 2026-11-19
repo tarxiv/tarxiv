@@ -839,6 +839,246 @@ class UserDB(TarxivModule):
         finally:
             session.close()
 
+    # --- Comments ---------------------------------------------------------
+    # Visibility mirrors tags: a comment is visible to its owner user or to
+    # members of its owner team. Replies share their parent's owner, so one
+    # filter covers both.
+
+    def list_comments(self, source_id: str, user_id: UUID | str) -> list[dto.Comment]:
+        with self.get_session() as session:
+            try:
+                user_uuid = self._coerce_uuid(user_id)
+                team_ids = self._team_ids_for_user(session, user_uuid)
+                rows = (
+                    session
+                    .query(orm.Comment)
+                    .filter(orm.Comment.source_id == source_id)
+                    .filter(self._comment_visible(user_uuid, team_ids))
+                    .order_by(orm.Comment.created_at.asc())
+                    .all()
+                )
+                return [self._build_comment_dto(row) for row in rows]
+            except SQLAlchemyError as exc:
+                raise DataLayerError(
+                    "A system error occurred while loading comments."
+                ) from exc
+
+    def count_comments(
+        self, source_ids: list[str], user_id: UUID | str
+    ) -> dict[str, int]:
+        """Visible, non-deleted comments per object; objects with none are omitted."""
+        if not source_ids:
+            return {}
+        with self.get_session() as session:
+            try:
+                user_uuid = self._coerce_uuid(user_id)
+                team_ids = self._team_ids_for_user(session, user_uuid)
+                rows = (
+                    session
+                    .query(orm.Comment.source_id, func.count(orm.Comment.id))
+                    .filter(orm.Comment.source_id.in_(source_ids))
+                    .filter(orm.Comment.deleted_at.is_(None))
+                    .filter(self._comment_visible(user_uuid, team_ids))
+                    .group_by(orm.Comment.source_id)
+                    .all()
+                )
+                return dict(rows)
+            except SQLAlchemyError as exc:
+                raise DataLayerError(
+                    "A system error occurred while counting comments."
+                ) from exc
+
+    def create_comment(
+        self, source_id: str, user_id: UUID | str, comment: dto.CommentCreate
+    ) -> dto.Comment:
+        session = self.get_session()
+        try:
+            user_uuid = self._coerce_uuid(user_id)
+            team_ids = self._team_ids_for_user(session, user_uuid)
+
+            if comment.parent_id is not None:
+                parent = self._get_visible_comment(
+                    session, comment.parent_id, user_uuid, team_ids
+                )
+                if parent is None:
+                    raise LookupError("Parent comment not found.")
+                if parent.parent_id is not None:
+                    raise ValueError("Replies cannot be replied to.")
+                if parent.source_id != source_id:
+                    raise ValueError("The parent comment is on a different object.")
+                if (
+                    comment.owner_team_id is not None
+                    and comment.owner_team_id != parent.owner_team_id
+                ):
+                    raise ValueError("A reply must have the same owner as its parent.")
+                owner_user_id = parent.owner_user_id
+                owner_team_id = parent.owner_team_id
+            elif comment.owner_team_id is not None:
+                if comment.owner_team_id not in team_ids:
+                    raise AccessDeniedError(
+                        "You are not a member of the requested team."
+                    )
+                owner_user_id, owner_team_id = None, comment.owner_team_id
+            else:
+                owner_user_id, owner_team_id = user_uuid, None
+
+            row = orm.Comment(
+                source_id=source_id,
+                parent_id=comment.parent_id,
+                author_user_id=user_uuid,
+                owner_user_id=owner_user_id,
+                owner_team_id=owner_team_id,
+                body=comment.body,
+            )
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return self._build_comment_dto(row)
+        except SQLAlchemyError as exc:
+            session.rollback()
+            raise DataLayerError(
+                "A system error occurred while creating the comment."
+            ) from exc
+        finally:
+            session.close()
+
+    def update_comment(
+        self, comment_id: UUID | str, user_id: UUID | str, update: dto.CommentUpdate
+    ) -> dto.Comment | None:
+        """Edit in place, author only. Returns None if not found or not visible."""
+        session = self.get_session()
+        try:
+            user_uuid = self._coerce_uuid(user_id)
+            team_ids = self._team_ids_for_user(session, user_uuid)
+            row = self._get_visible_comment(session, comment_id, user_uuid, team_ids)
+            if row is None:
+                return None
+            if row.author_user_id != user_uuid:
+                raise AccessDeniedError("Only the author can edit this comment.")
+            if row.deleted_at is not None:
+                raise ValueError("A deleted comment cannot be edited.")
+
+            row.body = update.body
+            session.commit()
+            session.refresh(row)
+            return self._build_comment_dto(row)
+        except SQLAlchemyError as exc:
+            session.rollback()
+            raise DataLayerError(
+                "A system error occurred while editing the comment."
+            ) from exc
+        finally:
+            session.close()
+
+    def delete_comment(self, comment_id: UUID | str, user_id: UUID | str) -> bool:
+        """Delete as the author or the owner team's owner.
+
+        A top-level comment with replies becomes a tombstone; anything else is
+        removed. Removing the last reply under a tombstone removes the
+        tombstone too. Returns False if not found or not visible.
+        """
+        session = self.get_session()
+        try:
+            user_uuid = self._coerce_uuid(user_id)
+            team_ids = self._team_ids_for_user(session, user_uuid)
+            row = self._get_visible_comment(session, comment_id, user_uuid, team_ids)
+            if row is None:
+                return False
+
+            is_team_owner = (
+                row.owner_team_id is not None
+                and session
+                .query(orm.TeamMembership)
+                .filter(orm.TeamMembership.team_id == row.owner_team_id)
+                .filter(orm.TeamMembership.user_id == user_uuid)
+                .filter(orm.TeamMembership.role == "owner")
+                .first()
+                is not None
+            )
+            if row.author_user_id != user_uuid and not is_team_owner:
+                raise AccessDeniedError(
+                    "Only the author or the team owner can delete this comment."
+                )
+
+            parent = row.parent
+            if parent is None and self._has_replies(session, row.id):
+                row.deleted_at = func.now()
+                row.body = ""
+            else:
+                session.delete(row)
+                session.flush()
+                if (
+                    parent is not None
+                    and parent.deleted_at is not None
+                    and not self._has_replies(session, parent.id)
+                ):
+                    session.delete(parent)
+            session.commit()
+            return True
+        except SQLAlchemyError as exc:
+            session.rollback()
+            raise DataLayerError(
+                "A system error occurred while deleting the comment."
+            ) from exc
+        finally:
+            session.close()
+
+    @staticmethod
+    def _comment_visible(user_id: UUID, team_ids: list[UUID]):
+        return or_(
+            orm.Comment.owner_user_id == user_id,
+            orm.Comment.owner_team_id.in_(team_ids),
+        )
+
+    @staticmethod
+    def _get_visible_comment(
+        session: Session,
+        comment_id: UUID | str,
+        user_id: UUID,
+        team_ids: list[UUID],
+    ) -> orm.Comment | None:
+        return (
+            session
+            .query(orm.Comment)
+            .filter(orm.Comment.id == UserDB._coerce_uuid(comment_id))
+            .filter(UserDB._comment_visible(user_id, team_ids))
+            .first()
+        )
+
+    @staticmethod
+    def _has_replies(session: Session, comment_id: UUID) -> bool:
+        return (
+            session
+            .query(orm.Comment.id)
+            .filter(orm.Comment.parent_id == comment_id)
+            .first()
+            is not None
+        )
+
+    @staticmethod
+    def _build_comment_dto(row: orm.Comment) -> dto.Comment:
+        if row.owner_team_id is not None:
+            owner_type, owner_id = "team", row.owner_team_id
+            owner_name = row.owner_team.name if row.owner_team else None
+        else:
+            owner_type, owner_id = "user", row.owner_user_id
+            owner_name = row.owner_user.username if row.owner_user else None
+        return dto.Comment(
+            id=row.id,
+            source_id=row.source_id,
+            parent_id=row.parent_id,
+            author_id=row.author_user_id,
+            author_name=row.author.username if row.author else None,
+            author_picture_url=row.author.picture_url if row.author else None,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            owner_name=owner_name,
+            body=row.body,
+            deleted=row.deleted_at is not None,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
     @staticmethod
     def _coerce_uuid(value: UUID | str) -> UUID:
         if isinstance(value, UUID):

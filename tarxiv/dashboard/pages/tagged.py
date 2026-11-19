@@ -9,6 +9,7 @@ from flask import current_app, request
 
 from ...auth import TokenStatus, get_jwt_from_request, validate_token
 from ..components.cards import create_message_banner, expressive_card, title_card
+from ..components.comments import comment_count_badge, fetch_comment_counts
 
 
 dash.register_page(
@@ -133,9 +134,15 @@ def render_tagged_objects(objects):
                 withBorder=True,
                 p="sm",
                 radius="md",
-                children=dmc.Anchor(
-                    obj.get("object_id", "Unknown object"),
-                    href=f"/lightcurve/{quote(obj.get('object_id', ''))}",
+                children=dmc.Group(
+                    [
+                        dmc.Anchor(
+                            obj.get("object_id", "Unknown object"),
+                            href=f"/lightcurve/{quote(obj.get('object_id', ''))}",
+                        ),
+                        comment_count_badge(obj.get("comment_count")),
+                    ],
+                    gap="sm",
                 ),
             )
             for obj in objects
@@ -172,4 +179,7 @@ def load_tagged_objects(n_clicks, tag_id):
         return no_update, create_message_banner(error_message, "error")
 
     objects = response.json()
+    counts = fetch_comment_counts([o["object_id"] for o in objects], token, logger)
+    for obj in objects:
+        obj["comment_count"] = counts.get(obj["object_id"], 0)
     return render_tagged_objects(objects), html.Div()

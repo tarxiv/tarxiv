@@ -231,8 +231,9 @@ def build_page_head(
 
     actions = dmc.Group(
         [
-            # Dummy sink for the scroll-to-tags clientside callback.
+            # Dummy sinks for the scroll-to-tags/comments clientside callbacks.
             html.Div(id="tag-scroll-dummy", style={"display": "none"}),
+            html.Div(id="comment-scroll-dummy", style={"display": "none"}),
             dmc.Button(
                 "Tag",
                 id="jump-to-tags",
@@ -241,6 +242,15 @@ def build_page_head(
                 variant="light",
                 color="arxiv_red",
                 leftSection=DashIconify(icon="mdi:tag-plus-outline", width=15),
+            ),
+            dmc.Button(
+                "Comment",
+                id="jump-to-comments",
+                n_clicks=0,
+                size="xs",
+                variant="light",
+                color="arxiv_red",
+                leftSection=DashIconify(icon="mdi:comment-plus-outline", width=15),
             ),
             # Copies the citations card's BibTeX block directly. dcc.Clipboard
             # reads the target element's text, so no callback is needed; it is
@@ -346,6 +356,10 @@ def build_lightcurve_body():
             dcc.Loading(
                 dcc.Graph(
                     id={"type": "themeable-plot", "index": "lightcurve-plot"},
+                    # Start with a figure: update_all_plots_theme Patches
+                    # figure.layout.template and can land before the plot
+                    # callback, and Dash cannot patch an undefined prop.
+                    figure={"data": [], "layout": {}},
                     style={"height": f"{PLOT_HEIGHT_PX}px", "width": "100%"},
                     config={"responsive": True, "displaylogo": False},
                 ),

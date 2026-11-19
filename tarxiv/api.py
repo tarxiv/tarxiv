@@ -67,7 +67,8 @@ class API(TarxivModule):
         self.app.register_blueprint(Blueprint("main", __name__))
 
     def start_server(self):
-        host, port = "0.0.0.0", self.config["api_port"]
+        host = "0.0.0.0"
+        port = int(os.getenv("TARXIV_API_PORT", self.config["api_port"]))
         if self.debug:
             # Local development: Flask's dev server with the interactive reloader.
             self.app.run(host=host, port=port, debug=True)
@@ -577,6 +578,83 @@ class API(TarxivModule):
                 )
                 return server_response({"error": str(exc), "type": "server"}, 500)
 
+        def comment_response(route, action, status_code=200):
+            """Run ``action(user_id)`` with the shared comment-route error mapping."""
+            token = request.headers.get("Authorization")
+            try:
+                user_id = self._require_authenticated_user_id(token)
+                return server_response(action(user_id), status_code)
+            except PermissionError as exc:
+                return server_response({"error": str(exc), "type": "token"}, 401)
+            except AccessDeniedError as exc:
+                return server_response({"error": str(exc), "type": "access"}, 403)
+            except LookupError as exc:
+                return server_response({"error": str(exc), "type": "lookup"}, 404)
+            except ValueError as exc:
+                return server_response({"error": str(exc), "type": "validation"}, 400)
+            except DataLayerError as exc:
+                self.logger.exception("Comment request failed.", extra={"route": route})
+                return server_response({"error": str(exc), "type": "server"}, 500)
+
+        def found_or_404(result):
+            if result is None or result is False:
+                raise LookupError("Comment not found")
+            return result
+
+        @self.app.route("/objects/<string:source_id>/comments", methods=["GET"])
+        def list_comments(source_id):
+            return comment_response(
+                "/objects/<source_id>/comments",
+                lambda user_id: [
+                    c.model_dump(mode="json")
+                    for c in self.user_db.list_comments(source_id, user_id)
+                ],
+            )
+
+        @self.app.route("/objects/<string:source_id>/comments", methods=["POST"])
+        def create_comment(source_id):
+            request_json = request.get_json(silent=True) or {}
+            return comment_response(
+                "/objects/<source_id>/comments",
+                lambda user_id: self.user_db.create_comment(
+                    source_id, user_id, dto.CommentCreate.model_validate(request_json)
+                ).model_dump(mode="json"),
+                201,
+            )
+
+        @self.app.route("/comments/<string:comment_id>", methods=["PATCH"])
+        def update_comment(comment_id):
+            request_json = request.get_json(silent=True) or {}
+            return comment_response(
+                "/comments/<comment_id>",
+                lambda user_id: found_or_404(
+                    self.user_db.update_comment(
+                        comment_id,
+                        user_id,
+                        dto.CommentUpdate.model_validate(request_json),
+                    )
+                ).model_dump(mode="json"),
+            )
+
+        @self.app.route("/comments/<string:comment_id>", methods=["DELETE"])
+        def delete_comment(comment_id):
+            def delete(user_id):
+                found_or_404(self.user_db.delete_comment(comment_id, user_id))
+                return {"status": "deleted", "comment_id": comment_id}
+
+            return comment_response("/comments/<comment_id>", delete)
+
+        @self.app.route("/comments/counts", methods=["POST"])
+        def count_comments():
+            request_json = request.get_json(silent=True) or {}
+            return comment_response(
+                "/comments/counts",
+                lambda user_id: self.user_db.count_comments(
+                    dto.CommentCountsRequest.model_validate(request_json).source_ids,
+                    user_id,
+                ),
+            )
+
         # HFS - 2025-05-28: These self.app.route things are Flask decorators which become
         # endpoints for the API
         @self.app.route("/get_object_meta/<string:source_id>", methods=["POST"])
@@ -612,6 +690,7 @@ class API(TarxivModule):
                 result = {"error": str(e), "type": "server"}
                 status_code = 500
                 log["status"] = "ServerError"
+                log["error"] = str(e)
 
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
@@ -650,6 +729,7 @@ class API(TarxivModule):
                 result = {"error": str(e), "type": "server"}
                 status_code = 500
                 log["status"] = "ServerError"
+                log["error"] = str(e)
 
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
@@ -695,6 +775,7 @@ class API(TarxivModule):
                 result = {"error": str(e), "type": "server"}
                 status_code = 500
                 log["status"] = "ServerError"
+                log["error"] = str(e)
 
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
@@ -754,6 +835,7 @@ class API(TarxivModule):
                 result = {"error": str(e), "type": "server"}
                 status_code = 500
                 log["status"] = "ServerError"
+                log["error"] = str(e)
 
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
@@ -800,6 +882,7 @@ class API(TarxivModule):
                 result = {"error": str(e), "type": "server"}
                 status_code = 500
                 log["status"] = "ServerError"
+                log["error"] = str(e)
 
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
@@ -842,6 +925,7 @@ class API(TarxivModule):
                 result = {"error": str(e), "type": "server"}
                 status_code = 500
                 log["status"] = "ServerError"
+                log["error"] = str(e)
             self.logger.info(log, extra=log)
             return server_response(result, status_code)
 

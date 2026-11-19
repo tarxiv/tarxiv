@@ -249,7 +249,7 @@ services:
       - ../scripts:/app/scripts:Z
       - ${TARXIV_HOST_LOG_DIR:-.data/logs}:/data/tarxiv/logs:rw,z
     ports:
-      - ${TARXIV_PORT:-9001}:${TARXIV_PORT:-9001}
+      - ${TARXIV_API_PORT:-9001}:${TARXIV_API_PORT:-9001}
     environment:
       TARXIV_CONFIG_DIR: /app/aux
       TARXIV_COUCHBASE_HOST: couchbase
@@ -272,13 +272,20 @@ services:
       TARXIV_DASHBOARD_URL: ${TARXIV_DASHBOARD_URL:-}
       TARXIV_POSTGRES_URL: ${TARXIV_POSTGRES_URL:-postgresql+psycopg2://tarxiv:tarxiv@postgres:5432/tarxiv}
       VIRTUAL_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.tarxiv.com}
-      VIRTUAL_PORT: ${TARXIV_PORT:-9001}
+      VIRTUAL_PORT: ${TARXIV_API_PORT:-9001}
       LETSENCRYPT_HOST: ${TARXIV_API_VIRTUAL_HOST:-api.tarxiv.com}
       LETSENCRYPT_EMAIL: ${TARXIV_LETSENCRYPT_EMAIL:-}
       TARXIV_SAMPLE_META_PATH: ${TARXIV_SAMPLE_META_PATH:-/app/docs/dev-notes/new_sample.json}
+      TARXIV_API_PORT: ${TARXIV_API_PORT:-9001}
     networks:
       - tarxiv_net
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${TARXIV_API_PORT:-9001}/', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   tarxiv-dashboard:
     profiles:
@@ -298,7 +305,7 @@ services:
       - ${TARXIV_DASHBOARD_PORT:-8050}:${TARXIV_DASHBOARD_PORT:-8050}
     environment:
       TARXIV_HOST: ${TARXIV_HOST}
-      TARXIV_PORT: ${TARXIV_PORT}
+      TARXIV_API_PORT: ${TARXIV_API_PORT:-9001}
       TARXIV_INTERNAL_API_URL: ${TARXIV_INTERNAL_API_URL:-tarxiv-api:9001}
       TARXIV_EXTERNAL_API_URL: ${TARXIV_EXTERNAL_API_URL:-api.tarxiv.com}
       TARXIV_DASHBOARD_URL: ${TARXIV_DASHBOARD_URL}
@@ -319,6 +326,16 @@ services:
     networks:
       - tarxiv_net
     restart: unless-stopped
+    depends_on:
+      tarxiv-api:
+        condition: service_healthy
+    healthcheck:
+      # Dash's index page is static; the layout (and its DB calls) loads via /_dash-layout.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${TARXIV_DASHBOARD_PORT:-8050}/', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
   
   kafka-broker:
     image: confluentinc/cp-kafka:8.0.0

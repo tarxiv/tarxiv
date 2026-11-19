@@ -105,11 +105,15 @@ _STATIC_CSS = """
 }
 
 /* ------------------------------------------------------------ card head */
+/* Fixed height (not padding-driven) so a header holding a control, like the
+   lightcurve's Plot/Table switch, matches plain-title headers beside it. */
 .tarxiv-card-head {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 12px 16px;
+    box-sizing: border-box;
+    min-height: 43px;
+    padding: 0 16px;
     border-bottom: 1px solid var(--tarxiv-border);
 }
 
@@ -118,6 +122,35 @@ _STATIC_CSS = """
     white-space: normal;
     word-break: break-word;
     line-height: 1.1;
+}
+
+/* -------------------------------------------------------- comment threads */
+/* Same width as the size="xs" ActionIcon toggle, so the line sits under it. */
+.comment-thread-gutter {
+    flex: none;
+    width: 18px;
+}
+.comment-thread-line {
+    flex: 1;
+    cursor: pointer;
+    background: linear-gradient(var(--tarxiv-border), var(--tarxiv-border))
+        center / 2px 100% no-repeat;
+}
+/* Collapsed: hide the line, show + instead of -. */
+.is-collapsed .comment-thread-line {
+    visibility: hidden;
+}
+.comment-thread-gutter .when-closed,
+.comment-thread-gutter.is-collapsed .when-open {
+    display: none;
+}
+.comment-thread-gutter.is-collapsed .when-closed {
+    display: inline-block;
+}
+.comment-thread-line:hover {
+    background-image: linear-gradient(
+        var(--tarxiv-primary-ink), var(--tarxiv-primary-ink)
+    );
 }
 """
 

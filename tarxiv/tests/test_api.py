@@ -29,6 +29,7 @@ import pytest
 
 import tarxiv.dto as tarxiv_dto
 from tarxiv.auth.token_utils import sign_token
+from tarxiv.database_user import AccessDeniedError, DataLayerError
 
 
 @pytest.fixture
@@ -647,3 +648,108 @@ def test_cone_search_route_returns_results(mock_api):
     assert response.status_code == 200
     assert response.json[0]["obj_name"] == "2018mqw"
     mock_api.txv_db.cone_search.assert_called_once_with(189.62, 39.0, 5.0)
+
+
+def _comment(**overrides):
+    return tarxiv_dto.Comment.model_validate({
+        "id": uuid.uuid4(),
+        "source_id": "2024abc",
+        "owner_type": "user",
+        "owner_id": uuid.uuid4(),
+        "body": "Looks like a Ia.",
+        **overrides,
+    })
+
+
+def test_list_comments_requires_auth(mock_api):
+    response = mock_api.app.test_client().get("/objects/2024abc/comments")
+
+    assert response.status_code == 401
+    mock_api.user_db.list_comments.assert_not_called()
+
+
+def test_create_comment_validates_and_forwards(mock_api, auth_token):
+    client = mock_api.app.test_client()
+    mock_api.user_db.create_comment.return_value = _comment()
+
+    response = client.post(
+        "/objects/2024abc/comments",
+        json={"body": "  Looks like a Ia.  "},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 201
+    assert response.json["body"] == "Looks like a Ia."
+    source_id, _, payload = mock_api.user_db.create_comment.call_args.args
+    assert source_id == "2024abc"
+    assert payload.body == "Looks like a Ia."  # whitespace stripped by the DTO
+
+
+@pytest.mark.parametrize("body", ["", "   ", "x" * 5001])
+def test_create_comment_rejects_bad_body(mock_api, auth_token, body):
+    response = mock_api.app.test_client().post(
+        "/objects/2024abc/comments",
+        json={"body": body},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 400
+    mock_api.user_db.create_comment.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "error, status",
+    [
+        (AccessDeniedError("no"), 403),
+        (LookupError("no"), 404),
+        (ValueError("no"), 400),
+        (DataLayerError("no"), 500),
+    ],
+)
+def test_comment_errors_map_to_status(mock_api, auth_token, error, status):
+    mock_api.user_db.update_comment.side_effect = error
+
+    response = mock_api.app.test_client().patch(
+        f"/comments/{uuid.uuid4()}",
+        json={"body": "edited"},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == status
+
+
+def test_update_comment_not_found(mock_api, auth_token):
+    mock_api.user_db.update_comment.return_value = None
+
+    response = mock_api.app.test_client().patch(
+        f"/comments/{uuid.uuid4()}",
+        json={"body": "edited"},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize("removed, status", [(True, 200), (False, 404)])
+def test_delete_comment(mock_api, auth_token, removed, status):
+    mock_api.user_db.delete_comment.return_value = removed
+
+    response = mock_api.app.test_client().delete(
+        f"/comments/{uuid.uuid4()}", headers={"Authorization": auth_token}
+    )
+
+    assert response.status_code == status
+
+
+def test_count_comments(mock_api, auth_token):
+    mock_api.user_db.count_comments.return_value = {"2024abc": 3}
+
+    response = mock_api.app.test_client().post(
+        "/comments/counts",
+        json={"source_ids": ["2024abc", "2024abd"]},
+        headers={"Authorization": auth_token},
+    )
+
+    assert response.status_code == 200
+    assert response.json == {"2024abc": 3}
+    assert mock_api.user_db.count_comments.call_args.args[0] == ["2024abc", "2024abd"]

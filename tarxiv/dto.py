@@ -6,9 +6,16 @@ duplicate has been removed in favour of importing from here.)
 """
 
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    TypeAdapter,
+)
 
 
 class MetadataResponseModel(BaseModel):
@@ -244,3 +251,41 @@ class ObjectTagAssignmentView(BaseModel):
 
 class TaggedObject(BaseModel):
     object_id: str
+
+
+# Plain text only; the dashboard renders it escaped. Max length matches the
+# ck_comments_body_length constraint in tarxiv/orm.py.
+CommentBody = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=5000)
+]
+
+
+class CommentCreate(BaseModel):
+    body: CommentBody
+    parent_id: UUID | None = None
+    # Only for top-level comments; a reply always takes its parent's owner.
+    owner_team_id: UUID | None = None
+
+
+class CommentUpdate(BaseModel):
+    body: CommentBody
+
+
+class Comment(BaseModel):
+    id: UUID
+    source_id: str
+    parent_id: UUID | None = None
+    author_id: UUID | None = None
+    author_name: str | None = None
+    author_picture_url: str | None = None
+    owner_type: str
+    owner_id: UUID
+    owner_name: str | None = None
+    body: str
+    deleted: bool = False
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class CommentCountsRequest(BaseModel):
+    source_ids: list[str] = Field(max_length=1000)

@@ -448,3 +448,114 @@ def test_update_and_delete_team(monkeypatch):
         remaining_tag_names = {tag.name for tag in user_db.list_tags(owner.id)}
         assert "team-tag" not in remaining_tag_names
         assert user_db.list_objects_for_tag(team_tag.id, owner.id, 50, 0) == []
+
+
+@pytest.mark.slow
+def test_comment_rules(monkeypatch):
+    pytest.importorskip("testcontainers")
+
+    workspace_root = Path(__file__).resolve().parents[2]
+
+    with PostgresContainer("postgres:15") as postgres:
+        sqlalchemy_url = postgres.get_connection_url().replace(
+            "postgresql://", "postgresql+psycopg2://", 1
+        )
+        monkeypatch.setenv("TARXIV_POSTGRES_URL", sqlalchemy_url)
+        monkeypatch.setenv("TARXIV_CONFIG_DIR", str(workspace_root / "aux"))
+
+        from alembic import command
+        from alembic.config import Config
+
+        command.upgrade(Config(str(workspace_root / "alembic.ini")), "head")
+        user_db = UserDB("integration", 0, debug=False)
+
+        def make_user(n, name):
+            orcid = f"0000-0002-0000-000{n}"
+            return user_db.get_or_create_user_from_identity(
+                "orcid",
+                dto.ProviderProfile(provider_user_id=orcid, username=name),
+                {"orcid": orcid},
+            )
+
+        owner, alice, bob, outsider = (
+            make_user(i, name)
+            for i, name in enumerate(["owner", "alice", "bob", "outsider"], 1)
+        )
+        team = user_db.create_team(owner.id, dto.TeamCreate(name="hubble"))
+        for member in (alice, bob):
+            user_db.add_user_to_team(
+                team.id, owner.id, dto.TeamMembershipCreate(user_id=member.id)
+            )
+
+        def post(user, body, **kwargs):
+            return user_db.create_comment(
+                "2024abc", user.id, dto.CommentCreate(body=body, **kwargs)
+            )
+
+        # Visibility: team comment seen by members only; personal note by its owner only.
+        root = post(alice, "Team comment", owner_team_id=team.id)
+        note = post(alice, "My note")
+        assert root.owner_type == "team" and root.author_name == "alice"
+        assert {c.id for c in user_db.list_comments("2024abc", bob.id)} == {root.id}
+        assert user_db.list_comments("2024abc", outsider.id) == []
+        assert {c.id for c in user_db.list_comments("2024abc", alice.id)} == {
+            root.id,
+            note.id,
+        }
+        with pytest.raises(AccessDeniedError):
+            post(outsider, "x", owner_team_id=team.id)
+
+        # Replies: inherit the parent's owner, one level only, invisible parent is 404.
+        reply = post(bob, "Agreed", parent_id=root.id)
+        assert reply.owner_type == "team" and reply.owner_id == team.id
+        with pytest.raises(ValueError):
+            post(alice, "nested", parent_id=reply.id)
+        with pytest.raises(ValueError):
+            post(alice, "mismatch", parent_id=root.id, owner_team_id=owner.id)
+        with pytest.raises(LookupError):
+            post(outsider, "sneaky", parent_id=root.id)
+
+        # Counts: visible and non-deleted only.
+        assert user_db.count_comments(["2024abc", "2024zzz"], alice.id) == {
+            "2024abc": 3
+        }
+        assert user_db.count_comments(["2024abc"], outsider.id) == {}
+
+        # Editing: author only.
+        edited = user_db.update_comment(root.id, alice.id, dto.CommentUpdate(body="v2"))
+        assert edited.body == "v2"
+        with pytest.raises(AccessDeniedError):
+            user_db.update_comment(root.id, bob.id, dto.CommentUpdate(body="v3"))
+        assert (
+            user_db.update_comment(root.id, outsider.id, dto.CommentUpdate(body="x"))
+            is None
+        )
+
+        # Deleting: a plain member cannot delete someone else's comment.
+        with pytest.raises(AccessDeniedError):
+            user_db.delete_comment(root.id, bob.id)
+
+        # A root with replies becomes a tombstone; replies still allowed under it.
+        assert user_db.delete_comment(root.id, alice.id)
+        tombstone = next(
+            c for c in user_db.list_comments("2024abc", bob.id) if c.id == root.id
+        )
+        assert tombstone.deleted and tombstone.body == ""
+        assert user_db.count_comments(["2024abc"], bob.id) == {"2024abc": 1}
+        late_reply = post(bob, "Still here", parent_id=root.id)
+
+        # The team owner can moderate; deleting the last reply removes the tombstone.
+        assert user_db.delete_comment(reply.id, owner.id)
+        assert user_db.delete_comment(late_reply.id, bob.id)
+        assert user_db.list_comments("2024abc", bob.id) == []
+
+        # Leaving the team removes access, but the comment stays for the team.
+        kept = post(bob, "Bye", owner_team_id=team.id)
+        user_db.leave_team(team.id, bob.id)
+        assert (
+            user_db.update_comment(kept.id, bob.id, dto.CommentUpdate(body="x")) is None
+        )
+        assert [c.id for c in user_db.list_comments("2024abc", alice.id)] == [
+            note.id,
+            kept.id,
+        ]
