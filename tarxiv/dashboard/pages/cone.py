@@ -31,6 +31,7 @@ from ..components import (
     format_cone_search_results,
     build_cone_result_cards_page,
     create_message_banner,
+    default_sky_survey,
     fetch_comment_counts,
 )
 from ...dto import ConeSearchResponseModel
@@ -449,6 +450,7 @@ def render_cone_search(ra, dec, radius, token, logger):
             "ra": ra,
             "dec": dec,
             "radius": radius,
+            "survey": default_sky_survey(dec),
         }
 
         return result, status_msg, success_banner, store_data

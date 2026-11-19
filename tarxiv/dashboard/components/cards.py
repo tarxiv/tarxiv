@@ -11,6 +11,8 @@ from dash_iconify import DashIconify
 from ..styles import CARD_STYLE
 from .comments import comment_count_badge
 from .object_view import (
+    PANSTARRS_HIPS,
+    SKY_SURVEY_LABELS,
     build_hero_grid,
     build_key_facts,
     build_lightcurve_body,
@@ -536,7 +538,13 @@ def _build_citation_component(citation_str: str | None):
 
 
 def format_object_metadata(
-    object_id, meta, citation_str=None, lc_data=None, assigned_tags=None, logger=None
+    object_id,
+    meta,
+    citation_str=None,
+    lc_data=None,
+    assigned_tags=None,
+    logger=None,
+    sky_survey=PANSTARRS_HIPS,
 ):
     """Format object metadata for display.
 
@@ -551,6 +559,7 @@ def format_object_metadata(
         lc_data: Optional photometry list, used for the detection-count fact
         assigned_tags: Optional tag assignments, shown as chips in the page head
         logger: Optional logger instance
+        sky_survey: HiPS ID the sky view starts on
 
     Returns
     -------
@@ -588,7 +597,12 @@ def format_object_metadata(
         ],
         title="Sky view",
         icon="mdi:earth",
-        header_extra=dmc.Text("PanSTARRS DR1", size="xs", c="dimmed", ff="monospace"),
+        header_extra=dmc.Text(
+            SKY_SURVEY_LABELS.get(sky_survey, sky_survey),
+            size="xs",
+            c="dimmed",
+            ff="monospace",
+        ),
         body_padding=0,
         fill=True,
     )

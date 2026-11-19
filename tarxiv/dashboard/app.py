@@ -42,15 +42,7 @@ class TarxivDashboard(TarxivModule):
             use_pages=True,
             # use_async=False,  # TODO: async is a thing in dash!
             suppress_callback_exceptions=True,
-            external_scripts=[
-                # Pinned (CDS's /v3/latest/ tracks betas) and deferred so a slow
-                # CDN never blocks page load; assets/*_aladin.js poll for
-                # window.A before initialising.
-                {
-                    "src": "https://cdn.jsdelivr.net/npm/aladin-lite@3.8.2/dist/aladin.js",
-                    "defer": "defer",
-                },
-            ],
+            # Aladin Lite is loaded (pinned) by assets/aladin_loader.js.
             external_stylesheets=[
                 # UI + monospace faces referenced by the Mantine theme
                 # (theme_manager.FONT_STACK / MONO_STACK). Both fall back to

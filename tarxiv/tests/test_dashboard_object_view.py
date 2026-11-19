@@ -338,3 +338,19 @@ def test_page_head_renders_assigned_tags():
     texts = _texts(head)
     assert "followup" in texts
     assert "SN II" in texts
+
+
+def test_default_sky_survey_switches_to_desi_in_the_south():
+    from tarxiv.dashboard.components.object_view import (
+        DESI_HIPS,
+        PANSTARRS_HIPS,
+        default_sky_survey,
+    )
+
+    assert default_sky_survey(39.0) == PANSTARRS_HIPS
+    assert default_sky_survey(-29.9) == PANSTARRS_HIPS
+    assert default_sky_survey(-60) == DESI_HIPS
+    assert default_sky_survey("-45:00:00") == DESI_HIPS
+    # Unparseable or missing: fall back to the old default.
+    assert default_sky_survey(None) == PANSTARRS_HIPS
+    assert default_sky_survey("junk") == PANSTARRS_HIPS
